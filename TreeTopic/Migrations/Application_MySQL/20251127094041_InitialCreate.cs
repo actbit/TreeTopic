@@ -104,6 +104,8 @@ namespace TreeTopic.Migrations.Application_MySQL
                 columns: table => new
                 {
                     Id = table.Column<byte[]>(type: "BINARY(16)", nullable: false),
+                    Name = table.Column<string>(type: "longtext", nullable: true)
+                        .Annotation("MySql:CharSet", "utf8mb4"),
                     RoleId = table.Column<byte[]>(type: "BINARY(16)", nullable: false),
                     CreatedAt = table.Column<DateTime>(type: "datetime(6)", nullable: false),
                     UpdatedAt = table.Column<DateTime>(type: "datetime(6)", nullable: false),

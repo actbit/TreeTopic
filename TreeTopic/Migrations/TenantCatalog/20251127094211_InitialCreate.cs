@@ -5,7 +5,7 @@
 namespace TreeTopic.Migrations.TenantCatalog
 {
     /// <inheritdoc />
-    public partial class AddRoleClaimNameToTenantInfo : Migration
+    public partial class InitialCreate : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -22,7 +22,9 @@ namespace TreeTopic.Migrations.TenantCatalog
                     OpenIdConnctAuthority = table.Column<string>(type: "text", nullable: true),
                     OpenIdConnecClientId = table.Column<string>(type: "text", nullable: true),
                     OpenIdConnecClientSecret = table.Column<string>(type: "text", nullable: true),
-                    RoleClaimName = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true)
+                    RoleClaimName = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
+                    TenantObfuscationKeyK0 = table.Column<decimal>(type: "numeric(20,0)", nullable: false),
+                    TenantObfuscationKeyK1 = table.Column<decimal>(type: "numeric(20,0)", nullable: false)
                 },
                 constraints: table =>
                 {

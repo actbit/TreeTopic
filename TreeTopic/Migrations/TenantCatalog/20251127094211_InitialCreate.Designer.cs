@@ -11,8 +11,8 @@ using TreeTopic;
 namespace TreeTopic.Migrations.TenantCatalog
 {
     [DbContext(typeof(TenantCatalogDbContext))]
-    [Migration("20251127090611_AddTenantObfuscationKey")]
-    partial class AddTenantObfuscationKey
+    [Migration("20251127094211_InitialCreate")]
+    partial class InitialCreate
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)

@@ -281,6 +281,9 @@ namespace TreeTopic.Migrations.Application_MySQL
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime(6)");
 
+                    b.Property<string>("Name")
+                        .HasColumnType("longtext");
+
                     b.Property<byte[]>("RoleId")
                         .IsRequired()
                         .HasColumnType("BINARY(16)");
