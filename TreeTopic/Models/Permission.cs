@@ -6,6 +6,8 @@ namespace TreeTopic.Models
     [MultiTenant]
     public class Permission:BaseModel
     {
+        public string? Name { get; set; }
+
         [ForeignKey(nameof(Role))]
         public Guid RoleId { get; set; }
         public ApplicationRole Role { get; set; }
