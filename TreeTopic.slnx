@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="TreeTopic.AppHost/TreeTopic.AppHost.csproj" />
+  <Project Path="TreeTopic.ServiceDefaults/TreeTopic.ServiceDefaults.csproj" />
+  <Project Path="TreeTopic/TreeTopic.csproj" />
+</Solution>

@@ -1,0 +1,6 @@
+@TreeTopic_HostAddress = http://localhost:5265
+
+GET {{TreeTopic_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
