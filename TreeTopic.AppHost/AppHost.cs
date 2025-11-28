@@ -1,5 +1,19 @@
 var builder = DistributedApplication.CreateBuilder(args);
 
-builder.AddProject<Projects.TreeTopic>("treetopic");
+// Add PostgreSQL for tenant catalog
+var postgres = builder.AddPostgres("postgres");
+
+// Add TenantCatalog database
+var tenantDb = postgres.AddDatabase("treetopic-tenants");
+
+// Add default ApplicationDbContext database
+var appDb = postgres.AddDatabase("treetopic-default");
+
+// Add TreeTopic project with database references
+// Wait for PostgreSQL to be ready before starting the application
+builder.AddProject<Projects.TreeTopic>("treetopic")
+    .WithReference(tenantDb)
+    .WithReference(appDb)
+    .WaitFor(postgres);
 
 builder.Build().Run();
