@@ -7,13 +7,34 @@ namespace TreeTopic.Models
     {
         [Key]
         public string? Id { get; set; } = Guid.NewGuid().ToString();
+
+        [StringLength(50)]
         public string? Identifier { get; set; }
+
+        [StringLength(255)]
         public string? Name { get; set; }
+
+        [StringLength(20)]
         public string? DbProvider { get; set; }
+
+        // テナント用暗号化キー（マスターキーで暗号化済み）
+        // 形式: nonce:ciphertext:tag (Base64)
+        [StringLength(200)]
+        public string? TenantEncryptionKey { get; set; }
+
+        // ConnectionString は テナント用キーで暗号化
+        // (元データ 3000 文字 → Base64 エンコード後 ~4000 文字 + overhead)
+        [StringLength(5000)]
         public string? ConnectionString { get; set; }
 
+        [StringLength(500)]
         public string? OpenIdConnctAuthority { get; set; }
+
+        [StringLength(500)]
         public string? OpenIdConnecClientId { get; set; }
+
+        // OpenIdConnecClientSecret も暗号化後の base64 データ（最大 1000 文字）
+        [StringLength(1000)]
         public string? OpenIdConnecClientSecret { get; set; }
 
         // Role取得方法の設定
