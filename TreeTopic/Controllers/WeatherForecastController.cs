@@ -1,15 +1,29 @@
 using Microsoft.AspNetCore.Mvc;
+using Finbuckle.MultiTenant;
+using Finbuckle.MultiTenant.Abstractions;
+using TreeTopic.Models;
 
 namespace TreeTopic.Controllers;
 
 [ApiController]
-[Route("api/[controller]")]
+[Route("{tenant}/api/[controller]")]
 public class WeatherForecastController : ControllerBase
 {
+    private readonly IMultiTenantContextAccessor<ApplicationTenantInfo> _tenantAccessor;
+    private readonly ILogger<WeatherForecastController> _logger;
+
     private static readonly string[] Summaries =
     [
         "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
     ];
+
+    public WeatherForecastController(
+        IMultiTenantContextAccessor<ApplicationTenantInfo> tenantAccessor,
+        ILogger<WeatherForecastController> logger)
+    {
+        _tenantAccessor = tenantAccessor;
+        _logger = logger;
+    }
 
     [HttpGet(Name = "GetWeatherForecast")]
     public IEnumerable<WeatherForecast> Get()
