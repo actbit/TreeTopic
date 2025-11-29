@@ -27,8 +27,36 @@ namespace TreeTopic.Models
         [StringLength(5000)]
         public string? ConnectionString { get; set; }
 
+        // OpenID Connect メタデータアドレス（ディスカバリーエンドポイント、テナント登録時に入力）
+        // 例: http://localhost:8081/realms/master/.well-known/openid-configuration
         [StringLength(500)]
-        public string? OpenIdConnctAuthority { get; set; }
+        public string? OpenIdConnectMetadataAddress { get; set; }
+
+        // OpenID Connect 発行者（メタデータから自動取得）
+        // 例: http://localhost:8081/realms/master
+        [StringLength(500)]
+        public string? OpenIdConnectAuthority { get; set; }
+
+        // OpenID Connect 認可エンドポイント（メタデータから自動取得）
+        // 例: http://localhost:8081/realms/master/protocol/openid-connect/auth
+        [StringLength(500)]
+        public string? OpenIdConnectAuthorizationEndpoint { get; set; }
+
+        // OpenID Connect トークンエンドポイント（メタデータから自動取得）
+        // 例: http://localhost:8081/realms/master/protocol/openid-connect/token
+        [StringLength(500)]
+        public string? OpenIdConnectTokenEndpoint { get; set; }
+
+        // OpenID Connect JSON Web Key Set URI（メタデータから自動取得）
+        // ID Token の署名検証に使用
+        [StringLength(500)]
+        public string? OpenIdConnectJwksUri { get; set; }
+
+        // OpenID Connect エンドセッションエンドポイント（メタデータから自動取得）
+        // ログアウト時にプロバイダー側のセッション終了に使用
+        // 例: http://localhost:8081/realms/master/protocol/openid-connect/logout
+        [StringLength(500)]
+        public string? OpenIdConnectEndSessionEndpoint { get; set; }
 
         [StringLength(500)]
         public string? OpenIdConnecClientId { get; set; }
@@ -46,5 +74,8 @@ namespace TreeTopic.Models
         // UUIDv47Codec用の暗号化キー（テナント単位で管理）
         public ulong TenantObfuscationKeyK0 { get; set; }
         public ulong TenantObfuscationKeyK1 { get; set; }
+
+        // リレーション：初期設定トークン
+        public virtual ICollection<SetupToken>? SetupTokens { get; set; }
     }
 }

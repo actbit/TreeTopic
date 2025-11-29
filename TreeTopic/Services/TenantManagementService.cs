@@ -1,6 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 using TreeTopic.Dtos;
 using TreeTopic.Models;
+using TreeTopic.Models.OpenIdConnect;
+using System.Security.Cryptography;
 
 namespace TreeTopic.Services;
 
@@ -14,6 +16,7 @@ public class TenantManagementService
     private readonly TenantIdObfuscationService _obfuscationService;
     private readonly MigrationService _migrationService;
     private readonly EncryptionService _encryptionService;
+    private readonly IConfiguration _configuration;
     private readonly ILogger<TenantManagementService> _logger;
 
     public TenantManagementService(
@@ -21,19 +24,21 @@ public class TenantManagementService
         TenantIdObfuscationService obfuscationService,
         MigrationService migrationService,
         EncryptionService encryptionService,
+        IConfiguration configuration,
         ILogger<TenantManagementService> logger)
     {
         _tenantDb = tenantDb;
         _obfuscationService = obfuscationService;
         _migrationService = migrationService;
         _encryptionService = encryptionService;
+        _configuration = configuration;
         _logger = logger;
     }
 
     /// <summary>
     /// 新しいテナントを登録
     /// </summary>
-    public async Task<ApplicationTenantInfo> CreateTenantAsync(CreateTenantRequest request)
+    public async Task<CreateTenantResponse> CreateTenantAsync(CreateTenantRequest request)
     {
         if (string.IsNullOrEmpty(request.Identifier))
         {
@@ -61,8 +66,11 @@ public class TenantManagementService
 
             // DbProvider を小文字に正規化（postgresql → postgres）
             var dbProvider = (request.DbProvider?.ToLower() ?? "postgres").Replace("postgresql", "postgres");
+
+            // ConnectionString の取得（未指定の場合は SharedApp を使用）
             var connectionString = request.ConnectionString
-                ?? throw new ArgumentException("ConnectionString is required when DbProvider is not specified", nameof(request.ConnectionString));
+                ?? _configuration.GetConnectionString("SharedApp")
+                ?? throw new InvalidOperationException("No connection string configured for SharedApp");
 
             // テナント用暗号化キーを生成（AES-256 キー: 32 bytes → Base64 で 44文字）
             var tenantKeyBytes = new byte[32];
@@ -85,6 +93,40 @@ public class TenantManagementService
                 ? tenantEncryptionService.Encrypt(request.OpenIdConnectClientSecret)
                 : null;
 
+            // OpenID Connect メタデータから エンドポイント情報を取得
+            string? authority = null;
+            string? authorizationEndpoint = null;
+            string? tokenEndpoint = null;
+            string? jwksUri = null;
+            string? endSessionEndpoint = null;
+
+            if (!string.IsNullOrEmpty(request.OpenIdConnectMetadataAddress))
+            {
+                try
+                {
+                    using (var httpClient = new System.Net.Http.HttpClient())
+                    {
+                        var metadata = await httpClient.GetStringAsync(request.OpenIdConnectMetadataAddress);
+                        var oidcMetadata = System.Text.Json.JsonSerializer.Deserialize<OpenIdConnectMetadata>(metadata);
+
+                        if (oidcMetadata != null)
+                        {
+                            authority = oidcMetadata.Issuer;
+                            authorizationEndpoint = oidcMetadata.AuthorizationEndpoint;
+                            tokenEndpoint = oidcMetadata.TokenEndpoint;
+                            jwksUri = oidcMetadata.JwksUri;
+                            endSessionEndpoint = oidcMetadata.EndSessionEndpoint;
+                        }
+                    }
+                    _logger.LogInformation("OIDC metadata retrieved for tenant: {TenantIdentifier}", request.Identifier);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to retrieve OIDC metadata for tenant: {TenantIdentifier}", request.Identifier);
+                    throw new InvalidOperationException($"Failed to retrieve OIDC metadata from {request.OpenIdConnectMetadataAddress}", ex);
+                }
+            }
+
             // テナント情報を作成
             var tenant = new ApplicationTenantInfo
             {
@@ -95,7 +137,12 @@ public class TenantManagementService
                 TenantEncryptionKey = encryptedTenantKey,
                 ConnectionString = encryptedConnectionString,
                 RoleClaimName = request.RoleClaimName,
-                OpenIdConnctAuthority = request.OpenIdConnectAuthority,
+                OpenIdConnectMetadataAddress = request.OpenIdConnectMetadataAddress,
+                OpenIdConnectAuthority = authority,
+                OpenIdConnectAuthorizationEndpoint = authorizationEndpoint,
+                OpenIdConnectTokenEndpoint = tokenEndpoint,
+                OpenIdConnectJwksUri = jwksUri,
+                OpenIdConnectEndSessionEndpoint = endSessionEndpoint,
                 OpenIdConnecClientId = request.OpenIdConnectClientId,
                 OpenIdConnecClientSecret = encryptedClientSecret,
                 TenantObfuscationKeyK0 = k0,
@@ -108,10 +155,28 @@ public class TenantManagementService
             _logger.LogInformation("Tenant created: {TenantIdentifier} (ID: {TenantId})",
                 request.Identifier, tenant.Id);
 
+            // セットアップトークンを生成
+            var setupToken = SetupToken.GenerateToken();
+            var setupTokenRecord = new SetupToken
+            {
+                Id = Guid.NewGuid(),
+                TenantId = tenant.Id,
+                TokenHash = SetupToken.HashToken(setupToken),
+                CreatedAt = DateTime.UtcNow,
+                ExpiresAt = DateTime.UtcNow.AddHours(1) // 1時間の有効期限
+            };
+            _tenantDb.SetupTokens.Add(setupTokenRecord);
+            await _tenantDb.SaveChangesAsync();
+
             // テナント用DB のマイグレーション実行
             await MigrateTenantsDbAsync(tenant);
 
-            return tenant;
+            // テナント情報とセットアップトークンを返す
+            return new CreateTenantResponse
+            {
+                Tenant = tenant,
+                SetupToken = setupToken
+            };
         }
         catch (Exception ex)
         {
