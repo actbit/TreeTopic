@@ -27,9 +27,9 @@ public class Program
         );
 
         // Register ApplicationDbContext for multi-tenant app data
-        // Connection string from AppHost: "ConnectionStrings:treetopic-default"
-        var appConnectionString = builder.Configuration.GetConnectionString("treetopic-default")
-            ?? throw new InvalidOperationException("ApplicationDb connection string not configured");
+        // Connection string from AppHost: "ConnectionStrings:SharedApp"
+        var appConnectionString = builder.Configuration.GetConnectionString("SharedApp")
+            ?? throw new InvalidOperationException("ApplicationDb connection string (SharedApp) not configured");
 
         builder.Services.AddDbContext<ApplicationDbContext>((sp, options) =>
         {
@@ -74,7 +74,7 @@ public class Program
             .AddMultiTenant<ApplicationTenantInfo>()
             .WithRouteStrategy("tenant")  // {tenant} というルートパラメータでテナント抽出（OpenAPI対応）
             .WithClaimStrategy("tenant")
-            .WithConfigurationStore()
+            .WithStore<EFCoreMultiTenantStore>(ServiceLifetime.Scoped)  // EF Core Store を使用
             .WithPerTenantAuthentication();
         
         // マイグレーションサービスを登録

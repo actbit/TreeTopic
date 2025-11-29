@@ -6,8 +6,8 @@ var postgres = builder.AddPostgres("postgres");
 // Add TenantCatalog database
 var tenantDb = postgres.AddDatabase("treetopic-tenants");
 
-// Add default ApplicationDbContext database
-var appDb = postgres.AddDatabase("treetopic-default");
+// Add SharedApp database (shared application data for all tenants)
+var appDb = postgres.AddDatabase("SharedApp");
 
 // Add TreeTopic project with database references
 // Wait for PostgreSQL to be ready before starting the application

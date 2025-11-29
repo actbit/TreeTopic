@@ -38,19 +38,16 @@ public class TenantController : ControllerBase
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
-    public async Task<ActionResult<TenantResponse>> RegisterTenant([FromBody] CreateTenantRequest request)
+    public async Task<ActionResult<RegisterTenantResponse>> RegisterTenant([FromBody] CreateTenantRequest request)
     {
         try
         {
-            var tenant = await _tenantService.CreateTenantAsync(request);
-            return CreatedAtAction(nameof(GetTenant), new { identifier = tenant.Identifier },
-                new TenantResponse
+            var response = await _tenantService.CreateTenantAsync(request);
+            return StatusCode(StatusCodes.Status201Created,
+                new RegisterTenantResponse
                 {
-                    Id = tenant.Id,
-                    Identifier = tenant.Identifier,
-                    Name = tenant.Name,
-                    DbProvider = tenant.DbProvider,
-                    CreatedAt = DateTime.UtcNow
+                    Identifier = response.Tenant.Identifier,
+                    SetupToken = response.SetupToken
                 });
         }
         catch (ArgumentException ex)
@@ -165,6 +162,22 @@ public class TenantController : ControllerBase
             return StatusCode(StatusCodes.Status500InternalServerError);
         }
     }
+}
+
+/// <summary>
+/// テナント登録レスポンス
+/// </summary>
+public class RegisterTenantResponse
+{
+    /// <summary>
+    /// テナント識別子
+    /// </summary>
+    public string? Identifier { get; set; }
+
+    /// <summary>
+    /// 初期設定用トークン（1時間有効）
+    /// </summary>
+    public string? SetupToken { get; set; }
 }
 
 /// <summary>

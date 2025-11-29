@@ -14,15 +14,18 @@ public class MigrationService
 {
     private readonly IMultiTenantContextAccessor<ApplicationTenantInfo> _accessor;
     private readonly IServiceProvider _serviceProvider;
+    private readonly EncryptionService _encryptionService;
     private readonly ILogger<MigrationService> _logger;
 
     public MigrationService(
         IMultiTenantContextAccessor<ApplicationTenantInfo> accessor,
         IServiceProvider serviceProvider,
+        EncryptionService encryptionService,
         ILogger<MigrationService> logger)
     {
         _accessor = accessor;
         _serviceProvider = serviceProvider;
+        _encryptionService = encryptionService;
         _logger = logger;
     }
 
@@ -52,17 +55,18 @@ public class MigrationService
             throw new ArgumentNullException(nameof(tenant));
         }
 
-        // テナント用 DbContext のオプションを取得
-        var baseDbContext = _serviceProvider.GetRequiredService<ApplicationDbContext>();
-        var options = baseDbContext.GetType().GetProperty("ContextOptions")?.GetValue(baseDbContext)
-            as DbContextOptions<ApplicationDbContext>
-            ?? throw new InvalidOperationException("Cannot retrieve DbContextOptions");
-
         try
         {
+            // テナント用の接続文字列を復号化
+            var decryptedConnectionString = DecryptTenantConnectionString(tenant);
+
             // テナントのDB タイプに応じて、マイグレーション用 DbContext を選択
             if (tenant.DbProvider?.ToLower() == "mysql")
             {
+                var options = new DbContextOptionsBuilder<ApplicationDbContext>()
+                    .UseMySql(decryptedConnectionString, ServerVersion.AutoDetect(decryptedConnectionString))
+                    .Options;
+
                 using (var mysqlDb = new ApplicationDbContextMySQL(_accessor, options))
                 {
                     var allMigrations = mysqlDb.Database.GetMigrations();
@@ -73,6 +77,10 @@ public class MigrationService
             }
             else
             {
+                var options = new DbContextOptionsBuilder<ApplicationDbContext>()
+                    .UseNpgsql(decryptedConnectionString)
+                    .Options;
+
                 using (var pgDb = new ApplicationDbContextPostgreSQL(_accessor, options))
                 {
                     var allMigrations = pgDb.Database.GetMigrations();
@@ -91,6 +99,7 @@ public class MigrationService
 
     /// <summary>
     /// 指定されたテナント情報に基づいて、マイグレーション実行
+    /// 暗号化された接続文字列を復号化してからマイグレーション実行
     /// </summary>
     public async Task MigrateTenantAsync(ApplicationTenantInfo tenant)
     {
@@ -99,16 +108,17 @@ public class MigrationService
             throw new ArgumentNullException(nameof(tenant));
         }
 
-        // テナント用 DbContext のオプションを取得
-        var baseDbContext = _serviceProvider.GetRequiredService<ApplicationDbContext>();
-        var options = baseDbContext.GetType().GetProperty("ContextOptions")?.GetValue(baseDbContext)
-            as DbContextOptions<ApplicationDbContext>
-            ?? throw new InvalidOperationException("Cannot retrieve DbContextOptions");
+        // テナント用の接続文字列を復号化
+        var decryptedConnectionString = DecryptTenantConnectionString(tenant);
 
         // テナントのDB タイプに応じて、マイグレーション用 DbContext を選択
         if (tenant.DbProvider?.ToLower() == "mysql")
         {
             _logger.LogInformation("MySQL マイグレーション実行: テナント '{TenantName}'", tenant.Name);
+            var options = new DbContextOptionsBuilder<ApplicationDbContext>()
+                .UseMySql(decryptedConnectionString, ServerVersion.AutoDetect(decryptedConnectionString))
+                .Options;
+
             using (var mysqlDb = new ApplicationDbContextMySQL(_accessor, options))
             {
                 await mysqlDb.Database.MigrateAsync();
@@ -117,11 +127,36 @@ public class MigrationService
         else
         {
             _logger.LogInformation("PostgreSQL マイグレーション実行: テナント '{TenantName}'", tenant.Name);
+            var options = new DbContextOptionsBuilder<ApplicationDbContext>()
+                .UseNpgsql(decryptedConnectionString)
+                .Options;
+
             using (var pgDb = new ApplicationDbContextPostgreSQL(_accessor, options))
             {
                 await pgDb.Database.MigrateAsync();
             }
         }
+    }
+
+    /// <summary>
+    /// テナントの接続文字列を 2 段階で復号化
+    /// </summary>
+    private string DecryptTenantConnectionString(ApplicationTenantInfo tenant)
+    {
+        if (string.IsNullOrEmpty(tenant.TenantEncryptionKey))
+            throw new InvalidOperationException($"Tenant '{tenant.Identifier}' has no encryption key.");
+
+        if (string.IsNullOrEmpty(tenant.ConnectionString))
+            throw new InvalidOperationException($"Tenant '{tenant.Identifier}' has no connection string.");
+
+        // 1. マスターキーでテナント用キーを復号化
+        var decryptedTenantKey = _encryptionService.Decrypt(tenant.TenantEncryptionKey);
+
+        // 2. テナント用キーで接続文字列を復号化
+        var loggerFactory = LoggerFactory.Create(builder => builder.AddConsole());
+        var logger = loggerFactory.CreateLogger<EncryptionService>();
+        var tenantEncryption = new EncryptionService(decryptedTenantKey, logger);
+        return tenantEncryption.Decrypt(tenant.ConnectionString);
     }
 
     /// <summary>

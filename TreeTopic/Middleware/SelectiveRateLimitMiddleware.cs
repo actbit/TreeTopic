@@ -47,6 +47,15 @@ public class SelectiveRateLimitMiddleware
                 ip, _requests[ip].Count);
         }
 
-        await _next(context);
+        try
+        {
+            await _next(context);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Exception in downstream middleware. Path: {Path}, Method: {Method}",
+                context.Request.Path, context.Request.Method);
+            throw;
+        }
     }
 }
