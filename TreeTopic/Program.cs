@@ -65,18 +65,25 @@ public class Program
                 options.SlidingExpiration = true;
                 options.Cookie.Name = "auth_token";
                 options.Cookie.HttpOnly = true;
-                options.Cookie.SameSite = SameSiteMode.Strict;
-                options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+                // SameSite=None is required for the cross-site OIDC redirect round-trip
+                options.Cookie.SameSite = SameSiteMode.None;
+                // Keep Secure in production; allow HTTP during local dev to avoid cookie drop
+                options.Cookie.SecurePolicy = builder.Environment.IsDevelopment()
+                    ? CookieSecurePolicy.SameAsRequest
+                    : CookieSecurePolicy.Always;
             })
-            .AddOpenIdConnectConfiguration(builder.Configuration);
+            .AddOpenIdConnectConfiguration(builder.Configuration, builder.Environment);
          
         builder.Services
             .AddMultiTenant<ApplicationTenantInfo>()
-            .WithRouteStrategy("tenant")  // {tenant} というルートパラメータでテナント抽出（OpenAPI対応）
-            .WithClaimStrategy("tenant")
+            .WithStrategy<CustomClaimStrategy>(ServiceLifetime.Singleton, "tenant")
             .WithStore<EFCoreMultiTenantStore>(ServiceLifetime.Scoped)  // EF Core Store を使用
             .WithPerTenantAuthentication();
         
+        // カスタム Claim Strategy を登録
+        builder.Services.AddSingleton(sp =>
+            new CustomClaimStrategy("tenant", sp.GetRequiredService<ILogger<CustomClaimStrategy>>()));
+
         // マイグレーションサービスを登録
         builder.Services.AddScoped<MigrationService>();
 
@@ -144,7 +151,9 @@ public class Program
 
         app.UseRouting();
 
+
         app.UseAuthentication();
+
         app.UseAuthorization();
 
         // Map API controllers first (priority over static files)

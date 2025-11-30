@@ -27,7 +27,7 @@ public class AuthController : ControllerBase
     }
 
     /// <summary>
-    /// ログイン（Keycloak へリダイレクト）
+    /// ログイン（OIDC プロバイダーへリダイレクト）
     /// </summary>
     [HttpGet("login")]
     [AllowAnonymous]
@@ -55,6 +55,30 @@ public class AuthController : ControllerBase
             },
             "oidc"
         );
+    }
+
+    /// <summary>
+    /// OIDC コールバック（サインイン）
+    /// </summary>
+    [HttpGet("/auth/signin-oidc")]
+    [AllowAnonymous]
+    public IActionResult SignInOidc()
+    {
+        // OIDC ミドルウェアが処理するため、このメソッドには到達しない
+        // ただし、Authorize で保護されたルートを明示的に除外する必要があるため定義
+        return Ok();
+    }
+
+    /// <summary>
+    /// OIDC コールバック（サインアウト）
+    /// </summary>
+    [HttpGet("/auth/signout-oidc")]
+    [AllowAnonymous]
+    public IActionResult SignOutOidc()
+    {
+        // OIDC ミドルウェアが処理するため、このメソッドには到達しない
+        // ただし、Authorize で保護されたルートを明示的に除外する必要があるため定義
+        return Ok();
     }
 
     private bool IsValidReturnUrl(string returnUrl, string? currentTenant)

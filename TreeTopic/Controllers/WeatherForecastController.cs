@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Finbuckle.MultiTenant;
 using Finbuckle.MultiTenant.Abstractions;
 using TreeTopic.Models;
+using Microsoft.AspNetCore.Authorization;
 
 namespace TreeTopic.Controllers;
 
@@ -24,10 +25,11 @@ public class WeatherForecastController : ControllerBase
         _tenantAccessor = tenantAccessor;
         _logger = logger;
     }
-
+    [Authorize]
     [HttpGet(Name = "GetWeatherForecast")]
     public IEnumerable<WeatherForecast> Get()
     {
+
         return Enumerable.Range(1, 5).Select(index => new WeatherForecast
         {
             Date = DateOnly.FromDateTime(DateTime.Now.AddDays(index)),

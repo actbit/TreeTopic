@@ -12,6 +12,7 @@ public class EFCoreMultiTenantStore : IMultiTenantStore<ApplicationTenantInfo>
 {
     private readonly TenantCatalogDbContext _dbContext;
     private readonly ILogger<EFCoreMultiTenantStore> _logger;
+    private readonly Dictionary<string, ApplicationTenantInfo?> _cache = new();
 
     public EFCoreMultiTenantStore(
         TenantCatalogDbContext dbContext,
@@ -26,6 +27,12 @@ public class EFCoreMultiTenantStore : IMultiTenantStore<ApplicationTenantInfo>
     /// </summary>
     public async Task<ApplicationTenantInfo?> TryGetAsync(string identifier)
     {
+        // キャッシュをチェック
+        if (_cache.TryGetValue($"id:{identifier}", out var cached))
+        {
+            return cached;
+        }
+
         try
         {
             var tenant = await _dbContext.Tenants
@@ -35,6 +42,9 @@ public class EFCoreMultiTenantStore : IMultiTenantStore<ApplicationTenantInfo>
             {
                 _logger.LogDebug("Tenant not found: {Identifier}", identifier);
             }
+
+            // キャッシュに保存
+            _cache[$"id:{identifier}"] = tenant;
 
             return tenant;
         }

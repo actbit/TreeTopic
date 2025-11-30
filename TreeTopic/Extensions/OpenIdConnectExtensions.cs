@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Protocols;
 using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 using System.Security.Claims;
@@ -8,6 +10,7 @@ using TreeTopic.Models;
 using TreeTopic.Services;
 using Finbuckle.MultiTenant;
 using Finbuckle.MultiTenant.Abstractions;
+using Microsoft.Extensions.Hosting;
 
 namespace TreeTopic.Extensions;
 
@@ -18,11 +21,18 @@ public static class OpenIdConnectExtensions
     /// </summary>
     public static AuthenticationBuilder AddOpenIdConnectConfiguration(
         this AuthenticationBuilder builder,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        IHostEnvironment environment)
     {
         return builder.AddOpenIdConnect("oidc", options =>
         {
             options.SignInScheme = Microsoft.AspNetCore.Authentication.Cookies.CookieAuthenticationDefaults.AuthenticationScheme;
+            options.RequireHttpsMetadata = !environment.IsDevelopment();
+            // Ensure OIDC correlation/nonce cookies survive the cross-site round-trip
+            options.CorrelationCookie.SameSite = SameSiteMode.None;
+            options.CorrelationCookie.SecurePolicy = CookieSecurePolicy.Always;
+            options.NonceCookie.SameSite = SameSiteMode.None;
+            options.NonceCookie.SecurePolicy = CookieSecurePolicy.Always;
 
             // Callback paths for SPA
             // テナント情報は query parameter で渡す
@@ -79,19 +89,30 @@ public static class OpenIdConnectExtensions
 
         ApplicationTenantInfo? tenantInfo = null;
 
-        // テナント ID がある場合、テナント情報を取得
-        if (!string.IsNullOrEmpty(tenantId))
+        if (string.IsNullOrWhiteSpace(tenantId))
         {
-            // redirect_uri にテナント識別子を含める
-            var scheme = ctx.HttpContext.Request.Scheme;
-            var host = ctx.HttpContext.Request.Host;
-            ctx.ProtocolMessage.RedirectUri = $"{scheme}://{host}/auth/signin-oidc?tenant={Uri.EscapeDataString(tenantId)}";
-
-            // IMultiTenantStore から tenant を取得
-            var store = ctx.HttpContext.RequestServices
-                .GetRequiredService<IMultiTenantStore<ApplicationTenantInfo>>();
-            tenantInfo = await store.TryGetAsync(tenantId);
+            logger.LogWarning("Tenant not found on redirect request");
+            // Stop the OIDC redirect to avoid anonymous tenant-less flow
+            ctx.HandleResponse();
+            ctx.Response.StatusCode = StatusCodes.Status400BadRequest;
+            await ctx.Response.WriteAsync("Tenant is required.");
+            return;
         }
+
+        // redirect_uri を設定（query に tenant を含める）
+        var scheme = ctx.HttpContext.Request.Scheme;
+        var host = ctx.HttpContext.Request.Host;
+        ctx.ProtocolMessage.RedirectUri = $"{scheme}://{host}/auth/signin-oidc?tenant={Uri.EscapeDataString(tenantId)}";
+
+        // state は ASP.NET Core に任せる（上書きしない）
+        // tenant 情報は query パラメータで渡す
+
+        ctx.Properties.Items["tenant"] = tenantId;
+
+        // IMultiTenantStore から tenant を取得
+        var store = ctx.HttpContext.RequestServices
+            .GetRequiredService<IMultiTenantStore<ApplicationTenantInfo>>();
+        tenantInfo = await store.TryGetAsync(tenantId);
 
         // テナント固有の OIDC 設定があるか確認
         bool hasTenantOidcConfig = tenantInfo != null &&
@@ -118,10 +139,10 @@ public static class OpenIdConnectExtensions
             // ConfigurationManager を設定して JwksUri から公開鍵を取得できるようにする
             if (!string.IsNullOrEmpty(tenantInfo.OpenIdConnectMetadataAddress))
             {
-                // TODO: 本番環境では RequireHttps = true にすること
+                var env = ctx.HttpContext.RequestServices.GetRequiredService<IHostEnvironment>();
                 var httpDocumentRetriever = new HttpDocumentRetriever
                 {
-                    RequireHttps = false
+                    RequireHttps = !env.IsDevelopment()
                 };
 
                 ctx.Options.ConfigurationManager = new ConfigurationManager<OpenIdConnectConfiguration>(
@@ -161,16 +182,16 @@ public static class OpenIdConnectExtensions
     {
         var logger = ctx.HttpContext.RequestServices.GetRequiredService<ILogger<Program>>();
 
-        // query parameter から tenant を取得
-        var tenantId = ctx.HttpContext.Request.Query["tenant"].ToString();
+        // query パラメータから tenant を取得
+        var tenantId = ResolveTenantId(ctx.Properties, ctx.HttpContext);
 
         if (string.IsNullOrEmpty(tenantId))
         {
-            // Google デフォルト設定の場合（テナントなし）
+            ctx.Fail("Tenant not found");
             return;
         }
 
-        // Store から直接テナント情報を取得
+        // Store からテナント情報を取得
         var store = ctx.HttpContext.RequestServices.GetRequiredService<IMultiTenantStore<ApplicationTenantInfo>>();
         var tenantInfo = await store.TryGetAsync(tenantId);
 
@@ -197,9 +218,9 @@ public static class OpenIdConnectExtensions
                 logger.LogError(ex, "Failed to decrypt ClientSecret for tenant: {Tenant}", tenantInfo.Identifier);
             }
         }
-        else
+        else if (tenantInfo != null)
         {
-            logger.LogWarning("TenantInfo not found or ClientSecret is empty for tenant: {TenantId}", tenantId);
+            logger.LogDebug("TenantInfo found but ClientSecret is empty for tenant: {TenantId}", tenantId);
         }
     }
 
@@ -224,66 +245,42 @@ public static class OpenIdConnectExtensions
         return Task.CompletedTask;
     }
 
-    private static async Task OnTokenValidated(TokenValidatedContext ctx)
+    private static Task OnTokenValidated(TokenValidatedContext ctx)
     {
         var logger = ctx.HttpContext.RequestServices.GetRequiredService<ILogger<Program>>();
 
-        // URL から抽出したテナント（ルートパラメータまたはクエリパラメータ）
-        var urlTenant = ctx.HttpContext.GetRouteValue("tenant")?.ToString()
-            ?? ctx.HttpContext.Request.Query["tenant"].ToString();
+        // query パラメータから tenant を取得
+        var tenantId = ResolveTenantId(ctx.Properties, ctx.HttpContext);
 
-        // Cookie から復元された claim のテナント
-        var claimTenant = ctx.Principal?.FindFirst("tenant")?.Value;
-
-        // ログイン済み（claim がある）場合のみ検証
-        if (!string.IsNullOrEmpty(claimTenant))
+        if (string.IsNullOrEmpty(tenantId))
         {
-            if (claimTenant != urlTenant)
-            {
-                ctx.Fail("テナント情報が一致しません");
-                return;
-            }
+            logger.LogWarning("Tenant not found in query parameter");
+            ctx.Fail("Tenant not found");
+            return Task.CompletedTask;
         }
 
-        // テナント情報を取得（Google設定の場合は null）
-        var mtc = ctx.HttpContext.GetMultiTenantContext<ApplicationTenantInfo>();
-        var tenantInfo = mtc?.TenantInfo;
-
-        // テナント情報がある場合のみ、ユーザー同期とロール設定を行う
-        if (tenantInfo != null)
+        // claim に tenant を追加（claim 戦略で自動的にテナント解決される）
+        var identity = (ClaimsIdentity)ctx.Principal!.Identity!;
+        if (identity.FindFirst("tenant") == null)
         {
-            // ユーザー同期（ロール情報は除外）
-            var userSync = ctx.HttpContext.RequestServices
-                .GetRequiredService<UserSyncService>();
-            await userSync.SyncUserAsync(ctx.Principal);
-
-            // テナント情報をclaimに追加（ログイン時）
-            var identity = (ClaimsIdentity)ctx.Principal!.Identity!;
-            if (!string.IsNullOrEmpty(tenantInfo.Identifier) && string.IsNullOrEmpty(claimTenant))
-            {
-                identity.AddClaim(new Claim("tenant", tenantInfo.Identifier));
-            }
-
-            // OIDC からのロール情報を claim に追加（DBには保存しない）
-            if (!string.IsNullOrEmpty(tenantInfo.RoleClaimName))
-            {
-                try
-                {
-                    var roleClaims = ctx.Principal?.FindAll(tenantInfo.RoleClaimName);
-                    if (roleClaims != null)
-                    {
-                        foreach (var roleClaim in roleClaims)
-                        {
-                            identity.AddClaim(new Claim(ClaimTypes.Role, roleClaim.Value));
-                        }
-                    }
-                }
-                catch (Exception ex)
-                {
-                    logger.LogWarning(ex, "Failed to add role claims from OIDC");
-                }
-            }
+            identity.AddClaim(new Claim("tenant", tenantId));
+            logger.LogInformation("Tenant claim added: {TenantId}", tenantId);
         }
+
+        return Task.CompletedTask;
+    }
+
+    private static string? ResolveTenantId(AuthenticationProperties? properties, HttpContext httpContext)
+    {
+        if (properties != null &&
+            properties.Items.TryGetValue("tenant", out var tenantId) &&
+            !string.IsNullOrWhiteSpace(tenantId))
+        {
+            return tenantId;
+        }
+
+        var tenantFromQuery = httpContext.Request.Query["tenant"].ToString();
+        return string.IsNullOrWhiteSpace(tenantFromQuery) ? null : tenantFromQuery;
     }
 
     /// <summary>
