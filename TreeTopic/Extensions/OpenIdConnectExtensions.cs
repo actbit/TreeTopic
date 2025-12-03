@@ -72,7 +72,7 @@ public static class OpenIdConnectExtensions
                 OnRedirectToIdentityProvider = async ctx => await OnRedirectToIdentityProvider(ctx),
                 OnRedirectToIdentityProviderForSignOut = OnRedirectToIdentityProviderForSignOut,
                 OnAuthorizationCodeReceived = async ctx => await OnAuthorizationCodeReceived(ctx),
-                OnTokenValidated = OnTokenValidated
+                OnTokenValidated = async ctx => await OnTokenValidated(ctx)
             };
         });
     }
@@ -245,7 +245,7 @@ public static class OpenIdConnectExtensions
         return Task.CompletedTask;
     }
 
-    private static Task OnTokenValidated(TokenValidatedContext ctx)
+    private static async Task OnTokenValidated(TokenValidatedContext ctx)
     {
         var logger = ctx.HttpContext.RequestServices.GetRequiredService<ILogger<Program>>();
 
@@ -256,8 +256,11 @@ public static class OpenIdConnectExtensions
         {
             logger.LogWarning("Tenant not found in query parameter");
             ctx.Fail("Tenant not found");
-            return Task.CompletedTask;
+            return;
         }
+
+        var userSync = ctx.HttpContext.RequestServices.GetRequiredService<UserSyncService>();
+        await userSync.SyncUserAsync(ctx.Principal);
 
         // claim に tenant を追加（claim 戦略で自動的にテナント解決される）
         var identity = (ClaimsIdentity)ctx.Principal!.Identity!;
