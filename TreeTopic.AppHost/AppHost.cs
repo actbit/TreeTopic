@@ -1,19 +1,29 @@
+using Aspire.Hosting.Keycloak;
+using Microsoft.Extensions.Hosting;
+
 var builder = DistributedApplication.CreateBuilder(args);
 
-// Add PostgreSQL for tenant catalog
-var postgres = builder.AddPostgres("postgres");
+var postgres = builder.AddPostgres("postgres")
+    .WithPgAdmin();
 
-// Add TenantCatalog database
 var tenantDb = postgres.AddDatabase("treetopic-tenants");
-
-// Add SharedApp database (shared application data for all tenants)
 var appDb = postgres.AddDatabase("SharedApp");
 
-// Add TreeTopic project with database references
-// Wait for PostgreSQL to be ready before starting the application
-builder.AddProject<Projects.TreeTopic>("treetopic")
+var projectBuilder = builder.AddProject<Projects.TreeTopic>("treetopic")
     .WithReference(tenantDb)
     .WithReference(appDb)
     .WaitFor(postgres);
+
+if (builder.Environment.IsDevelopment())
+{
+    var keycloakAdminPassword = builder.AddParameter("keycloak-admin-password", secret: true);
+
+    var keycloak = builder.AddKeycloak("keycloak", port: 8080, adminPassword: keycloakAdminPassword)
+        .WithDataVolume();
+
+    projectBuilder
+        .WithReference(keycloak)
+        .WaitFor(keycloak);
+}
 
 builder.Build().Run();
