@@ -270,7 +270,7 @@ public static class OpenIdConnectExtensions
             logger.LogInformation("Tenant claim added: {TenantId}", tenantId);
         }
 
-        return Task.CompletedTask;
+        return;
     }
 
     private static string? ResolveTenantId(AuthenticationProperties? properties, HttpContext httpContext)
