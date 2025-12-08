@@ -6,6 +6,7 @@ using TreeTopic.Models;
 using Microsoft.EntityFrameworkCore;
 using TreeTopic.Extensions;
 using TreeTopic.Services;
+using TreeTopic.Repositories;
 using TreeTopic.Middleware;
 namespace TreeTopic;
 
@@ -100,6 +101,13 @@ public class Program
         builder.Services.AddSingleton<EncryptionService>();
 
         builder.Services.AddControllers();
+        builder.Services.AddScoped(typeof(IBaseRepository<>), typeof(BaseRepository<>));
+        builder.Services.AddScoped<IRoomRepository, RoomRepository>();
+        builder.Services.AddScoped<ITopicRepository, TopicRepository>();
+        builder.Services.AddScoped<IMessageRepository, MessageRepository>();
+        builder.Services.AddScoped<IFileRepository, FileRepository>();
+        builder.Services.AddScoped<IRoomUserRepository, RoomUserRepository>();
+        builder.Services.AddScoped<IRoomPermissionRepository, RoomPermissionRepository>();
 
         builder.Services.AddOpenApi();
 
