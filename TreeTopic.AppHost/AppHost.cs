@@ -1,6 +1,6 @@
 using Aspire.Hosting.Keycloak;
 using Microsoft.Extensions.Hosting;
-
+using Projects;
 var builder = DistributedApplication.CreateBuilder(args);
 
 var postgres = builder.AddPostgres("postgres")
@@ -9,7 +9,7 @@ var postgres = builder.AddPostgres("postgres")
 var tenantDb = postgres.AddDatabase("treetopic-tenants");
 var appDb = postgres.AddDatabase("SharedApp");
 
-var projectBuilder = builder.AddProject<Projects.TreeTopic>("treetopic")
+var projectBuilder = builder.AddProject<TreeTopic>("treetopic")
     .WithReference(tenantDb)
     .WithReference(appDb)
     .WaitFor(postgres);
