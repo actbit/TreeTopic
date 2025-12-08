@@ -94,6 +94,9 @@ public class Program
         // テナント管理サービスを登録
         builder.Services.AddScoped<TenantManagementService>();
 
+        // SetupToken検証サービスを登録
+        builder.Services.AddScoped<SetupTokenValidationService>();
+
         // TenantId Obfuscationサービスを登録（外部露出時に使用）
         builder.Services.AddSingleton<TenantIdObfuscationService>();
 
