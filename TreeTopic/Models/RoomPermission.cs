@@ -9,5 +9,6 @@ namespace TreeTopic.Models
         [ForeignKey(nameof(RoomUser))]
         public Guid RoomUserId { get; set; }
         public RoomUser RoomUser { get; set; }
+        public string Name { get; set; } = string.Empty;
     }
 }
