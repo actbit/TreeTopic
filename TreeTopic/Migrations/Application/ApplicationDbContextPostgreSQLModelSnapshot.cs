@@ -243,6 +243,9 @@ namespace TreeTopic.Migrations.Application
                     b.Property<string>("SecurityStamp")
                         .HasColumnType("text");
 
+                    b.Property<string>("Sub")
+                        .HasColumnType("text");
+
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(64)
@@ -263,6 +266,9 @@ namespace TreeTopic.Migrations.Application
                     b.HasIndex("NormalizedUserName")
                         .IsUnique()
                         .HasDatabaseName("UserNameIndex");
+
+                    b.HasIndex("TenantId", "Sub")
+                        .IsUnique();
 
                     b.ToTable("AspNetUsers", (string)null);
 

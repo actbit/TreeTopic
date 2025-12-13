@@ -7,6 +7,8 @@ namespace TreeTopic.Models
     public class ApplicationUser : IdentityUser<Guid>
     {
         public string? DisplayName { get; set; }
+        public string? Sub { get; set; }
+        public string? TenantId { get; set; }
         public ApplicationUser() : base()
         {
             Id = Guid.NewGuid();

@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using TreeTopic.Data;
 
@@ -11,9 +12,11 @@ using TreeTopic.Data;
 namespace TreeTopic.Migrations.Application_MySQL
 {
     [DbContext(typeof(ApplicationDbContextMySQL))]
-    partial class ApplicationDbContextMySQLModelSnapshot : ModelSnapshot
+    [Migration("20251212073538_AddSubToApplicationUser")]
+    partial class AddSubToApplicationUser
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

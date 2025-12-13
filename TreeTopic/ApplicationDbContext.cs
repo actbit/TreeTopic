@@ -26,6 +26,11 @@ namespace TreeTopic
         {
             base.OnModelCreating(modelBuilder);
 
+            // ApplicationUser - テナント + Sub の組み合わせに対するユニークインデックスを設定
+            modelBuilder.Entity<ApplicationUser>()
+                .HasIndex(u => new { u.TenantId, u.Sub })
+                .IsUnique();
+
             // DB プロバイダーに応じて Guid 型を最適化
             var provider = Database.ProviderName ?? "postgresql";
             if (provider.Contains("mysql", StringComparison.OrdinalIgnoreCase))

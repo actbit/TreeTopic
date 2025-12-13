@@ -1,6 +1,7 @@
 using System.Linq;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 using TreeTopic.Models;
 
 namespace TreeTopic.Services;
@@ -15,13 +16,16 @@ namespace TreeTopic.Services;
         private const string OidcProviderDisplay = "OpenID Connect";
 
         private readonly UserManager<ApplicationUser> _userManager;
+        private readonly ApplicationDbContext _dbContext;
         private readonly ILogger<UserSyncService> _logger;
 
         public UserSyncService(
             UserManager<ApplicationUser> userManager,
+            ApplicationDbContext dbContext,
             ILogger<UserSyncService> logger)
         {
             _userManager = userManager;
+            _dbContext = dbContext;
             _logger = logger;
         }
 
@@ -47,42 +51,49 @@ namespace TreeTopic.Services;
 
             try
             {
-                var user = await _userManager.FindByNameAsync(sub);
+                var user = await FindUserBySubAsync(sub);
 
                 if (user == null)
                 {
                     user = new ApplicationUser
                     {
-                        UserName = sub,
+                        UserName = name ?? sub,
                         Email = email,
-                        DisplayName = name
+                        DisplayName = name,
+                        Sub = sub
                     };
 
                     var result = await _userManager.CreateAsync(user);
                     if (!result.Succeeded)
                     {
-                        _logger.LogError("Failed to create user: {UserId} - {Errors}", sub,
+                        _logger.LogError("Failed to create user: {Sub} - {Errors}", sub,
                             string.Join(", ", result.Errors.Select(e => e.Description)));
                         return;
                     }
 
-                    _logger.LogInformation("User created: {UserId} ({Email})", sub, email);
+                    _logger.LogInformation("User created: {Sub} ({Email})", sub, email);
                 }
                 else if (user.Email != email || user.DisplayName != name)
                 {
                     user.Email = email;
                     user.DisplayName = name;
+                    user.UserName = name ?? sub;
                     await _userManager.UpdateAsync(user);
-                    _logger.LogInformation("User updated: {UserId}", sub);
+                    _logger.LogInformation("User updated: {Sub}", sub);
                 }
 
                 await EnsureOidcLoginAsync(user, sub);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error syncing user: {UserId}", sub);
+                _logger.LogError(ex, "Error syncing user: {Sub}", sub);
                 throw;
             }
+        }
+
+        private async Task<ApplicationUser?> FindUserBySubAsync(string sub)
+        {
+            return await _dbContext.Users.FirstOrDefaultAsync(u => u.Sub == sub);
         }
 
         private async Task EnsureOidcLoginAsync(ApplicationUser user, string sub)
