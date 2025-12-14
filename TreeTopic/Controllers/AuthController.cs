@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
 using Finbuckle.MultiTenant;
@@ -16,13 +17,16 @@ namespace TreeTopic.Controllers;
 public class AuthController : ControllerBase
 {
     private readonly IMultiTenantContextAccessor<ApplicationTenantInfo> _tenantAccessor;
+    private readonly UserManager<ApplicationUser> _userManager;
     private readonly ILogger<AuthController> _logger;
 
     public AuthController(
         IMultiTenantContextAccessor<ApplicationTenantInfo> tenantAccessor,
+        UserManager<ApplicationUser> userManager,
         ILogger<AuthController> logger)
     {
         _tenantAccessor = tenantAccessor;
+        _userManager = userManager;
         _logger = logger;
     }
 
@@ -57,30 +61,6 @@ public class AuthController : ControllerBase
         );
     }
 
-    /// <summary>
-    /// OIDC コールバック（サインイン）
-    /// </summary>
-    [HttpGet("/auth/signin-oidc")]
-    [AllowAnonymous]
-    public IActionResult SignInOidc()
-    {
-        // OIDC ミドルウェアが処理するため、このメソッドには到達しない
-        // ただし、Authorize で保護されたルートを明示的に除外する必要があるため定義
-        return Ok();
-    }
-
-    /// <summary>
-    /// OIDC コールバック（サインアウト）
-    /// </summary>
-    [HttpGet("/auth/signout-oidc")]
-    [AllowAnonymous]
-    public IActionResult SignOutOidc()
-    {
-        // OIDC ミドルウェアが処理するため、このメソッドには到達しない
-        // ただし、Authorize で保護されたルートを明示的に除外する必要があるため定義
-        return Ok();
-    }
-
     private bool IsValidReturnUrl(string returnUrl, string? currentTenant)
     {
         // 相対 URL か確認
@@ -104,13 +84,14 @@ public class AuthController : ControllerBase
     {
         _logger.LogInformation("Logout initiated");
 
+        // Only logout from application session (Cookies)
+        // Don't logout from Keycloak to preserve session for other applications
         return SignOut(
             new AuthenticationProperties
             {
                 RedirectUri = "/"
             },
-            "Cookies",
-            "oidc"
+            "Cookies"
         );
     }
 
@@ -120,7 +101,8 @@ public class AuthController : ControllerBase
     [HttpGet("me")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    public IActionResult GetCurrentUser()
+    [Authorize]
+    public async Task<IActionResult> GetCurrentUser()
     {
         if (!User.Identity?.IsAuthenticated ?? true)
         {
@@ -128,10 +110,17 @@ public class AuthController : ControllerBase
         }
 
         var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        var userName = User.FindFirst(ClaimTypes.Name)?.Value;
         var email = User.FindFirst(ClaimTypes.Email)?.Value;
         var roles = User.FindAll(ClaimTypes.Role).Select(c => c.Value).ToList();
         var tenant = User.FindFirst("tenant")?.Value;
+
+        // DB からユーザー情報を取得して DisplayName を取得
+        string? userName = null;
+        if (!string.IsNullOrEmpty(userId))
+        {
+            var user = await _userManager.FindByIdAsync(userId);
+            userName = user?.DisplayName ?? user?.UserName;
+        }
 
         return Ok(new
         {

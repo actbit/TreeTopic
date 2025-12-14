@@ -37,7 +37,8 @@ public static class OpenIdConnectExtensions
             // Callback paths for SPA
             // テナント情報は query parameter で渡す
             options.CallbackPath = "/auth/signin-oidc";
-            options.SignedOutCallbackPath = "/auth/signout-oidc";
+            // Note: We only manage application session (Cookies), not Keycloak session
+            // SignedOutCallbackPath is not needed
 
             // メタデータ自動発見を防ぐため、Configuration を手動で設定
             // Google のデフォルトエンドポイントを使用
@@ -70,7 +71,6 @@ public static class OpenIdConnectExtensions
             options.Events = new OpenIdConnectEvents
             {
                 OnRedirectToIdentityProvider = async ctx => await OnRedirectToIdentityProvider(ctx),
-                OnRedirectToIdentityProviderForSignOut = OnRedirectToIdentityProviderForSignOut,
                 OnAuthorizationCodeReceived = async ctx => await OnAuthorizationCodeReceived(ctx),
                 OnTokenValidated = async ctx => await OnTokenValidated(ctx)
             };
@@ -228,22 +228,6 @@ public static class OpenIdConnectExtensions
     /// トークン検証後の処理
     /// テナント検証、ユーザー同期、クレーム追加
     /// </summary>
-    /// <summary>
-    /// サインアウト後のコールバックURIにテナント識別子を含める
-    /// </summary>
-    private static Task OnRedirectToIdentityProviderForSignOut(RedirectContext ctx)
-    {
-        var tenantId = ctx.HttpContext.GetRouteValue("tenant")?.ToString();
-
-        if (!string.IsNullOrEmpty(tenantId))
-        {
-            var scheme = ctx.HttpContext.Request.Scheme;
-            var host = ctx.HttpContext.Request.Host;
-            ctx.ProtocolMessage.PostLogoutRedirectUri = $"{scheme}://{host}/auth/signout-oidc?tenant={Uri.EscapeDataString(tenantId)}";
-        }
-
-        return Task.CompletedTask;
-    }
 
     private static async Task OnTokenValidated(TokenValidatedContext ctx)
     {
@@ -269,6 +253,9 @@ public static class OpenIdConnectExtensions
             identity.AddClaim(new Claim("tenant", tenantId));
             logger.LogInformation("Tenant claim added: {TenantId}", tenantId);
         }
+
+        // Note: ID token storage for OIDC logout removed
+        // Application now only manages session cookies, not Keycloak session
 
         return;
     }
