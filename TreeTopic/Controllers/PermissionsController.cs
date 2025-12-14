@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using TreeTopic.Common;
 using TreeTopic.Dtos;
+using TreeTopic.Models;
 using TreeTopic.Services;
 
 namespace TreeTopic.Controllers;
@@ -18,85 +20,95 @@ public class PermissionsController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<ActionResult> List(CancellationToken cancellationToken)
+    public async Task<ActionResult<List<PermissionDto>>> List(CancellationToken cancellationToken)
     {
-        var (success, permissions, errorMessage) = await _permissionManagementService.ListPermissionsAsync();
+        var result = await _permissionManagementService.ListPermissionsAsync();
 
-        if (!success)
+        if (result.IsFailure)
         {
-            return StatusCode(StatusCodes.Status500InternalServerError,
-                new { message = errorMessage });
+            return result.ToActionResult(p => p.Select(PermissionToDto).ToList());
         }
 
-        return Ok(permissions);
+        var permissionDtos = result.Data!.Select(PermissionToDto).ToList();
+        return Ok(permissionDtos);
     }
 
     [HttpGet("{permissionId:guid}")]
-    public async Task<ActionResult> Get(Guid permissionId, CancellationToken cancellationToken)
+    public async Task<ActionResult<PermissionDto>> Get(Guid permissionId, CancellationToken cancellationToken)
     {
-        var (success, permission, errorMessage) = await _permissionManagementService.GetPermissionByIdAsync(permissionId);
+        var result = await _permissionManagementService.GetPermissionByIdAsync(permissionId);
 
-        if (!success)
+        if (result.IsFailure)
         {
-            return NotFound(new { message = errorMessage });
+            return result.ToActionResult(PermissionToDto);
         }
 
-        return Ok(permission);
+        var dto = PermissionToDto(result.Data!);
+        return Ok(dto);
     }
 
     [HttpPost]
-    public async Task<ActionResult> Create([FromBody] PermissionModificationRequest request)
+    public async Task<ActionResult<PermissionDto>> Create([FromBody] PermissionModificationRequest request)
     {
         if (!ModelState.IsValid)
         {
             return ValidationProblem(ModelState);
         }
 
-        var (success, permission, errorMessage) = await _permissionManagementService.CreatePermissionAsync(request);
+        var result = await _permissionManagementService.CreatePermissionAsync(request);
 
-        if (!success)
+        if (result.IsFailure)
         {
-            if (errorMessage?.Contains("not found") == true)
-            {
-                return NotFound(new { message = errorMessage });
-            }
-            else if (errorMessage?.Contains("required") == true)
-            {
-                return BadRequest(new { message = errorMessage });
-            }
-            else if (errorMessage?.Contains("already exists") == true)
-            {
-                return Conflict(new { message = errorMessage });
-            }
-            return BadRequest(new { message = errorMessage });
+            return result.ToActionResult(PermissionToDto);
         }
 
-        return CreatedAtAction(nameof(Get), new { permissionId = permission!.Id }, permission);
+        var dto = PermissionToDto(result.Data!);
+        return CreatedAtAction(nameof(Get), new { permissionId = dto.Id }, dto);
     }
 
     [HttpPut("{permissionId:guid}")]
-    public async Task<ActionResult> Update(Guid permissionId, [FromBody] PermissionModificationRequest request)
+    public async Task<ActionResult<PermissionDto>> Update(Guid permissionId, [FromBody] PermissionModificationRequest request)
     {
         if (!ModelState.IsValid)
         {
             return ValidationProblem(ModelState);
         }
 
-        var (success, permission, errorMessage) = await _permissionManagementService.UpdatePermissionAsync(permissionId, request);
+        var result = await _permissionManagementService.UpdatePermissionAsync(permissionId, request);
 
-        if (!success)
+        if (result.IsFailure)
         {
-            if (errorMessage?.Contains("not found") == true)
-            {
-                return NotFound(new { message = errorMessage });
-            }
-            else if (errorMessage?.Contains("already exists") == true)
-            {
-                return Conflict(new { message = errorMessage });
-            }
-            return BadRequest(new { message = errorMessage });
+            return result.ToActionResult(PermissionToDto);
         }
 
-        return Ok(permission);
+        var dto = PermissionToDto(result.Data!);
+        return Ok(dto);
+    }
+
+    [HttpDelete("{permissionId:guid}")]
+    public async Task<IActionResult> Delete(Guid permissionId)
+    {
+        var result = await _permissionManagementService.DeletePermissionAsync(permissionId);
+
+        if (result.IsFailure)
+        {
+            return result.ToActionResult();
+        }
+
+        return NoContent();
+    }
+
+    /// <summary>
+    /// Maps Permission entity to PermissionDto
+    /// </summary>
+    private static PermissionDto PermissionToDto(Permission permission)
+    {
+        return new PermissionDto
+        {
+            Id = permission.Id,
+            Name = permission.Name,
+            RoleId = permission.RoleId,
+            RoleName = permission.Role?.Name
+        };
     }
 }

@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using TreeTopic.Common;
 using TreeTopic.Dtos;
+using TreeTopic.Models;
 using TreeTopic.Services;
 
 namespace TreeTopic.Controllers;
@@ -20,69 +22,74 @@ public class UsersController : ControllerBase
     [HttpGet]
     public async Task<ActionResult<List<UserSummaryDto>>> GetAll(CancellationToken cancellationToken)
     {
-        var (success, users, errorMessage) = await _userManagementService.GetAllUsersAsync();
+        var result = await _userManagementService.GetAllUsersAsync();
 
-        if (!success)
+        if (result.IsFailure)
         {
-            return StatusCode(StatusCodes.Status500InternalServerError,
-                new { message = errorMessage });
+            return result.ToActionResult(userList => userList.Select(tuple => UserToDto(tuple.user, tuple.roles)).ToList());
         }
 
-        return Ok(users);
+        var userDtos = result.Data!.Select(tuple => UserToDto(tuple.user, tuple.roles)).ToList();
+        return Ok(userDtos);
     }
 
     [HttpGet("{userId:guid}")]
     public async Task<ActionResult<UserSummaryDto>> GetById(Guid userId)
     {
-        var (success, user, errorMessage) = await _userManagementService.GetUserByIdAsync(userId);
+        var result = await _userManagementService.GetUserByIdAsync(userId);
 
-        if (!success)
+        if (result.IsFailure)
         {
-            return NotFound(new { message = errorMessage });
+            return result.ToActionResult(tuple => UserToDto(tuple.user, tuple.roles));
         }
 
-        return Ok(user);
+        var (user, roles) = result.Data!;
+        var dto = UserToDto(user, roles);
+        return Ok(dto);
     }
 
     [HttpPost("{userId:guid}/roles")]
     public async Task<ActionResult<UserSummaryDto>> AddRole(Guid userId, [FromBody] RoleAssignmentRequest request)
     {
-        var (success, user, errorMessage) = await _userManagementService.AddRoleToUserAsync(userId, request);
+        var result = await _userManagementService.AddRoleToUserAsync(userId, request);
 
-        if (!success)
+        if (result.IsFailure)
         {
-            if (errorMessage?.Contains("not found") == true)
-            {
-                return NotFound(new { message = errorMessage });
-            }
-            else if (errorMessage?.Contains("required") == true)
-            {
-                return BadRequest(new { message = errorMessage });
-            }
-            return BadRequest(new { message = errorMessage });
+            return result.ToActionResult(tuple => UserToDto(tuple.user, tuple.roles));
         }
 
-        return Ok(user);
+        var (user, roles) = result.Data!;
+        var dto = UserToDto(user, roles);
+        return Ok(dto);
     }
 
     [HttpDelete("{userId:guid}/roles")]
     public async Task<ActionResult<UserSummaryDto>> RemoveRole(Guid userId, [FromBody] RoleAssignmentRequest request)
     {
-        var (success, user, errorMessage) = await _userManagementService.RemoveRoleFromUserAsync(userId, request);
+        var result = await _userManagementService.RemoveRoleFromUserAsync(userId, request);
 
-        if (!success)
+        if (result.IsFailure)
         {
-            if (errorMessage?.Contains("not found") == true)
-            {
-                return NotFound(new { message = errorMessage });
-            }
-            else if (errorMessage?.Contains("required") == true)
-            {
-                return BadRequest(new { message = errorMessage });
-            }
-            return BadRequest(new { message = errorMessage });
+            return result.ToActionResult(tuple => UserToDto(tuple.user, tuple.roles));
         }
 
-        return Ok(user);
+        var (user, roles) = result.Data!;
+        var dto = UserToDto(user, roles);
+        return Ok(dto);
+    }
+
+    /// <summary>
+    /// Maps ApplicationUser and roles to UserSummaryDto
+    /// </summary>
+    private static UserSummaryDto UserToDto(ApplicationUser user, IList<string> roles)
+    {
+        return new UserSummaryDto
+        {
+            Id = user.Id,
+            UserName = user.UserName,
+            Email = user.Email,
+            DisplayName = user.DisplayName,
+            Roles = roles
+        };
     }
 }

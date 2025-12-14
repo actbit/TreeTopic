@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using TreeTopic.Common;
+using TreeTopic.Common.Helpers;
 using TreeTopic.Dtos;
 using TreeTopic.Models;
 
@@ -9,28 +11,26 @@ namespace TreeTopic.Services;
 /// ユーザー管理サービス
 /// ユーザー取得・ロール管理を統括
 /// </summary>
-public class UserManagementService
+public class UserManagementService : BaseService
 {
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly RoleManager<ApplicationRole> _roleManager;
-    private readonly ILogger<UserManagementService> _logger;
 
     public UserManagementService(
         UserManager<ApplicationUser> userManager,
         RoleManager<ApplicationRole> roleManager,
-        ILogger<UserManagementService> logger)
+        ILogger<UserManagementService> logger) : base(logger)
     {
         _userManager = userManager;
         _roleManager = roleManager;
-        _logger = logger;
     }
 
     /// <summary>
     /// すべてのユーザーをロール情報と共に取得
     /// </summary>
-    public async Task<(bool Success, List<UserSummaryDto>? Users, string? ErrorMessage)> GetAllUsersAsync()
+    public async Task<Result<List<(ApplicationUser user, IList<string> roles)>>> GetAllUsersAsync()
     {
-        try
+        return await ExecuteAsync(async () =>
         {
             var users = await _userManager.Users
                 .OrderBy(u => u.UserName)
@@ -42,173 +42,126 @@ public class UserManagementService
                 return (user, roles);
             }));
 
-            var summaries = userWithRoles.Select(tuple => UserToDto(tuple.user, tuple.roles)).ToList();
-            return (true, summaries, null);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving all users");
-            return (false, null, "An error occurred while retrieving users");
-        }
+            return Result<List<(ApplicationUser user, IList<string> roles)>>.Success(userWithRoles.ToList());
+        }, nameof(GetAllUsersAsync));
     }
 
     /// <summary>
     /// ユーザーをIDで取得（ロール情報含む）
     /// </summary>
-    public async Task<(bool Success, UserSummaryDto? User, string? ErrorMessage)> GetUserByIdAsync(Guid userId)
+    public async Task<Result<(ApplicationUser user, IList<string> roles)>> GetUserByIdAsync(Guid userId)
     {
-        try
+        return await ExecuteAsync(async () =>
         {
-            var user = await _userManager.FindByIdAsync(userId.ToString());
-            if (user == null)
+            var userResult = await EntityHelper.FindUserByIdOrNotFoundAsync(_userManager, userId);
+            if (userResult.IsFailure)
             {
-                _logger.LogWarning("User {UserId} not found", userId);
-                return (false, null, $"User '{userId}' not found");
+                return Result<(ApplicationUser, IList<string>)>.NotFound(userResult.Error!.Message);
             }
 
-            var dto = await BuildUserDtoAsync(user);
-            return (true, dto, null);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving user {UserId}", userId);
-            return (false, null, "An error occurred while retrieving the user");
-        }
+            var user = userResult.Data!;
+            var roles = await _userManager.GetRolesAsync(user);
+            return Result<(ApplicationUser, IList<string>)>.Success((user, roles));
+        }, nameof(GetUserByIdAsync));
     }
 
     /// <summary>
     /// ユーザーにロールを追加
     /// </summary>
-    public async Task<(bool Success, UserSummaryDto? User, string? ErrorMessage)> AddRoleToUserAsync(
+    public async Task<Result<(ApplicationUser user, IList<string> roles)>> AddRoleToUserAsync(
         Guid userId, RoleAssignmentRequest request)
     {
-        try
+        return await ExecuteAsync(async () =>
         {
-            var user = await _userManager.FindByIdAsync(userId.ToString());
-            if (user == null)
+            var userResult = await EntityHelper.FindUserByIdOrNotFoundAsync(_userManager, userId);
+            if (userResult.IsFailure)
             {
-                _logger.LogWarning("User {UserId} not found", userId);
-                return (false, null, $"User '{userId}' not found");
+                return Result<(ApplicationUser, IList<string>)>.NotFound(userResult.Error!.Message);
             }
 
-            if (string.IsNullOrWhiteSpace(request.RoleName))
+            var user = userResult.Data!;
+
+            // Validate role name is not empty
+            var roleNameValidation = ValidationHelper.ValidateRequired(request.RoleName, "RoleName");
+            if (roleNameValidation.IsFailure)
             {
-                return (false, null, "RoleName is required");
+                return Result<(ApplicationUser, IList<string>)>.BadRequest(roleNameValidation.Error!.Message);
             }
 
             var roleName = request.RoleName.Trim();
             if (!await _roleManager.RoleExistsAsync(roleName))
             {
-                _logger.LogWarning("Role {RoleName} does not exist", roleName);
-                return (false, null, $"Role '{roleName}' does not exist");
+                return Result<(ApplicationUser, IList<string>)>.NotFound($"Role '{roleName}' does not exist");
             }
 
-            // ユーザーが既にこのロールを持っているかチェック
+            // Check if user already has this role
             var currentRoles = await _userManager.GetRolesAsync(user);
             if (currentRoles.Contains(roleName))
             {
-                _logger.LogWarning("User {UserId} already has role {RoleName}", userId, roleName);
-                var dto = await BuildUserDtoAsync(user);
-                return (true, dto, null); // 既に持っている場合は成功を返す
+                // Already has role, return success with current roles
+                return Result<(ApplicationUser, IList<string>)>.Success((user, currentRoles));
             }
 
             var result = await _userManager.AddToRoleAsync(user, roleName);
-            if (!result.Succeeded)
+            var identityResult = result.ToResult<(ApplicationUser, IList<string>)>((user, currentRoles));
+            if (identityResult.IsFailure)
             {
-                var errors = string.Join(", ", result.Errors.Select(e => e.Description));
-                _logger.LogError("Failed to add role {RoleName} to user {UserId}: {Errors}",
-                    roleName, userId, errors);
-                return (false, null, $"Failed to add role: {errors}");
+                return identityResult;
             }
 
-            _logger.LogInformation("Role {RoleName} added to user {UserId}", roleName, userId);
-            var updatedDto = await BuildUserDtoAsync(user);
-            return (true, updatedDto, null);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error adding role to user {UserId}", userId);
-            return (false, null, "An error occurred while adding the role");
-        }
+            // Get updated roles
+            var updatedRoles = await _userManager.GetRolesAsync(user);
+            return Result<(ApplicationUser, IList<string>)>.Success((user, updatedRoles));
+        }, nameof(AddRoleToUserAsync));
     }
 
     /// <summary>
     /// ユーザーからロールを削除
     /// </summary>
-    public async Task<(bool Success, UserSummaryDto? User, string? ErrorMessage)> RemoveRoleFromUserAsync(
+    public async Task<Result<(ApplicationUser user, IList<string> roles)>> RemoveRoleFromUserAsync(
         Guid userId, RoleAssignmentRequest request)
     {
-        try
+        return await ExecuteAsync(async () =>
         {
-            var user = await _userManager.FindByIdAsync(userId.ToString());
-            if (user == null)
+            var userResult = await EntityHelper.FindUserByIdOrNotFoundAsync(_userManager, userId);
+            if (userResult.IsFailure)
             {
-                _logger.LogWarning("User {UserId} not found", userId);
-                return (false, null, $"User '{userId}' not found");
+                return Result<(ApplicationUser, IList<string>)>.NotFound(userResult.Error!.Message);
             }
 
-            if (string.IsNullOrWhiteSpace(request.RoleName))
+            var user = userResult.Data!;
+
+            // Validate role name is not empty
+            var roleNameValidation = ValidationHelper.ValidateRequired(request.RoleName, "RoleName");
+            if (roleNameValidation.IsFailure)
             {
-                return (false, null, "RoleName is required");
+                return Result<(ApplicationUser, IList<string>)>.BadRequest(roleNameValidation.Error!.Message);
             }
 
             var roleName = request.RoleName.Trim();
             if (!await _roleManager.RoleExistsAsync(roleName))
             {
-                _logger.LogWarning("Role {RoleName} does not exist", roleName);
-                return (false, null, $"Role '{roleName}' does not exist");
+                return Result<(ApplicationUser, IList<string>)>.NotFound($"Role '{roleName}' does not exist");
             }
 
-            // ユーザーがこのロールを持っているかチェック
+            // Check if user has this role
             var currentRoles = await _userManager.GetRolesAsync(user);
             if (!currentRoles.Contains(roleName))
             {
-                _logger.LogWarning("User {UserId} does not have role {RoleName}", userId, roleName);
-                var dto = await BuildUserDtoAsync(user);
-                return (true, dto, null); // 持っていない場合は成功を返す
+                // Does not have role, return success with current roles
+                return Result<(ApplicationUser, IList<string>)>.Success((user, currentRoles));
             }
 
             var result = await _userManager.RemoveFromRoleAsync(user, roleName);
-            if (!result.Succeeded)
+            var identityResult = result.ToResult<(ApplicationUser, IList<string>)>((user, currentRoles));
+            if (identityResult.IsFailure)
             {
-                var errors = string.Join(", ", result.Errors.Select(e => e.Description));
-                _logger.LogError("Failed to remove role {RoleName} from user {UserId}: {Errors}",
-                    roleName, userId, errors);
-                return (false, null, $"Failed to remove role: {errors}");
+                return identityResult;
             }
 
-            _logger.LogInformation("Role {RoleName} removed from user {UserId}", roleName, userId);
-            var updatedDto = await BuildUserDtoAsync(user);
-            return (true, updatedDto, null);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error removing role from user {UserId}", userId);
-            return (false, null, "An error occurred while removing the role");
-        }
-    }
-
-    /// <summary>
-    /// ユーザーオブジェクトからDtoを非同期で構築
-    /// </summary>
-    private async Task<UserSummaryDto> BuildUserDtoAsync(ApplicationUser user)
-    {
-        var roles = await _userManager.GetRolesAsync(user);
-        return UserToDto(user, roles);
-    }
-
-    /// <summary>
-    /// ユーザーオブジェクトからDtoを構築
-    /// </summary>
-    private static UserSummaryDto UserToDto(ApplicationUser user, IList<string> roles)
-    {
-        return new UserSummaryDto
-        {
-            Id = user.Id,
-            UserName = user.UserName,
-            Email = user.Email,
-            DisplayName = user.DisplayName,
-            Roles = roles
-        };
+            // Get updated roles
+            var updatedRoles = await _userManager.GetRolesAsync(user);
+            return Result<(ApplicationUser, IList<string>)>.Success((user, updatedRoles));
+        }, nameof(RemoveRoleFromUserAsync));
     }
 }

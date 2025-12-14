@@ -1,4 +1,6 @@
 using Microsoft.AspNetCore.Identity;
+using TreeTopic.Common;
+using TreeTopic.Common.Helpers;
 using TreeTopic.Dtos;
 using TreeTopic.Models;
 
@@ -8,143 +10,150 @@ namespace TreeTopic.Services;
 /// ロール管理サービス
 /// ロール作成・削除・パーミッション管理を統括
 /// </summary>
-public class RoleManagementService
+public class RoleManagementService : BaseService
 {
     private readonly RoleManager<ApplicationRole> _roleManager;
     private readonly SetupTokenValidationService _setupTokenValidator;
-    private readonly ILogger<RoleManagementService> _logger;
 
     public RoleManagementService(
         RoleManager<ApplicationRole> roleManager,
         SetupTokenValidationService setupTokenValidator,
-        ILogger<RoleManagementService> logger)
+        ILogger<RoleManagementService> logger) : base(logger)
     {
         _roleManager = roleManager;
         _setupTokenValidator = setupTokenValidator;
-        _logger = logger;
     }
 
     /// <summary>
     /// SetupToken検証を伴うロール作成
     /// </summary>
-    public async Task<(bool Success, ApplicationRole? Role, string? ErrorMessage)> CreateRoleAsync(
+    public async Task<Result<ApplicationRole>> CreateRoleAsync(
         string tenant, SetupRoleCreationRequest request)
     {
-        try
+        return await ExecuteAsync(async () =>
         {
             // SetupToken の検証
             if (!await _setupTokenValidator.ValidateSetupTokenAsync(tenant, request.SetupToken))
             {
-                _logger.LogWarning("Invalid or expired SetupToken provided for tenant {TenantId}", tenant);
-                return (false, null, "Invalid or expired setup token");
+                return Result<ApplicationRole>.Unauthorized("Invalid or expired setup token");
+            }
+
+            // Validate role name is not empty
+            var nameValidation = ValidationHelper.ValidateRequired(request.Name, "Role name");
+            if (nameValidation.IsFailure)
+            {
+                return Result<ApplicationRole>.BadRequest(nameValidation.Error!.Message);
             }
 
             var cleanName = request.Name.Trim();
 
-            // ロールが既に存在するかチェック
+            // Check if role already exists
             if (await _roleManager.RoleExistsAsync(cleanName))
             {
-                _logger.LogWarning("Attempt to create existing role {RoleName} for tenant {TenantId}", cleanName, tenant);
-                return (false, null, $"Role '{cleanName}' already exists");
+                return Result<ApplicationRole>.Conflict($"Role '{cleanName}' already exists");
             }
 
             var role = new ApplicationRole(cleanName);
             var result = await _roleManager.CreateAsync(role);
 
-            if (!result.Succeeded)
+            var identityResult = result.ToResult(role);
+            if (identityResult.IsFailure)
             {
-                var errors = string.Join(", ", result.Errors.Select(e => e.Description));
-                _logger.LogError("Failed to create role {RoleName} for tenant {TenantId}: {Errors}",
-                    cleanName, tenant, errors);
-                return (false, null, $"Failed to create role: {errors}");
+                return Result<ApplicationRole>.BadRequest(identityResult.Error!.Message);
             }
 
-            _logger.LogInformation("Role {RoleName} created for tenant {TenantId}", cleanName, tenant);
-            return (true, role, null);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error creating role for tenant {TenantId}", tenant);
-            return (false, null, "An error occurred while creating the role");
-        }
+            return Result<ApplicationRole>.Success(role, 201);
+        }, nameof(CreateRoleAsync));
     }
 
     /// <summary>
-    /// SetupToken検証を伴うロール削除
+    /// SetupToken検証を伴うロール削除（ロール名で指定）
+    /// ASP.NET Core Identity ではロール名は一意なため、ID不要
     /// </summary>
-    public async Task<(bool Success, string? ErrorMessage)> DeleteRoleAsync(
+    public async Task<Result> DeleteRoleAsync(
         string tenant, SetupRoleDeletionRequest request)
     {
-        try
+        return await ExecuteAsync(async () =>
         {
             // SetupToken の検証
             if (!await _setupTokenValidator.ValidateSetupTokenAsync(tenant, request.SetupToken))
             {
-                _logger.LogWarning("Invalid or expired SetupToken provided for tenant {TenantId}", tenant);
-                return (false, "Invalid or expired setup token");
+                return Result.Unauthorized("Invalid or expired setup token");
             }
 
-            var role = await _roleManager.FindByIdAsync(request.RoleId.ToString());
+            // ロール名を検証
+            var roleNameValidation = ValidationHelper.ValidateRequired(request.RoleName, "Role name");
+            if (roleNameValidation.IsFailure)
+            {
+                return Result.BadRequest(roleNameValidation.Error!.Message);
+            }
+
+            // ロール名で検索
+            var role = await _roleManager.FindByNameAsync(request.RoleName.Trim());
             if (role == null)
             {
-                _logger.LogWarning("Role {RoleId} not found for tenant {TenantId}", request.RoleId, tenant);
-                return (false, $"Role '{request.RoleId}' not found");
+                return Result.NotFound($"Role '{request.RoleName}' not found");
             }
 
-            var result = await _roleManager.DeleteAsync(role);
-            if (!result.Succeeded)
+            // ロールを削除
+            var deleteResult = await _roleManager.DeleteAsync(role);
+            var identityResult = deleteResult.ToResult();
+            if (identityResult.IsFailure)
             {
-                var errors = string.Join(", ", result.Errors.Select(e => e.Description));
-                _logger.LogError("Failed to delete role {RoleId} for tenant {TenantId}: {Errors}",
-                    request.RoleId, tenant, errors);
-                return (false, $"Failed to delete role: {errors}");
+                return Result.BadRequest(identityResult.Error!.Message);
             }
 
-            _logger.LogInformation("Role {RoleId} deleted for tenant {TenantId}", request.RoleId, tenant);
-            return (true, null);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error deleting role {RoleId} for tenant {TenantId}", request.RoleId, tenant);
-            return (false, "An error occurred while deleting the role");
-        }
+            return Result.NoContent();
+        }, nameof(DeleteRoleAsync));
     }
 
     /// <summary>
     /// SetupToken検証を伴うロールへのパーミッション追加
+    /// ロール名で指定（ASP.NET Core Identity ではロール名は一意）
     /// </summary>
-    public async Task<(bool Success, Permission? Permission, string? ErrorMessage)> AddPermissionToRoleAsync(
+    public async Task<Result<Permission>> AddPermissionToRoleAsync(
         string tenant, SetupPermissionRequest request)
     {
-        try
+        return await ExecuteAsync(async () =>
         {
             // SetupToken の検証
             if (!await _setupTokenValidator.ValidateSetupTokenAsync(tenant, request.SetupToken))
             {
-                _logger.LogWarning("Invalid or expired SetupToken provided for tenant {TenantId}", tenant);
-                return (false, null, "Invalid or expired setup token");
+                return Result<Permission>.Unauthorized("Invalid or expired setup token");
             }
 
-            var role = await _roleManager.FindByIdAsync(request.RoleId.ToString());
+            // ロール名を検証
+            var roleNameValidation = ValidationHelper.ValidateRequired(request.RoleName, "Role name");
+            if (roleNameValidation.IsFailure)
+            {
+                return Result<Permission>.BadRequest(roleNameValidation.Error!.Message);
+            }
+
+            // ロール名で検索
+            var role = await _roleManager.FindByNameAsync(request.RoleName.Trim());
             if (role == null)
             {
-                _logger.LogWarning("Role {RoleId} not found for tenant {TenantId}", request.RoleId, tenant);
-                return (false, null, $"Role '{request.RoleId}' not found");
+                return Result<Permission>.NotFound($"Role '{request.RoleName}' not found");
             }
 
-            // パーミッションが既に存在するかチェック
+            // Validate permission name is not empty
+            var permissionNameValidation = ValidationHelper.ValidateRequired(request.PermissionName, "Permission name");
+            if (permissionNameValidation.IsFailure)
+            {
+                return Result<Permission>.BadRequest(permissionNameValidation.Error!.Message);
+            }
+
+            // Check if permission already exists for this role
             if (role.Authorities?.Any(a => a.Name == request.PermissionName) ?? false)
             {
-                _logger.LogWarning("Permission {PermissionName} already exists for role {RoleId}",
-                    request.PermissionName, request.RoleId);
-                return (false, null, $"Permission '{request.PermissionName}' already exists for this role");
+                return Result<Permission>.Conflict($"Permission '{request.PermissionName}' already exists for this role");
             }
 
             var permission = new Permission
             {
                 Id = Guid.NewGuid(),
                 Name = request.PermissionName,
-                RoleId = request.RoleId,
+                RoleId = role.Id,
                 CreatedAt = DateTime.UtcNow
             };
 
@@ -155,106 +164,110 @@ public class RoleManagementService
             role.Authorities.Add(permission);
             var result = await _roleManager.UpdateAsync(role);
 
-            if (!result.Succeeded)
+            var identityResult = result.ToResult(permission);
+            if (identityResult.IsFailure)
             {
-                var errors = string.Join(", ", result.Errors.Select(e => e.Description));
-                _logger.LogError("Failed to add permission {PermissionName} to role {RoleId}: {Errors}",
-                    request.PermissionName, request.RoleId, errors);
-                return (false, null, $"Failed to add permission: {errors}");
+                return Result<Permission>.BadRequest(identityResult.Error!.Message);
             }
 
-            _logger.LogInformation("Permission {PermissionName} added to role {RoleId} for tenant {TenantId}",
-                request.PermissionName, request.RoleId, tenant);
-            return (true, permission, null);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error adding permission {PermissionName} to role {RoleId} for tenant {TenantId}",
-                request.PermissionName, request.RoleId, tenant);
-            return (false, null, "An error occurred while adding the permission");
-        }
+            return Result<Permission>.Success(permission, 201);
+        }, nameof(AddPermissionToRoleAsync));
     }
 
     /// <summary>
     /// SetupToken検証を伴うロールからのパーミッション削除
+    /// ロール名で指定（ASP.NET Core Identity ではロール名は一意）
     /// </summary>
-    public async Task<(bool Success, string? ErrorMessage)> DeletePermissionFromRoleAsync(
+    public async Task<Result> DeletePermissionFromRoleAsync(
         string tenant, SetupPermissionDeletionRequest request)
     {
-        try
+        return await ExecuteAsync(async () =>
         {
             // SetupToken の検証
             if (!await _setupTokenValidator.ValidateSetupTokenAsync(tenant, request.SetupToken))
             {
-                _logger.LogWarning("Invalid or expired SetupToken provided for tenant {TenantId}", tenant);
-                return (false, "Invalid or expired setup token");
+                return Result.Unauthorized("Invalid or expired setup token");
             }
 
-            // パーミッション削除ロジック（ApplicationDbContext が必要な場合は、
-            // PermissionManagementService で実装）
-            _logger.LogWarning("Delete permission endpoint not fully implemented - requires ApplicationDbContext access");
-            return (false, "Delete permission functionality requires additional setup");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error deleting permission {PermissionId} for tenant {TenantId}",
-                request.PermissionId, tenant);
-            return (false, "An error occurred while deleting the permission");
-        }
+            // ロール名を検証
+            var roleNameValidation = ValidationHelper.ValidateRequired(request.RoleName, "Role name");
+            if (roleNameValidation.IsFailure)
+            {
+                return Result.BadRequest(roleNameValidation.Error!.Message);
+            }
+
+            // ロール名で検索
+            var role = await _roleManager.FindByNameAsync(request.RoleName.Trim());
+            if (role == null)
+            {
+                return Result.NotFound($"Role '{request.RoleName}' not found");
+            }
+
+            // パーミッション名を検証
+            var permissionNameValidation = ValidationHelper.ValidateRequired(request.PermissionName, "Permission name");
+            if (permissionNameValidation.IsFailure)
+            {
+                return Result.BadRequest(permissionNameValidation.Error!.Message);
+            }
+
+            // ロールからパーミッションを削除
+            var permission = role.Authorities?.FirstOrDefault(a => a.Name == request.PermissionName.Trim());
+            if (permission == null)
+            {
+                return Result.NotFound($"Permission '{request.PermissionName}' not found for role '{request.RoleName}'");
+            }
+
+            role.Authorities!.Remove(permission);
+            var result = await _roleManager.UpdateAsync(role);
+            if (!result.Succeeded)
+            {
+                return Result.BadRequest("Failed to delete permission from role");
+            }
+
+            return Result.NoContent();
+        }, nameof(DeletePermissionFromRoleAsync));
     }
 
     /// <summary>
     /// SetupToken検証を伴うデフォルトロール設定
     /// </summary>
-    public async Task<(bool Success, RoleSetupCompletionResponse Response, string? ErrorMessage)> SetupDefaultRoleAsync(
+    public async Task<Result<RoleSetupCompletionResponse>> SetupDefaultRoleAsync(
         string tenant, SetupDefaultRoleRequest request)
     {
-        try
+        return await ExecuteAsync(async () =>
         {
             // SetupToken の検証
             if (!await _setupTokenValidator.ValidateSetupTokenAsync(tenant, request.SetupToken))
             {
-                _logger.LogWarning("Invalid or expired SetupToken provided for tenant {TenantId}", tenant);
-                var errorResponse = new RoleSetupCompletionResponse
-                {
-                    Success = false,
-                    Message = "Invalid or expired setup token"
-                };
-                return (false, errorResponse, "Invalid or expired setup token");
+                return Result<RoleSetupCompletionResponse>.Unauthorized("Invalid or expired setup token");
+            }
+
+            // Validate role name is not empty
+            var nameValidation = ValidationHelper.ValidateRequired(request.DefaultRoleName, "Default role name");
+            if (nameValidation.IsFailure)
+            {
+                return Result<RoleSetupCompletionResponse>.BadRequest(nameValidation.Error!.Message);
             }
 
             var cleanName = request.DefaultRoleName.Trim();
 
-            // デフォルトロールが既に存在するかチェック
+            // Check if default role already exists
             if (await _roleManager.RoleExistsAsync(cleanName))
             {
-                _logger.LogWarning("Default role {RoleName} already exists for tenant {TenantId}", cleanName, tenant);
-                var conflictResponse = new RoleSetupCompletionResponse
-                {
-                    Success = false,
-                    Message = $"Default role '{cleanName}' already exists"
-                };
-                return (false, conflictResponse, $"Default role '{cleanName}' already exists");
+                return Result<RoleSetupCompletionResponse>.Conflict($"Default role '{cleanName}' already exists");
             }
 
-            // デフォルトロールを作成
+            // Create default role
             var role = new ApplicationRole(cleanName);
             var createResult = await _roleManager.CreateAsync(role);
 
-            if (!createResult.Succeeded)
+            var identityResult = createResult.ToResult<RoleSetupCompletionResponse>(null);
+            if (identityResult.IsFailure)
             {
-                var errors = string.Join(", ", createResult.Errors.Select(e => e.Description));
-                _logger.LogError("Failed to create default role {RoleName}: {Errors}",
-                    cleanName, errors);
-                var failResponse = new RoleSetupCompletionResponse
-                {
-                    Success = false,
-                    Message = $"Failed to create default role: {errors}"
-                };
-                return (false, failResponse, $"Failed to create default role: {errors}");
+                return Result<RoleSetupCompletionResponse>.BadRequest(identityResult.Error!.Message);
             }
 
-            // デフォルトパーミッションを追加
+            // Add default permissions
             int permissionsAdded = 0;
             if (request.DefaultPermissions?.Count > 0)
             {
@@ -280,15 +293,10 @@ public class RoleManagementService
                     var updateResult = await _roleManager.UpdateAsync(role);
                     if (!updateResult.Succeeded)
                     {
-                        _logger.LogWarning("Failed to add all default permissions to role {RoleName}",
-                            cleanName);
+                        // Log warning but continue - permissions may have been partially added
                     }
                 }
             }
-
-            _logger.LogInformation(
-                "Default role {RoleName} created with {PermissionCount} permissions for tenant {TenantId}",
-                cleanName, permissionsAdded, tenant);
 
             var response = new RoleSetupCompletionResponse
             {
@@ -297,17 +305,8 @@ public class RoleManagementService
                 DefaultRoleName = cleanName,
                 PermissionsAdded = permissionsAdded
             };
-            return (true, response, null);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error setting default role for tenant {TenantId}", tenant);
-            var errorResponse = new RoleSetupCompletionResponse
-            {
-                Success = false,
-                Message = "An error occurred while setting the default role"
-            };
-            return (false, errorResponse, "An error occurred while setting the default role");
-        }
+
+            return Result<RoleSetupCompletionResponse>.Success(response, 201);
+        }, nameof(SetupDefaultRoleAsync));
     }
 }

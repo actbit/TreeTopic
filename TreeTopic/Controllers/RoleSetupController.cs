@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
+using TreeTopic.Common;
 using TreeTopic.Dtos;
+using TreeTopic.Models;
 using TreeTopic.Services;
 
 namespace TreeTopic.Controllers;
@@ -13,14 +15,10 @@ namespace TreeTopic.Controllers;
 public class RoleSetupController : ControllerBase
 {
     private readonly RoleManagementService _roleManagementService;
-    private readonly ILogger<RoleSetupController> _logger;
 
-    public RoleSetupController(
-        RoleManagementService roleManagementService,
-        ILogger<RoleSetupController> logger)
+    public RoleSetupController(RoleManagementService roleManagementService)
     {
         _roleManagementService = roleManagementService;
-        _logger = logger;
     }
 
     /// <summary>
@@ -34,45 +32,34 @@ public class RoleSetupController : ControllerBase
             return ValidationProblem(ModelState);
         }
 
-        var (success, role, errorMessage) = await _roleManagementService.CreateRoleAsync(tenant, request);
+        var result = await _roleManagementService.CreateRoleAsync(tenant, request);
 
-        if (!success)
+        if (result.IsFailure)
         {
-            // SetupToken検証エラーか一般的なエラーかで判定
-            if (errorMessage?.Contains("Invalid or expired") == true)
-            {
-                return Unauthorized(new { message = errorMessage });
-            }
-            else if (errorMessage?.Contains("already exists") == true)
-            {
-                return Conflict(new { message = errorMessage });
-            }
-            return BadRequest(new { message = errorMessage });
+            return result.ToActionResult(r => new RoleDto { Id = r.Id, Name = r.Name });
         }
 
-        return Ok(new RoleDto { Id = role!.Id, Name = role.Name });
+        var role = result.Data!;
+        return Ok(new RoleDto { Id = role.Id, Name = role.Name });
     }
 
     /// <summary>
-    /// ロールを削除（SetupToken経由）
+    /// ロールを削除（SetupToken経由、ロール名で指定）
     /// </summary>
-    [HttpPost("delete")]
-    public async Task<IActionResult> DeleteRole(string tenant, [FromBody] SetupRoleDeletionRequest request)
+    [HttpDelete("{roleName}")]
+    public async Task<IActionResult> DeleteRole(string tenant, string roleName, [FromBody] SetupTokenRequest request)
     {
-        var (success, errorMessage) = await _roleManagementService.DeleteRoleAsync(tenant, request);
-
-        if (!success)
+        var deletionRequest = new SetupRoleDeletionRequest
         {
-            // SetupToken検証エラーか一般的なエラーかで判定
-            if (errorMessage?.Contains("Invalid or expired") == true)
-            {
-                return Unauthorized(new { message = errorMessage });
-            }
-            else if (errorMessage?.Contains("not found") == true)
-            {
-                return NotFound(new { message = errorMessage });
-            }
-            return BadRequest(new { message = errorMessage });
+            SetupToken = request.SetupToken,
+            RoleName = roleName
+        };
+
+        var result = await _roleManagementService.DeleteRoleAsync(tenant, deletionRequest);
+
+        if (result.IsFailure)
+        {
+            return result.ToActionResult();
         }
 
         return NoContent();
@@ -89,27 +76,28 @@ public class RoleSetupController : ControllerBase
             return ValidationProblem(ModelState);
         }
 
-        var (success, permission, errorMessage) = await _roleManagementService.AddPermissionToRoleAsync(tenant, request);
+        var result = await _roleManagementService.AddPermissionToRoleAsync(tenant, request);
 
-        if (!success)
+        if (result.IsFailure)
         {
-            // SetupToken検証エラーか一般的なエラーかで判定
-            if (errorMessage?.Contains("Invalid or expired") == true)
+            return result.ToActionResult(p => new PermissionDto
             {
-                return Unauthorized(new { message = errorMessage });
-            }
-            else if (errorMessage?.Contains("not found") == true)
-            {
-                return NotFound(new { message = errorMessage });
-            }
-            else if (errorMessage?.Contains("already exists") == true)
-            {
-                return Conflict(new { message = errorMessage });
-            }
-            return BadRequest(new { message = errorMessage });
+                Id = p.Id,
+                Name = p.Name,
+                RoleId = p.RoleId,
+                RoleName = p.Role?.Name
+            });
         }
 
-        return Ok(permission);
+        var permission = result.Data!;
+        var dto = new PermissionDto
+        {
+            Id = permission.Id,
+            Name = permission.Name,
+            RoleId = permission.RoleId,
+            RoleName = permission.Role?.Name
+        };
+        return Ok(dto);
     }
 
     /// <summary>
@@ -118,20 +106,11 @@ public class RoleSetupController : ControllerBase
     [HttpPost("permissions/delete")]
     public async Task<IActionResult> DeletePermission(string tenant, [FromBody] SetupPermissionDeletionRequest request)
     {
-        var (success, errorMessage) = await _roleManagementService.DeletePermissionFromRoleAsync(tenant, request);
+        var result = await _roleManagementService.DeletePermissionFromRoleAsync(tenant, request);
 
-        if (!success)
+        if (result.IsFailure)
         {
-            // SetupToken検証エラーか一般的なエラーかで判定
-            if (errorMessage?.Contains("Invalid or expired") == true)
-            {
-                return Unauthorized(new { message = errorMessage });
-            }
-            else if (errorMessage?.Contains("not fully implemented") == true)
-            {
-                return StatusCode(StatusCodes.Status501NotImplemented, new { message = errorMessage });
-            }
-            return BadRequest(new { message = errorMessage });
+            return result.ToActionResult();
         }
 
         return NoContent();
@@ -141,29 +120,20 @@ public class RoleSetupController : ControllerBase
     /// デフォルトロール（新規ユーザーに自動付与されるロール）を設定
     /// </summary>
     [HttpPost("default")]
-    public async Task<IActionResult> SetDefaultRole(string tenant, [FromBody] SetupDefaultRoleRequest request)
+    public async Task<ActionResult<RoleSetupCompletionResponse>> SetDefaultRole(string tenant, [FromBody] SetupDefaultRoleRequest request)
     {
         if (!ModelState.IsValid)
         {
             return ValidationProblem(ModelState);
         }
 
-        var (success, response, errorMessage) = await _roleManagementService.SetupDefaultRoleAsync(tenant, request);
+        var result = await _roleManagementService.SetupDefaultRoleAsync(tenant, request);
 
-        if (!success)
+        if (result.IsFailure)
         {
-            // SetupToken検証エラーか一般的なエラーかで判定
-            if (errorMessage?.Contains("Invalid or expired") == true)
-            {
-                return Unauthorized(response);
-            }
-            else if (errorMessage?.Contains("already exists") == true)
-            {
-                return Conflict(response);
-            }
-            return BadRequest(response);
+            return result.ToActionResult(r => r);
         }
 
-        return Ok(response);
+        return Ok(result.Data!);
     }
 }
