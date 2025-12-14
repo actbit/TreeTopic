@@ -1,14 +1,7 @@
-using Finbuckle.MultiTenant.Abstractions;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using System;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
 using TreeTopic.Dtos;
-using TreeTopic.Models;
+using TreeTopic.Services;
 
 namespace TreeTopic.Controllers;
 
@@ -17,51 +10,38 @@ namespace TreeTopic.Controllers;
 [Authorize(Roles = "Admin")]
 public class PermissionsController : ControllerBase
 {
-    private readonly ApplicationDbContext _context;
-    private readonly RoleManager<ApplicationRole> _roleManager;
-    private readonly IMultiTenantContextAccessor<ApplicationTenantInfo> _tenantAccessor;
+    private readonly PermissionManagementService _permissionManagementService;
 
-    public PermissionsController(
-        ApplicationDbContext context,
-        RoleManager<ApplicationRole> roleManager,
-        IMultiTenantContextAccessor<ApplicationTenantInfo> tenantAccessor)
+    public PermissionsController(PermissionManagementService permissionManagementService)
     {
-        _context = context;
-        _roleManager = roleManager;
-        _tenantAccessor = tenantAccessor;
+        _permissionManagementService = permissionManagementService;
     }
-
-    private string? CurrentTenantId => _tenantAccessor.MultiTenantContext?.TenantInfo?.Id;
 
     [HttpGet]
     public async Task<ActionResult> List(CancellationToken cancellationToken)
     {
-        var query = _context.Permissions.Include(p => p.Role).AsQueryable();
-        var tenantId = CurrentTenantId;
-        if (!string.IsNullOrEmpty(tenantId))
+        var (success, permissions, errorMessage) = await _permissionManagementService.ListPermissionsAsync();
+
+        if (!success)
         {
-            query = query.Where(p => p.TenantId == tenantId);
+            return StatusCode(StatusCodes.Status500InternalServerError,
+                new { message = errorMessage });
         }
 
-        var permissions = await query.ToListAsync(cancellationToken);
-
-        var mapped = permissions.Select(PermissionToDto).ToList();
-        return Ok(mapped);
+        return Ok(permissions);
     }
 
     [HttpGet("{permissionId:guid}")]
     public async Task<ActionResult> Get(Guid permissionId, CancellationToken cancellationToken)
     {
-        var permission = await _context.Permissions
-            .Include(p => p.Role)
-            .FirstOrDefaultAsync(p => p.Id == permissionId, cancellationToken);
+        var (success, permission, errorMessage) = await _permissionManagementService.GetPermissionByIdAsync(permissionId);
 
-        if (permission == null)
+        if (!success)
         {
-            return NotFound(new { message = $"Permission '{permissionId}' not found" });
+            return NotFound(new { message = errorMessage });
         }
 
-        return Ok(PermissionToDto(permission));
+        return Ok(permission);
     }
 
     [HttpPost]
@@ -72,29 +52,26 @@ public class PermissionsController : ControllerBase
             return ValidationProblem(ModelState);
         }
 
-        var role = await _roleManager.FindByIdAsync(request.RoleId.ToString());
-        if (role == null)
+        var (success, permission, errorMessage) = await _permissionManagementService.CreatePermissionAsync(request);
+
+        if (!success)
         {
-            return NotFound(new { message = $"Role '{request.RoleId}' not found" });
+            if (errorMessage?.Contains("not found") == true)
+            {
+                return NotFound(new { message = errorMessage });
+            }
+            else if (errorMessage?.Contains("required") == true)
+            {
+                return BadRequest(new { message = errorMessage });
+            }
+            else if (errorMessage?.Contains("already exists") == true)
+            {
+                return Conflict(new { message = errorMessage });
+            }
+            return BadRequest(new { message = errorMessage });
         }
 
-        if (string.IsNullOrWhiteSpace(request.Name))
-        {
-            return BadRequest(new { message = "Name is required" });
-        }
-
-        var permission = new Permission
-        {
-            Name = request.Name.Trim(),
-            RoleId = request.RoleId,
-            TenantId = CurrentTenantId ?? string.Empty
-        };
-
-        _context.Permissions.Add(permission);
-        await _context.SaveChangesAsync();
-
-        await _context.Entry(permission).Reference(p => p.Role).LoadAsync();
-        return CreatedAtAction(nameof(Get), new { permissionId = permission.Id }, PermissionToDto(permission));
+        return CreatedAtAction(nameof(Get), new { permissionId = permission!.Id }, permission);
     }
 
     [HttpPut("{permissionId:guid}")]
@@ -105,33 +82,21 @@ public class PermissionsController : ControllerBase
             return ValidationProblem(ModelState);
         }
 
-        var permission = await _context.Permissions.FindAsync(permissionId);
-        if (permission == null)
+        var (success, permission, errorMessage) = await _permissionManagementService.UpdatePermissionAsync(permissionId, request);
+
+        if (!success)
         {
-            return NotFound(new { message = $"Permission '{permissionId}' not found" });
+            if (errorMessage?.Contains("not found") == true)
+            {
+                return NotFound(new { message = errorMessage });
+            }
+            else if (errorMessage?.Contains("already exists") == true)
+            {
+                return Conflict(new { message = errorMessage });
+            }
+            return BadRequest(new { message = errorMessage });
         }
 
-        var role = await _roleManager.FindByIdAsync(request.RoleId.ToString());
-        if (role == null)
-        {
-            return NotFound(new { message = $"Role '{request.RoleId}' not found" });
-        }
-
-        permission.Name = request.Name.Trim();
-        permission.RoleId = request.RoleId;
-        await _context.SaveChangesAsync();
-        await _context.Entry(permission).Reference(p => p.Role).LoadAsync();
-        return Ok(PermissionToDto(permission));
-    }
-
-    private static PermissionDto PermissionToDto(Permission permission)
-    {
-        return new PermissionDto
-        {
-            Id = permission.Id,
-            Name = permission.Name,
-            RoleId = permission.RoleId,
-            RoleName = permission.Role?.Name
-        };
+        return Ok(permission);
     }
 }

@@ -137,6 +137,15 @@ public class Program
         // 暗号化サービスを登録（Connection String暗号化用）
         builder.Services.AddSingleton<EncryptionService>();
 
+        // ロール管理サービスを登録
+        builder.Services.AddScoped<RoleManagementService>();
+
+        // ユーザー管理サービスを登録
+        builder.Services.AddScoped<UserManagementService>();
+
+        // パーミッション管理サービスを登録
+        builder.Services.AddScoped<PermissionManagementService>();
+
         builder.Services.AddControllers();
         builder.Services.AddScoped(typeof(IBaseRepository<>), typeof(BaseRepository<>));
         builder.Services.AddScoped<IRoomRepository, RoomRepository>();
