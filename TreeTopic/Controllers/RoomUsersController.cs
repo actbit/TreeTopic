@@ -53,8 +53,7 @@ public class RoomUsersController : ControllerBase
         var toCreate = new RoomUser
         {
             ApplicationUserId = request.ApplicationUserId,
-            RoomId = roomId,
-            RoomPermissonId = request.RoomPermissionId
+            RoomId = roomId
         };
 
         await _roomUserRepository.AddAsync(toCreate);
@@ -95,8 +94,7 @@ public class RoomUsersController : ControllerBase
         {
             Id = entity.Id,
             ApplicationUserId = entity.ApplicationUserId,
-            RoomId = entity.RoomId,
-            RoomPermissionId = entity.RoomPermissonId
+            RoomId = entity.RoomId
         };
     }
 }
