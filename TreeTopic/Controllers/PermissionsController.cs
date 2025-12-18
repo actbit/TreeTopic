@@ -1,14 +1,9 @@
-using Finbuckle.MultiTenant.Abstractions;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using System;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
+using TreeTopic.Common;
 using TreeTopic.Dtos;
 using TreeTopic.Models;
+using TreeTopic.Services;
 
 namespace TreeTopic.Controllers;
 
@@ -17,111 +12,90 @@ namespace TreeTopic.Controllers;
 [Authorize(Roles = "Admin")]
 public class PermissionsController : ControllerBase
 {
-    private readonly ApplicationDbContext _context;
-    private readonly RoleManager<ApplicationRole> _roleManager;
-    private readonly IMultiTenantContextAccessor<ApplicationTenantInfo> _tenantAccessor;
+    private readonly PermissionManagementService _permissionManagementService;
 
-    public PermissionsController(
-        ApplicationDbContext context,
-        RoleManager<ApplicationRole> roleManager,
-        IMultiTenantContextAccessor<ApplicationTenantInfo> tenantAccessor)
+    public PermissionsController(PermissionManagementService permissionManagementService)
     {
-        _context = context;
-        _roleManager = roleManager;
-        _tenantAccessor = tenantAccessor;
+        _permissionManagementService = permissionManagementService;
     }
 
-    private string? CurrentTenantId => _tenantAccessor.MultiTenantContext?.TenantInfo?.Id;
-
     [HttpGet]
-    public async Task<ActionResult> List(CancellationToken cancellationToken)
+    public async Task<ActionResult<List<PermissionDto>>> List(CancellationToken cancellationToken)
     {
-        var query = _context.Permissions.Include(p => p.Role).AsQueryable();
-        var tenantId = CurrentTenantId;
-        if (!string.IsNullOrEmpty(tenantId))
+        var result = await _permissionManagementService.ListPermissionsAsync();
+
+        if (result.IsFailure)
         {
-            query = query.Where(p => p.TenantId == tenantId);
+            return result.ToActionResult(p => p.Select(PermissionToDto).ToList());
         }
 
-        var permissions = await query.ToListAsync(cancellationToken);
-
-        var mapped = permissions.Select(PermissionToDto).ToList();
-        return Ok(mapped);
+        var permissionDtos = result.Data!.Select(PermissionToDto).ToList();
+        return Ok(permissionDtos);
     }
 
     [HttpGet("{permissionId:guid}")]
-    public async Task<ActionResult> Get(Guid permissionId, CancellationToken cancellationToken)
+    public async Task<ActionResult<PermissionDto>> Get(Guid permissionId, CancellationToken cancellationToken)
     {
-        var permission = await _context.Permissions
-            .Include(p => p.Role)
-            .FirstOrDefaultAsync(p => p.Id == permissionId, cancellationToken);
+        var result = await _permissionManagementService.GetPermissionByIdAsync(permissionId);
 
-        if (permission == null)
+        if (result.IsFailure)
         {
-            return NotFound(new { message = $"Permission '{permissionId}' not found" });
+            return result.ToActionResult(PermissionToDto);
         }
 
-        return Ok(PermissionToDto(permission));
+        var dto = PermissionToDto(result.Data!);
+        return Ok(dto);
     }
 
     [HttpPost]
-    public async Task<ActionResult> Create([FromBody] PermissionModificationRequest request)
+    public async Task<ActionResult<PermissionDto>> Create([FromBody] PermissionModificationRequest request)
     {
         if (!ModelState.IsValid)
         {
             return ValidationProblem(ModelState);
         }
 
-        var role = await _roleManager.FindByIdAsync(request.RoleId.ToString());
-        if (role == null)
+        var result = await _permissionManagementService.CreatePermissionAsync(request);
+
+        if (result.IsFailure)
         {
-            return NotFound(new { message = $"Role '{request.RoleId}' not found" });
+            return result.ToActionResult(PermissionToDto);
         }
 
-        if (string.IsNullOrWhiteSpace(request.Name))
-        {
-            return BadRequest(new { message = "Name is required" });
-        }
-
-        var permission = new Permission
-        {
-            Name = request.Name.Trim(),
-            RoleId = request.RoleId,
-            TenantId = CurrentTenantId ?? string.Empty
-        };
-
-        _context.Permissions.Add(permission);
-        await _context.SaveChangesAsync();
-
-        await _context.Entry(permission).Reference(p => p.Role).LoadAsync();
-        return CreatedAtAction(nameof(Get), new { permissionId = permission.Id }, PermissionToDto(permission));
+        var dto = PermissionToDto(result.Data!);
+        return CreatedAtAction(nameof(Get), new { permissionId = dto.Id }, dto);
     }
 
     [HttpPut("{permissionId:guid}")]
-    public async Task<ActionResult> Update(Guid permissionId, [FromBody] PermissionModificationRequest request)
+    public async Task<ActionResult<PermissionDto>> Update(Guid permissionId, [FromBody] PermissionModificationRequest request)
     {
         if (!ModelState.IsValid)
         {
             return ValidationProblem(ModelState);
         }
 
-        var permission = await _context.Permissions.FindAsync(permissionId);
-        if (permission == null)
+        var result = await _permissionManagementService.UpdatePermissionAsync(permissionId, request);
+
+        if (result.IsFailure)
         {
-            return NotFound(new { message = $"Permission '{permissionId}' not found" });
+            return result.ToActionResult(PermissionToDto);
         }
 
-        var role = await _roleManager.FindByIdAsync(request.RoleId.ToString());
-        if (role == null)
+        var dto = PermissionToDto(result.Data!);
+        return Ok(dto);
+    }
+
+    [HttpDelete("{permissionId:guid}")]
+    public async Task<IActionResult> Delete(Guid permissionId)
+    {
+        var result = await _permissionManagementService.DeletePermissionAsync(permissionId);
+
+        if (result.IsFailure)
         {
-            return NotFound(new { message = $"Role '{request.RoleId}' not found" });
+            return result.ToActionResult();
         }
 
-        permission.Name = request.Name.Trim();
-        permission.RoleId = request.RoleId;
-        await _context.SaveChangesAsync();
-        await _context.Entry(permission).Reference(p => p.Role).LoadAsync();
-        return Ok(PermissionToDto(permission));
+        return NoContent();
     }
 
     private static PermissionDto PermissionToDto(Permission permission)
