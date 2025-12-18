@@ -14,8 +14,6 @@ namespace TreeTopic.Models
         public Guid RoomId { get; set; }
         public Room Room { get; set; }
 
-        [ForeignKey(nameof(RoomPermission))]
-        public Guid RoomPermissonId { get; set; }
-        public RoomPermission RoomPermission { get; set; }
+        public List<RoomPermission> RoomPermission { get; set; } = new List<RoomPermission>();
     }
 }

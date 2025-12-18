@@ -14,5 +14,11 @@ namespace TreeTopic.Models
         public Guid ParentId { get; set; }
         public Topic Parent { get;set; }
 
+        public BrainBoard? BrainBoard { get; set; }
+
+        public List<Message> Messages { get; set; } = new List<Message>();
+        public List<Topic> ChildTopics { get; set; } = new List<Topic>();
+        public List<BrainIdea> BrainIdeas { get; set; } = new List<BrainIdea>();
+
     }
 }

@@ -9,5 +9,7 @@ namespace TreeTopic.Models
         public Topic Topic { get; set; }
         public string Name { get; set; }
         public bool IsSign { get; set; }
+
+        public List<BrainIdea> BrainIdeas { get; set; } = new List<BrainIdea>();
     }
 }
