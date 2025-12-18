@@ -209,9 +209,6 @@ public class RoleManagementService : BaseService
         }, nameof(DeletePermissionFromRoleAsync));
     }
 
-    /// <summary>
-    /// SetupToken検証を伴うデフォルトロール設定
-    /// </summary>
     public async Task<Result<RoleSetupCompletionResponse>> SetupDefaultRoleAsync(
         string tenant, SetupDefaultRoleRequest request)
     {
