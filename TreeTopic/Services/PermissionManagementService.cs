@@ -8,10 +8,6 @@ using TreeTopic.Models;
 
 namespace TreeTopic.Services;
 
-/// <summary>
-/// パーミッション管理サービス
-/// パーミッションのCRUD操作を統括
-/// </summary>
 public class PermissionManagementService : BaseService
 {
     private readonly ApplicationDbContext _context;
@@ -31,9 +27,6 @@ public class PermissionManagementService : BaseService
 
     private string? CurrentTenantId => _tenantAccessor.MultiTenantContext?.TenantInfo?.Id;
 
-    /// <summary>
-    /// パーミッション一覧を取得（テナント別）
-    /// </summary>
     public async Task<Result<List<Permission>>> ListPermissionsAsync()
     {
         return await ExecuteAsync(async () =>
@@ -50,9 +43,6 @@ public class PermissionManagementService : BaseService
         }, nameof(ListPermissionsAsync));
     }
 
-    /// <summary>
-    /// パーミッションをIDで取得
-    /// </summary>
     public async Task<Result<Permission>> GetPermissionByIdAsync(Guid permissionId)
     {
         return await ExecuteAsync(async () =>
@@ -75,9 +65,6 @@ public class PermissionManagementService : BaseService
         }, nameof(GetPermissionByIdAsync));
     }
 
-    /// <summary>
-    /// パーミッションを作成
-    /// </summary>
     public async Task<Result<Permission>> CreatePermissionAsync(PermissionModificationRequest request)
     {
         return await ExecuteAsync(async () =>
@@ -122,9 +109,6 @@ public class PermissionManagementService : BaseService
         }, nameof(CreatePermissionAsync));
     }
 
-    /// <summary>
-    /// パーミッションを更新
-    /// </summary>
     public async Task<Result<Permission>> UpdatePermissionAsync(
         Guid permissionId, PermissionModificationRequest request)
     {
@@ -175,9 +159,6 @@ public class PermissionManagementService : BaseService
         }, nameof(UpdatePermissionAsync));
     }
 
-    /// <summary>
-    /// パーミッションを削除
-    /// </summary>
     public async Task<Result> DeletePermissionAsync(Guid permissionId)
     {
         return await ExecuteAsync(async () =>

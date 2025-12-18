@@ -6,10 +6,6 @@ using TreeTopic.Models;
 
 namespace TreeTopic.Services;
 
-/// <summary>
-/// ロール管理サービス
-/// ロール作成・削除・パーミッション管理を統括
-/// </summary>
 public class RoleManagementService : BaseService
 {
     private readonly RoleManager<ApplicationRole> _roleManager;
@@ -24,9 +20,6 @@ public class RoleManagementService : BaseService
         _setupTokenValidator = setupTokenValidator;
     }
 
-    /// <summary>
-    /// SetupToken検証を伴うロール作成
-    /// </summary>
     public async Task<Result<ApplicationRole>> CreateRoleAsync(
         string tenant, SetupRoleCreationRequest request)
     {
@@ -66,10 +59,6 @@ public class RoleManagementService : BaseService
         }, nameof(CreateRoleAsync));
     }
 
-    /// <summary>
-    /// SetupToken検証を伴うロール削除（ロール名で指定）
-    /// ASP.NET Core Identity ではロール名は一意なため、ID不要
-    /// </summary>
     public async Task<Result> DeleteRoleAsync(
         string tenant, SetupRoleDeletionRequest request)
     {
@@ -107,10 +96,6 @@ public class RoleManagementService : BaseService
         }, nameof(DeleteRoleAsync));
     }
 
-    /// <summary>
-    /// SetupToken検証を伴うロールへのパーミッション追加
-    /// ロール名で指定（ASP.NET Core Identity ではロール名は一意）
-    /// </summary>
     public async Task<Result<Permission>> AddPermissionToRoleAsync(
         string tenant, SetupPermissionRequest request)
     {
@@ -174,10 +159,6 @@ public class RoleManagementService : BaseService
         }, nameof(AddPermissionToRoleAsync));
     }
 
-    /// <summary>
-    /// SetupToken検証を伴うロールからのパーミッション削除
-    /// ロール名で指定（ASP.NET Core Identity ではロール名は一意）
-    /// </summary>
     public async Task<Result> DeletePermissionFromRoleAsync(
         string tenant, SetupPermissionDeletionRequest request)
     {

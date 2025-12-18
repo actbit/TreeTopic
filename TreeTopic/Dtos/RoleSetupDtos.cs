@@ -2,18 +2,12 @@ using System.ComponentModel.DataAnnotations;
 
 namespace TreeTopic.Dtos;
 
-/// <summary>
-/// SetupToken経由でのロール設定リクエスト基本DTO
-/// </summary>
 public class SetupTokenRequest
 {
     [Required(ErrorMessage = "SetupToken is required")]
     public string SetupToken { get; set; } = string.Empty;
 }
 
-/// <summary>
-/// ロール作成リクエスト（SetupToken経由）
-/// </summary>
 public class SetupRoleCreationRequest : SetupTokenRequest
 {
     [Required(ErrorMessage = "Role name is required")]
@@ -23,10 +17,6 @@ public class SetupRoleCreationRequest : SetupTokenRequest
     public string? Description { get; set; }
 }
 
-/// <summary>
-/// ロール削除リクエスト（SetupToken経由）
-/// ASP.NET Core Identity ではロール名は一意なため、名前で指定
-/// </summary>
 public class SetupRoleDeletionRequest : SetupTokenRequest
 {
     [Required(ErrorMessage = "Role name is required")]
@@ -34,10 +24,6 @@ public class SetupRoleDeletionRequest : SetupTokenRequest
     public string RoleName { get; set; } = string.Empty;
 }
 
-/// <summary>
-/// パーミッション追加リクエスト（SetupToken経由）
-/// ロール名で指定（ASP.NET Core Identity ではロール名は一意）
-/// </summary>
 public class SetupPermissionRequest : SetupTokenRequest
 {
     [Required(ErrorMessage = "Role name is required")]
@@ -49,10 +35,6 @@ public class SetupPermissionRequest : SetupTokenRequest
     public string PermissionName { get; set; } = string.Empty;
 }
 
-/// <summary>
-/// パーミッション削除リクエスト（SetupToken経由）
-/// ロール名で指定（ASP.NET Core Identity ではロール名は一意）
-/// </summary>
 public class SetupPermissionDeletionRequest : SetupTokenRequest
 {
     [Required(ErrorMessage = "Role name is required")]
@@ -64,9 +46,6 @@ public class SetupPermissionDeletionRequest : SetupTokenRequest
     public string PermissionName { get; set; } = string.Empty;
 }
 
-/// <summary>
-/// デフォルトロール設定リクエスト
-/// </summary>
 public class SetupDefaultRoleRequest : SetupTokenRequest
 {
     [Required(ErrorMessage = "Default role name is required")]
@@ -75,22 +54,13 @@ public class SetupDefaultRoleRequest : SetupTokenRequest
 
     public string? Description { get; set; }
 
-    /// <summary>
-    /// デフォルトロールに付与するパーミッション名のリスト
-    /// </summary>
     public List<string> DefaultPermissions { get; set; } = new List<string>();
 }
 
-/// <summary>
-/// ロール設定完了レスポンス
-/// </summary>
 public class RoleSetupCompletionRequest : SetupTokenRequest
 {
 }
 
-/// <summary>
-/// ロール設定完了レスポンス
-/// </summary>
 public class RoleSetupCompletionResponse
 {
     public bool Success { get; set; }

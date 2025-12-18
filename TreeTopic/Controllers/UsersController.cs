@@ -78,9 +78,6 @@ public class UsersController : ControllerBase
         return Ok(dto);
     }
 
-    /// <summary>
-    /// Maps ApplicationUser and roles to UserSummaryDto
-    /// </summary>
     private static UserSummaryDto UserToDto(ApplicationUser user, IList<string> roles)
     {
         return new UserSummaryDto

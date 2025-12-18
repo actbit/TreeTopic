@@ -6,10 +6,6 @@ using TreeTopic.Services;
 
 namespace TreeTopic.Controllers;
 
-/// <summary>
-/// SetupToken を使用したロール初期設定API
-/// テナント初期化時のみ使用可能
-/// </summary>
 [ApiController]
 [Route("{tenant}/api/setup/[controller]")]
 public class RoleSetupController : ControllerBase
@@ -21,9 +17,6 @@ public class RoleSetupController : ControllerBase
         _roleManagementService = roleManagementService;
     }
 
-    /// <summary>
-    /// ロールを作成（SetupToken経由）
-    /// </summary>
     [HttpPost("create")]
     public async Task<ActionResult<RoleDto>> CreateRole(string tenant, [FromBody] SetupRoleCreationRequest request)
     {
@@ -43,9 +36,6 @@ public class RoleSetupController : ControllerBase
         return Ok(new RoleDto { Id = role.Id, Name = role.Name });
     }
 
-    /// <summary>
-    /// ロールを削除（SetupToken経由、ロール名で指定）
-    /// </summary>
     [HttpDelete("{roleName}")]
     public async Task<IActionResult> DeleteRole(string tenant, string roleName, [FromBody] SetupTokenRequest request)
     {
@@ -65,9 +55,6 @@ public class RoleSetupController : ControllerBase
         return NoContent();
     }
 
-    /// <summary>
-    /// パーミッションを追加（SetupToken経由）
-    /// </summary>
     [HttpPost("permissions/add")]
     public async Task<ActionResult<PermissionDto>> AddPermission(string tenant, [FromBody] SetupPermissionRequest request)
     {
@@ -100,9 +87,6 @@ public class RoleSetupController : ControllerBase
         return Ok(dto);
     }
 
-    /// <summary>
-    /// パーミッションを削除（SetupToken経由）
-    /// </summary>
     [HttpPost("permissions/delete")]
     public async Task<IActionResult> DeletePermission(string tenant, [FromBody] SetupPermissionDeletionRequest request)
     {
@@ -116,9 +100,6 @@ public class RoleSetupController : ControllerBase
         return NoContent();
     }
 
-    /// <summary>
-    /// デフォルトロール（新規ユーザーに自動付与されるロール）を設定
-    /// </summary>
     [HttpPost("default")]
     public async Task<ActionResult<RoleSetupCompletionResponse>> SetDefaultRole(string tenant, [FromBody] SetupDefaultRoleRequest request)
     {

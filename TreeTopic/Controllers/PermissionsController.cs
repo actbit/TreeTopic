@@ -98,9 +98,6 @@ public class PermissionsController : ControllerBase
         return NoContent();
     }
 
-    /// <summary>
-    /// Maps Permission entity to PermissionDto
-    /// </summary>
     private static PermissionDto PermissionToDto(Permission permission)
     {
         return new PermissionDto

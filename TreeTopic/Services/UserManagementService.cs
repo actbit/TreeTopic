@@ -7,10 +7,6 @@ using TreeTopic.Models;
 
 namespace TreeTopic.Services;
 
-/// <summary>
-/// ユーザー管理サービス
-/// ユーザー取得・ロール管理を統括
-/// </summary>
 public class UserManagementService : BaseService
 {
     private readonly UserManager<ApplicationUser> _userManager;
@@ -25,9 +21,6 @@ public class UserManagementService : BaseService
         _roleManager = roleManager;
     }
 
-    /// <summary>
-    /// すべてのユーザーをロール情報と共に取得
-    /// </summary>
     public async Task<Result<List<(ApplicationUser user, IList<string> roles)>>> GetAllUsersAsync()
     {
         return await ExecuteAsync(async () =>
@@ -46,9 +39,6 @@ public class UserManagementService : BaseService
         }, nameof(GetAllUsersAsync));
     }
 
-    /// <summary>
-    /// ユーザーをIDで取得（ロール情報含む）
-    /// </summary>
     public async Task<Result<(ApplicationUser user, IList<string> roles)>> GetUserByIdAsync(Guid userId)
     {
         return await ExecuteAsync(async () =>
@@ -65,9 +55,6 @@ public class UserManagementService : BaseService
         }, nameof(GetUserByIdAsync));
     }
 
-    /// <summary>
-    /// ユーザーにロールを追加
-    /// </summary>
     public async Task<Result<(ApplicationUser user, IList<string> roles)>> AddRoleToUserAsync(
         Guid userId, RoleAssignmentRequest request)
     {
@@ -115,9 +102,6 @@ public class UserManagementService : BaseService
         }, nameof(AddRoleToUserAsync));
     }
 
-    /// <summary>
-    /// ユーザーからロールを削除
-    /// </summary>
     public async Task<Result<(ApplicationUser user, IList<string> roles)>> RemoveRoleFromUserAsync(
         Guid userId, RoleAssignmentRequest request)
     {
