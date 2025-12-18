@@ -32,7 +32,7 @@ public class MessageRepository : BaseRepository<Message>, IMessageRepository
     {
         return Query()
             .Include(m => m.Topic)
-            .Include(m => m.Messages)
+            .Include(m => m.Replies)
             .FirstOrDefaultAsync(m => m.Id == messageId, cancellationToken);
     }
 }

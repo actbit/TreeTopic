@@ -154,6 +154,8 @@ public class Program
         builder.Services.AddScoped<IFileRepository, FileRepository>();
         builder.Services.AddScoped<IRoomUserRepository, RoomUserRepository>();
         builder.Services.AddScoped<IRoomPermissionRepository, RoomPermissionRepository>();
+        builder.Services.AddScoped<IBrainBoardRepository, BrainBoardRepository>();
+        builder.Services.AddScoped<IBrainIdeaRepository, BrainIdeaRepository>();
 
         builder.Services.AddOpenApi();
 

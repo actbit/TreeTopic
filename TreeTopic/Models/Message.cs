@@ -9,6 +9,9 @@ namespace TreeTopic.Models
         [ForeignKey(nameof(Topic))]
         public Guid TopicId { get; set; }
         public Topic Topic { get; set; }
+        [ForeignKey(nameof(ApplicationUser))]
+        public Guid ApplicationUserId { get; set; }
+        public ApplicationUser ApplicationUser { get; set; }
         public string Header { get; set; }
         public string Body { get; set; }
         
@@ -16,6 +19,7 @@ namespace TreeTopic.Models
         public Guid? ReplyId { get; set; }
         public Message Reply { get; set; }
 
-        public List<Message> Messages { get; set; } = new List<Message>();
+        public List<Message> Replies { get; set; } = new List<Message>();
+        public List<File> Files { get; set; } = new List<File>();
     }
 }

@@ -19,5 +19,11 @@ namespace TreeTopic.Models
             UserName = userName;
             DisplayName = userName;
         }
+
+        public List<Room> Rooms { get; set; } = new List<Room>();
+        public List<Message> Messages { get; set; } = new List<Message>();
+        public List<RoomUser> RoomUsers { get; set; } = new List<RoomUser>();
+        public List<BrainIdea> BrainIdeas { get; set; } = new List<BrainIdea>();
+
     }
 }

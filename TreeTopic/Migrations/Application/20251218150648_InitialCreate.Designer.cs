@@ -12,8 +12,8 @@ using TreeTopic.Data;
 namespace TreeTopic.Migrations.Application
 {
     [DbContext(typeof(ApplicationDbContextPostgreSQL))]
-    [Migration("20251208051258_AddForumTables")]
-    partial class AddForumTables
+    [Migration("20251218150648_InitialCreate")]
+    partial class InitialCreate
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -246,6 +246,9 @@ namespace TreeTopic.Migrations.Application
                     b.Property<string>("SecurityStamp")
                         .HasColumnType("text");
 
+                    b.Property<string>("Sub")
+                        .HasColumnType("text");
+
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(64)
@@ -267,9 +270,92 @@ namespace TreeTopic.Migrations.Application
                         .IsUnique()
                         .HasDatabaseName("UserNameIndex");
 
+                    b.HasIndex("TenantId", "Sub")
+                        .IsUnique();
+
                     b.ToTable("AspNetUsers", (string)null);
 
                     b.HasAnnotation("Finbuckle:MultiTenant", true);
+                });
+
+            modelBuilder.Entity("TreeTopic.Models.BrainBoard", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsSign")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("TenantId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("TopicId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TopicId")
+                        .IsUnique();
+
+                    b.ToTable("BrainBoards");
+                });
+
+            modelBuilder.Entity("TreeTopic.Models.BrainIdea", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("ApplicationUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("BrainBoardId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Idea")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<double>("PositionLeft")
+                        .HasColumnType("double precision");
+
+                    b.Property<double>("PositionTop")
+                        .HasColumnType("double precision");
+
+                    b.Property<string>("TenantId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("TopicId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ApplicationUserId");
+
+                    b.HasIndex("BrainBoardId");
+
+                    b.HasIndex("TopicId");
+
+                    b.ToTable("BrainIdeas");
                 });
 
             modelBuilder.Entity("TreeTopic.Models.File", b =>
@@ -327,6 +413,9 @@ namespace TreeTopic.Migrations.Application
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<Guid>("ApplicationUserId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("Body")
                         .IsRequired()
                         .HasColumnType("text");
@@ -353,6 +442,8 @@ namespace TreeTopic.Migrations.Application
                         .HasColumnType("timestamp with time zone");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("ApplicationUserId");
 
                     b.HasIndex("ReplyId");
 
@@ -476,9 +567,6 @@ namespace TreeTopic.Migrations.Application
                     b.Property<Guid>("RoomId")
                         .HasColumnType("uuid");
 
-                    b.Property<Guid>("RoomPermissonId")
-                        .HasColumnType("uuid");
-
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(64)
@@ -492,9 +580,6 @@ namespace TreeTopic.Migrations.Application
                     b.HasIndex("ApplicationUserId");
 
                     b.HasIndex("RoomId");
-
-                    b.HasIndex("RoomPermissonId")
-                        .IsUnique();
 
                     b.ToTable("RoomUsers");
 
@@ -586,15 +671,54 @@ namespace TreeTopic.Migrations.Application
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("TreeTopic.Models.BrainBoard", b =>
+                {
+                    b.HasOne("TreeTopic.Models.Topic", "Topic")
+                        .WithOne("BrainBoard")
+                        .HasForeignKey("TreeTopic.Models.BrainBoard", "TopicId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Topic");
+                });
+
+            modelBuilder.Entity("TreeTopic.Models.BrainIdea", b =>
+                {
+                    b.HasOne("TreeTopic.Models.ApplicationUser", "ApplicationUser")
+                        .WithMany("BrainIdeas")
+                        .HasForeignKey("ApplicationUserId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("TreeTopic.Models.BrainBoard", "BrainBoard")
+                        .WithMany("BrainIdeas")
+                        .HasForeignKey("BrainBoardId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("TreeTopic.Models.Topic", "Topic")
+                        .WithMany("BrainIdeas")
+                        .HasForeignKey("TopicId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ApplicationUser");
+
+                    b.Navigation("BrainBoard");
+
+                    b.Navigation("Topic");
+                });
+
             modelBuilder.Entity("TreeTopic.Models.File", b =>
                 {
                     b.HasOne("TreeTopic.Models.Message", "Message")
-                        .WithMany()
-                        .HasForeignKey("MessageId");
+                        .WithMany("Files")
+                        .HasForeignKey("MessageId")
+                        .OnDelete(DeleteBehavior.SetNull);
 
                     b.HasOne("TreeTopic.Models.File", "SourceFile")
-                        .WithMany()
-                        .HasForeignKey("SourceFileId");
+                        .WithMany("VersionedFiles")
+                        .HasForeignKey("SourceFileId")
+                        .OnDelete(DeleteBehavior.SetNull);
 
                     b.Navigation("Message");
 
@@ -603,15 +727,24 @@ namespace TreeTopic.Migrations.Application
 
             modelBuilder.Entity("TreeTopic.Models.Message", b =>
                 {
-                    b.HasOne("TreeTopic.Models.Message", "Reply")
+                    b.HasOne("TreeTopic.Models.ApplicationUser", "ApplicationUser")
                         .WithMany("Messages")
-                        .HasForeignKey("ReplyId");
+                        .HasForeignKey("ApplicationUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("TreeTopic.Models.Message", "Reply")
+                        .WithMany("Replies")
+                        .HasForeignKey("ReplyId")
+                        .OnDelete(DeleteBehavior.SetNull);
 
                     b.HasOne("TreeTopic.Models.Topic", "Topic")
-                        .WithMany()
+                        .WithMany("Messages")
                         .HasForeignKey("TopicId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.Navigation("ApplicationUser");
 
                     b.Navigation("Reply");
 
@@ -632,9 +765,9 @@ namespace TreeTopic.Migrations.Application
             modelBuilder.Entity("TreeTopic.Models.Room", b =>
                 {
                     b.HasOne("TreeTopic.Models.ApplicationUser", "CreatedUser")
-                        .WithMany()
+                        .WithMany("Rooms")
                         .HasForeignKey("CreatedUserId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.Navigation("CreatedUser");
@@ -643,7 +776,7 @@ namespace TreeTopic.Migrations.Application
             modelBuilder.Entity("TreeTopic.Models.RoomPermission", b =>
                 {
                     b.HasOne("TreeTopic.Models.RoomUser", "RoomUser")
-                        .WithMany()
+                        .WithMany("RoomPermission")
                         .HasForeignKey("RoomUserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
@@ -654,40 +787,32 @@ namespace TreeTopic.Migrations.Application
             modelBuilder.Entity("TreeTopic.Models.RoomUser", b =>
                 {
                     b.HasOne("TreeTopic.Models.ApplicationUser", "ApplicationUser")
-                        .WithMany()
+                        .WithMany("RoomUsers")
                         .HasForeignKey("ApplicationUserId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.HasOne("TreeTopic.Models.Room", "Room")
-                        .WithMany()
+                        .WithMany("RoomUsers")
                         .HasForeignKey("RoomId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("TreeTopic.Models.RoomPermission", "RoomPermission")
-                        .WithOne()
-                        .HasForeignKey("TreeTopic.Models.RoomUser", "RoomPermissonId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
                     b.Navigation("ApplicationUser");
 
                     b.Navigation("Room");
-
-                    b.Navigation("RoomPermission");
                 });
 
             modelBuilder.Entity("TreeTopic.Models.Topic", b =>
                 {
                     b.HasOne("TreeTopic.Models.Topic", "Parent")
-                        .WithMany()
+                        .WithMany("ChildTopics")
                         .HasForeignKey("ParentId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
                     b.HasOne("TreeTopic.Models.Room", "Room")
-                        .WithMany()
+                        .WithMany("Topics")
                         .HasForeignKey("RoomId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
@@ -702,8 +827,54 @@ namespace TreeTopic.Migrations.Application
                     b.Navigation("Authorities");
                 });
 
+            modelBuilder.Entity("TreeTopic.Models.ApplicationUser", b =>
+                {
+                    b.Navigation("BrainIdeas");
+
+                    b.Navigation("Messages");
+
+                    b.Navigation("RoomUsers");
+
+                    b.Navigation("Rooms");
+                });
+
+            modelBuilder.Entity("TreeTopic.Models.BrainBoard", b =>
+                {
+                    b.Navigation("BrainIdeas");
+                });
+
+            modelBuilder.Entity("TreeTopic.Models.File", b =>
+                {
+                    b.Navigation("VersionedFiles");
+                });
+
             modelBuilder.Entity("TreeTopic.Models.Message", b =>
                 {
+                    b.Navigation("Files");
+
+                    b.Navigation("Replies");
+                });
+
+            modelBuilder.Entity("TreeTopic.Models.Room", b =>
+                {
+                    b.Navigation("RoomUsers");
+
+                    b.Navigation("Topics");
+                });
+
+            modelBuilder.Entity("TreeTopic.Models.RoomUser", b =>
+                {
+                    b.Navigation("RoomPermission");
+                });
+
+            modelBuilder.Entity("TreeTopic.Models.Topic", b =>
+                {
+                    b.Navigation("BrainBoard");
+
+                    b.Navigation("BrainIdeas");
+
+                    b.Navigation("ChildTopics");
+
                     b.Navigation("Messages");
                 });
 #pragma warning restore 612, 618
