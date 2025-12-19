@@ -16,7 +16,9 @@ namespace TreeTopic.Models
         public required string FileName { get; set; }
         public required string SaveFileName { get; set; }
         public required string FileType { get; set; }
-        
+
         public bool IsLatast { get; set; } = true;
+
+        public List<File> VersionedFiles { get; set; } = new List<File>();
     }
 }

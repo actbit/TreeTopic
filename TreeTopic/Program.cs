@@ -8,6 +8,9 @@ using TreeTopic.Extensions;
 using TreeTopic.Services;
 using TreeTopic.Repositories;
 using TreeTopic.Middleware;
+using TreeTopic.Authentication;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Http.Features;
 namespace TreeTopic;
 
 public class Program
@@ -51,12 +54,13 @@ public class Program
             .AddEntityFrameworkStores<ApplicationDbContext>();
 
         // Add services to the container.
+        builder.Services.AddHttpContextAccessor();
+
         builder.Services
             .AddAuthentication(options =>
             {
                 options.DefaultAuthenticateScheme = CookieAuthenticationDefaults.AuthenticationScheme;
                 options.DefaultChallengeScheme = "oidc";
-
             })
             .AddCookie(options =>
             {
@@ -64,7 +68,6 @@ public class Program
                 options.LogoutPath = "/auth/logout";
                 options.ExpireTimeSpan = TimeSpan.FromHours(8);
                 options.SlidingExpiration = true;
-                options.Cookie.Name = "auth_token";
                 options.Cookie.HttpOnly = true;
                 // SameSite=None is required for the cross-site OIDC redirect round-trip
                 options.Cookie.SameSite = SameSiteMode.None;
@@ -72,8 +75,41 @@ public class Program
                 options.Cookie.SecurePolicy = builder.Environment.IsDevelopment()
                     ? CookieSecurePolicy.SameAsRequest
                     : CookieSecurePolicy.Always;
+
+                // Set cookie path per tenant to allow multiple tenant logins
+                options.Events = new CookieAuthenticationEvents
+                {
+                    OnSigningIn = async context =>
+                    {
+                        var tenantId = context.HttpContext.GetRouteValue("tenant")?.ToString();
+                        if (!string.IsNullOrEmpty(tenantId))
+                        {
+                            context.Properties.IsPersistent = true;
+                            // Set cookie to root path so multiple tenant cookies can coexist
+                            // Tenant-specific cookie name is handled by TenantAwareCookieManager
+                            var cookieOptions = new CookieOptions
+                            {
+                                Path = "/",
+                                HttpOnly = true,
+                                SameSite = SameSiteMode.None,
+                                Secure = true,
+                                Expires = DateTimeOffset.UtcNow.AddHours(8)
+                            };
+                            context.CookieOptions = cookieOptions;
+                        }
+                        await Task.CompletedTask;
+                    }
+                };
             })
             .AddOpenIdConnectConfiguration(builder.Configuration, builder.Environment);
+
+        // Set TenantAwareCookieManager after authentication configuration
+        builder.Services.PostConfigure<CookieAuthenticationOptions>(CookieAuthenticationDefaults.AuthenticationScheme, options =>
+        {
+            var httpContextAccessor = builder.Services.BuildServiceProvider().GetRequiredService<IHttpContextAccessor>();
+            var logger = builder.Services.BuildServiceProvider().GetRequiredService<ILogger<TenantAwareCookieManager>>();
+            options.CookieManager = new TenantAwareCookieManager(httpContextAccessor, logger);
+        });
          
         builder.Services
             .AddMultiTenant<ApplicationTenantInfo>()
@@ -103,7 +139,45 @@ public class Program
         // 暗号化サービスを登録（Connection String暗号化用）
         builder.Services.AddSingleton<EncryptionService>();
 
-        builder.Services.AddControllers();
+        // ロール管理サービスを登録
+        builder.Services.AddScoped<RoleManagementService>();
+
+        // ユーザー管理サービスを登録
+        builder.Services.AddScoped<UserManagementService>();
+
+        // パーミッション管理サービスを登録
+        builder.Services.AddScoped<PermissionManagementService>();
+
+        // Room管理サービスを登録
+        builder.Services.AddScoped<IRoomManagementService, RoomManagementService>();
+
+        // Topic管理サービスを登録
+        builder.Services.AddScoped<ITopicManagementService, TopicManagementService>();
+
+        // Message管理サービスを登録
+        builder.Services.AddScoped<IMessageManagementService, MessageManagementService>();
+
+        // File管理サービスを登録
+        builder.Services.AddScoped<IFileManagementService, FileManagementService>();
+
+        builder.Services.AddControllers()
+            .ConfigureApiBehaviorOptions(options =>
+            {
+                // ファイルアップロード時のサイズ制限を設定
+                options.InvalidModelStateResponseFactory = context =>
+                {
+                    var result = new BadHttpRequestException("Invalid request");
+                    return new BadRequestObjectResult(result);
+                };
+            });
+
+        // ファイルアップロードのサイズ制限（デフォルト: 30MB）
+        builder.Services.Configure<FormOptions>(options =>
+        {
+            options.ValueLengthLimit = int.MaxValue;
+            options.MultipartBodyLengthLimit = 31457280; // 30MB
+        });
+
         builder.Services.AddScoped(typeof(IBaseRepository<>), typeof(BaseRepository<>));
         builder.Services.AddScoped<IRoomRepository, RoomRepository>();
         builder.Services.AddScoped<ITopicRepository, TopicRepository>();
@@ -111,6 +185,8 @@ public class Program
         builder.Services.AddScoped<IFileRepository, FileRepository>();
         builder.Services.AddScoped<IRoomUserRepository, RoomUserRepository>();
         builder.Services.AddScoped<IRoomPermissionRepository, RoomPermissionRepository>();
+        builder.Services.AddScoped<IBrainBoardRepository, BrainBoardRepository>();
+        builder.Services.AddScoped<IBrainIdeaRepository, BrainIdeaRepository>();
 
         builder.Services.AddOpenApi();
 
@@ -161,7 +237,6 @@ public class Program
         app.UseHttpsRedirection();
 
         app.UseRouting();
-
 
         app.UseAuthentication();
 

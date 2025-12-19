@@ -1,11 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
-using System;
-using System.Collections.Generic;
-using System.ComponentModel.DataAnnotations;
-using System.Linq;
-using System.Threading.Tasks;
+using TreeTopic.Dtos;
 using TreeTopic.Models;
 
 namespace TreeTopic.Controllers;
@@ -53,13 +49,18 @@ public class RolesController : ControllerBase
         return CreatedAtAction(nameof(List), new { id = role.Id }, new RoleDto { Id = role.Id, Name = role.Name });
     }
 
-    [HttpDelete("{roleId:guid}")]
-    public async Task<IActionResult> Delete(Guid roleId)
+    [HttpDelete("{roleName}")]
+    public async Task<IActionResult> Delete(string roleName)
     {
-        var role = await _roleManager.FindByIdAsync(roleId.ToString());
+        if (string.IsNullOrWhiteSpace(roleName))
+        {
+            return BadRequest(new { message = "Role name cannot be empty" });
+        }
+
+        var role = await _roleManager.FindByNameAsync(roleName);
         if (role == null)
         {
-            return NotFound(new { message = $"Role '{roleId}' not found" });
+            return NotFound(new { message = $"Role '{roleName}' not found" });
         }
 
         var result = await _roleManager.DeleteAsync(role);
@@ -70,16 +71,4 @@ public class RolesController : ControllerBase
 
         return NoContent();
     }
-}
-
-public class RoleDto
-{
-    public Guid Id { get; set; }
-    public string? Name { get; set; }
-}
-
-public class RoleCreationRequest
-{
-    [Required]
-    public string Name { get; set; } = string.Empty;
 }
