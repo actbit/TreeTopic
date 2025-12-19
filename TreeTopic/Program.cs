@@ -9,6 +9,8 @@ using TreeTopic.Services;
 using TreeTopic.Repositories;
 using TreeTopic.Middleware;
 using TreeTopic.Authentication;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Http.Features;
 namespace TreeTopic;
 
 public class Program
@@ -146,7 +148,36 @@ public class Program
         // パーミッション管理サービスを登録
         builder.Services.AddScoped<PermissionManagementService>();
 
-        builder.Services.AddControllers();
+        // Room管理サービスを登録
+        builder.Services.AddScoped<IRoomManagementService, RoomManagementService>();
+
+        // Topic管理サービスを登録
+        builder.Services.AddScoped<ITopicManagementService, TopicManagementService>();
+
+        // Message管理サービスを登録
+        builder.Services.AddScoped<IMessageManagementService, MessageManagementService>();
+
+        // File管理サービスを登録
+        builder.Services.AddScoped<IFileManagementService, FileManagementService>();
+
+        builder.Services.AddControllers()
+            .ConfigureApiBehaviorOptions(options =>
+            {
+                // ファイルアップロード時のサイズ制限を設定
+                options.InvalidModelStateResponseFactory = context =>
+                {
+                    var result = new BadHttpRequestException("Invalid request");
+                    return new BadRequestObjectResult(result);
+                };
+            });
+
+        // ファイルアップロードのサイズ制限（デフォルト: 30MB）
+        builder.Services.Configure<FormOptions>(options =>
+        {
+            options.ValueLengthLimit = int.MaxValue;
+            options.MultipartBodyLengthLimit = 31457280; // 30MB
+        });
+
         builder.Services.AddScoped(typeof(IBaseRepository<>), typeof(BaseRepository<>));
         builder.Services.AddScoped<IRoomRepository, RoomRepository>();
         builder.Services.AddScoped<ITopicRepository, TopicRepository>();
