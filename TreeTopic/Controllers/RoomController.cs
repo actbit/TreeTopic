@@ -1,6 +1,7 @@
 using Finbuckle.MultiTenant.Abstractions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using MaskedUUID.AspNetCore.Attributes;
 using TreeTopic.Dtos;
 using TreeTopic.Models;
 using TreeTopic.Services;
@@ -34,8 +35,8 @@ public class RoomController : ControllerBase
         return HandleResult(result);
     }
 
-    [HttpGet("{roomId:guid}")]
-    public async Task<IActionResult> GetById(Guid roomId, CancellationToken cancellationToken)
+    [HttpGet("{roomId}")]
+    public async Task<IActionResult> GetById([MaskedUUID] Guid roomId, CancellationToken cancellationToken)
     {
         var result = await _roomManagementService.GetRoomByIdAsync(roomId, CurrentTenantId, cancellationToken);
         return HandleResult(result);
@@ -51,8 +52,8 @@ public class RoomController : ControllerBase
         return HandleResult(result);
     }
 
-    [HttpPut("{roomId:guid}")]
-    public async Task<IActionResult> Update(Guid roomId, [FromBody] UpdateRoomRequest request, CancellationToken cancellationToken)
+    [HttpPut("{roomId}")]
+    public async Task<IActionResult> Update([MaskedUUID] Guid roomId, [FromBody] UpdateRoomRequest request, CancellationToken cancellationToken)
     {
         if (!ModelState.IsValid)
             return ValidationProblem(ModelState);
@@ -61,8 +62,8 @@ public class RoomController : ControllerBase
         return HandleResult(result);
     }
 
-    [HttpDelete("{roomId:guid}")]
-    public async Task<IActionResult> Delete(Guid roomId, CancellationToken cancellationToken)
+    [HttpDelete("{roomId}")]
+    public async Task<IActionResult> Delete([MaskedUUID] Guid roomId, CancellationToken cancellationToken)
     {
         var result = await _roomManagementService.DeleteRoomAsync(roomId, CurrentTenantId, cancellationToken);
         return HandleResult(result);

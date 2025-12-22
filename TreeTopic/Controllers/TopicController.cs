@@ -1,6 +1,7 @@
 using Finbuckle.MultiTenant.Abstractions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using MaskedUUID.AspNetCore.Attributes;
 using TreeTopic.Dtos;
 using TreeTopic.Models;
 using TreeTopic.Services;
@@ -32,15 +33,15 @@ public class TopicController : ControllerBase
         return HandleResult(result);
     }
 
-    [HttpGet("room/{roomId:guid}")]
-    public async Task<IActionResult> GetByRoom(Guid roomId, CancellationToken cancellationToken)
+    [HttpGet("room/{roomId}")]
+    public async Task<IActionResult> GetByRoom([MaskedUUID] Guid roomId, CancellationToken cancellationToken)
     {
         var result = await _topicManagementService.GetTopicsByRoomAsync(roomId, CurrentTenantId, cancellationToken);
         return HandleResult(result);
     }
 
-    [HttpGet("{topicId:guid}")]
-    public async Task<IActionResult> GetById(Guid topicId, CancellationToken cancellationToken)
+    [HttpGet("{topicId}")]
+    public async Task<IActionResult> GetById([MaskedUUID] Guid topicId, CancellationToken cancellationToken)
     {
         var result = await _topicManagementService.GetTopicByIdAsync(topicId, CurrentTenantId, cancellationToken);
         return HandleResult(result);
@@ -56,8 +57,8 @@ public class TopicController : ControllerBase
         return HandleResult(result);
     }
 
-    [HttpPut("{topicId:guid}")]
-    public async Task<IActionResult> Update(Guid topicId, [FromBody] UpdateTopicRequest request, CancellationToken cancellationToken)
+    [HttpPut("{topicId}")]
+    public async Task<IActionResult> Update([MaskedUUID] Guid topicId, [FromBody] UpdateTopicRequest request, CancellationToken cancellationToken)
     {
         if (!ModelState.IsValid)
             return ValidationProblem(ModelState);
@@ -66,8 +67,8 @@ public class TopicController : ControllerBase
         return HandleResult(result);
     }
 
-    [HttpDelete("{topicId:guid}")]
-    public async Task<IActionResult> Delete(Guid topicId, CancellationToken cancellationToken)
+    [HttpDelete("{topicId}")]
+    public async Task<IActionResult> Delete([MaskedUUID] Guid topicId, CancellationToken cancellationToken)
     {
         var result = await _topicManagementService.DeleteTopicAsync(topicId, CurrentTenantId, cancellationToken);
         return HandleResult(result);

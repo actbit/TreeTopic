@@ -11,6 +11,12 @@ using TreeTopic.Middleware;
 using TreeTopic.Authentication;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Http.Features;
+using System.Text.Json.Serialization;
+using Microsoft.Extensions.Options;
+using MaskedUUID.AspNetCore.Extensions;
+using MaskedUUID.AspNetCore.KeyProviders;
+using MaskedUUID.AspNetCore.Services;
+using TreeTopic.KeyProviders;
 namespace TreeTopic;
 
 public class Program
@@ -103,13 +109,7 @@ public class Program
             })
             .AddOpenIdConnectConfiguration(builder.Configuration, builder.Environment);
 
-        // Set TenantAwareCookieManager after authentication configuration
-        builder.Services.PostConfigure<CookieAuthenticationOptions>(CookieAuthenticationDefaults.AuthenticationScheme, options =>
-        {
-            var httpContextAccessor = builder.Services.BuildServiceProvider().GetRequiredService<IHttpContextAccessor>();
-            var logger = builder.Services.BuildServiceProvider().GetRequiredService<ILogger<TenantAwareCookieManager>>();
-            options.CookieManager = new TenantAwareCookieManager(httpContextAccessor, logger);
-        });
+        builder.Services.AddSingleton<IPostConfigureOptions<CookieAuthenticationOptions>, CookieAuthenticationConfiguration>();
          
         builder.Services
             .AddMultiTenant<ApplicationTenantInfo>()
@@ -160,7 +160,15 @@ public class Program
         // File管理サービスを登録
         builder.Services.AddScoped<IFileManagementService, FileManagementService>();
 
-        builder.Services.AddControllers()
+        // メモリキャッシュを登録
+        builder.Services.AddMemoryCache();
+
+        // MaskedUUIDサービスを登録
+        builder.Services.AddScoped<IMaskedUUIDKeyProvider, TreeTopicMaskedUUIDKeyProvider>();
+        builder.Services.AddScoped<IMaskedUUIDService, MaskedUUIDService>();
+
+        var mvcBuilder = builder.Services
+            .AddControllers()
             .ConfigureApiBehaviorOptions(options =>
             {
                 // ファイルアップロード時のサイズ制限を設定
@@ -170,6 +178,10 @@ public class Program
                     return new BadRequestObjectResult(result);
                 };
             });
+
+        // MaskedUUID サービスを登録
+        builder.Services.AddMaskedUUID();
+        mvcBuilder.AddMaskedUUIDModelBinder();
 
         // ファイルアップロードのサイズ制限（デフォルト: 30MB）
         builder.Services.Configure<FormOptions>(options =>
