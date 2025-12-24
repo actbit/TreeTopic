@@ -164,8 +164,8 @@ public class Program
         builder.Services.AddMemoryCache();
 
         // MaskedUUIDサービスを登録
-        builder.Services.AddScoped<IMaskedUUIDKeyProvider, TreeTopicMaskedUUIDKeyProvider>();
-        builder.Services.AddScoped<IMaskedUUIDService, MaskedUUIDService>();
+        builder.Services.AddSingleton<IMaskedUUIDKeyProvider, TreeTopicMaskedUUIDKeyProvider>();
+        builder.Services.AddSingleton<IMaskedUUIDService, MaskedUUIDService>();
 
         var mvcBuilder = builder.Services
             .AddControllers()

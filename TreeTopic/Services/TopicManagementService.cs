@@ -3,6 +3,7 @@ using TreeTopic.Models;
 using TreeTopic.Repositories;
 using TreeTopic.Common;
 using Microsoft.EntityFrameworkCore;
+using MaskedUUID.AspNetCore.Types;
 
 namespace TreeTopic.Services;
 
@@ -116,7 +117,7 @@ public class TopicManagementService : BaseService, ITopicManagementService
             if (topic == null || topic.TenantId != tenantId.ToString())
                 return Result<TopicDto>.NotFound("Topic not found");
 
-            if (request.ParentId.HasValue && request.ParentId.Value != Guid.Empty)
+            if (request.ParentId.HasValue && request.ParentId.Value != new MaskedGuid(Guid.Empty))
             {
                 var parent = await _topicRepository.GetByIdAsync(request.ParentId.Value, cancellationToken);
                 if (parent == null || parent.TenantId != tenantId.ToString())

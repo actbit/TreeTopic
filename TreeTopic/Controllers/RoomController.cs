@@ -1,7 +1,7 @@
 using Finbuckle.MultiTenant.Abstractions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using MaskedUUID.AspNetCore.Attributes;
+using MaskedUUID.AspNetCore.Types;
 using TreeTopic.Dtos;
 using TreeTopic.Models;
 using TreeTopic.Services;
@@ -36,9 +36,9 @@ public class RoomController : ControllerBase
     }
 
     [HttpGet("{roomId}")]
-    public async Task<IActionResult> GetById([MaskedUUID] Guid roomId, CancellationToken cancellationToken)
+    public async Task<IActionResult> GetById(MaskedGuid roomId, CancellationToken cancellationToken)
     {
-        var result = await _roomManagementService.GetRoomByIdAsync(roomId, CurrentTenantId, cancellationToken);
+        var result = await _roomManagementService.GetRoomByIdAsync(roomId.Value, CurrentTenantId, cancellationToken);
         return HandleResult(result);
     }
 
@@ -53,19 +53,19 @@ public class RoomController : ControllerBase
     }
 
     [HttpPut("{roomId}")]
-    public async Task<IActionResult> Update([MaskedUUID] Guid roomId, [FromBody] UpdateRoomRequest request, CancellationToken cancellationToken)
+    public async Task<IActionResult> Update(MaskedGuid roomId, [FromBody] UpdateRoomRequest request, CancellationToken cancellationToken)
     {
         if (!ModelState.IsValid)
             return ValidationProblem(ModelState);
 
-        var result = await _roomManagementService.UpdateRoomAsync(roomId, request, CurrentTenantId, cancellationToken);
+        var result = await _roomManagementService.UpdateRoomAsync(roomId.Value, request, CurrentTenantId, cancellationToken);
         return HandleResult(result);
     }
 
     [HttpDelete("{roomId}")]
-    public async Task<IActionResult> Delete([MaskedUUID] Guid roomId, CancellationToken cancellationToken)
+    public async Task<IActionResult> Delete(MaskedGuid roomId, CancellationToken cancellationToken)
     {
-        var result = await _roomManagementService.DeleteRoomAsync(roomId, CurrentTenantId, cancellationToken);
+        var result = await _roomManagementService.DeleteRoomAsync(roomId.Value, CurrentTenantId, cancellationToken);
         return HandleResult(result);
     }
 

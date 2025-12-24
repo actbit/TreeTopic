@@ -8,7 +8,7 @@ namespace TreeTopic.KeyProviders;
 public class TreeTopicMaskedUUIDKeyProvider : IMaskedUUIDKeyProvider
 {
     private readonly IHttpContextAccessor _httpContextAccessor;
-    private readonly IServiceProvider _serviceProvider;
+    private readonly IServiceScopeFactory _serviceScopeFactory;
     private readonly IMemoryCache _cache;
     private readonly ILogger<TreeTopicMaskedUUIDKeyProvider> _logger;
     private const string CacheKeyPrefix = "MaskedUUID_Keys_";
@@ -16,12 +16,12 @@ public class TreeTopicMaskedUUIDKeyProvider : IMaskedUUIDKeyProvider
 
     public TreeTopicMaskedUUIDKeyProvider(
         IHttpContextAccessor httpContextAccessor,
-        IServiceProvider serviceProvider,
+        IServiceScopeFactory serviceScopeFactory,
         IMemoryCache cache,
         ILogger<TreeTopicMaskedUUIDKeyProvider> logger)
     {
         _httpContextAccessor = httpContextAccessor;
-        _serviceProvider = serviceProvider;
+        _serviceScopeFactory = serviceScopeFactory;
         _cache = cache;
         _logger = logger;
     }
@@ -91,7 +91,7 @@ public class TreeTopicMaskedUUIDKeyProvider : IMaskedUUIDKeyProvider
 
     private async Task<(ulong K0, ulong K1)> FetchKeysFromDatabaseAsync(Guid tenantId)
     {
-        using var scope = _serviceProvider.CreateScope();
+        using var scope = _serviceScopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<TenantCatalogDbContext>();
 
         var tenantInfo = await dbContext.Tenants
@@ -115,7 +115,7 @@ public class TreeTopicMaskedUUIDKeyProvider : IMaskedUUIDKeyProvider
 
     private (ulong K0, ulong K1) FetchKeysFromDatabaseSync(Guid tenantId)
     {
-        using var scope = _serviceProvider.CreateScope();
+        using var scope = _serviceScopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<TenantCatalogDbContext>();
 
         var tenantInfo = dbContext.Tenants

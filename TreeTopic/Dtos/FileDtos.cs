@@ -1,15 +1,13 @@
 using System.ComponentModel.DataAnnotations;
-using MaskedUUID.AspNetCore.Attributes;
+using MaskedUUID.AspNetCore.Types;
 
 namespace TreeTopic.Dtos;
 
 public class FileDto : BaseDto
 {
-    [MaskedUUID]
-    public Guid? SourceFileId { get; set; }
+    public MaskedGuid? SourceFileId { get; set; }
 
-    [MaskedUUID]
-    public Guid? MessageId { get; set; }
+    public MaskedGuid? MessageId { get; set; }
 
     public string FileName { get; set; } = string.Empty;
 
@@ -36,11 +34,9 @@ public class CreateFileRequest : BaseCreateRequest
     [StringLength(100)]
     public string FileType { get; set; } = string.Empty;
 
-    [MaskedUUID]
-    public Guid? SourceFileId { get; set; }
+    public MaskedGuid? SourceFileId { get; set; }
 
-    [MaskedUUID]
-    public Guid? MessageId { get; set; }
+    public MaskedGuid? MessageId { get; set; }
 }
 
 public class UpdateFileRequest : BaseUpdateRequest
