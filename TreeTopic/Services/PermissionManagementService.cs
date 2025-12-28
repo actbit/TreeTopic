@@ -86,7 +86,7 @@ public class PermissionManagementService : BaseService
 
             // Check if permission already exists with same name in the same role
             var existingPermission = await _context.Permissions
-                .FirstOrDefaultAsync(p => p.RoleId == request.RoleId && p.Name == request.Name.Trim());
+                .FirstOrDefaultAsync(p => p.RoleId == (Guid)request.RoleId && p.Name == request.Name.Trim());
 
             if (existingPermission != null)
             {
@@ -143,7 +143,7 @@ public class PermissionManagementService : BaseService
             // Check if permission already exists with same name in the same role (excluding current permission)
             var existingPermission = await _context.Permissions
                 .FirstOrDefaultAsync(p => p.Id != permissionId &&
-                                        p.RoleId == request.RoleId &&
+                                        p.RoleId == (Guid)request.RoleId &&
                                         p.Name == request.Name.Trim());
 
             if (existingPermission != null)

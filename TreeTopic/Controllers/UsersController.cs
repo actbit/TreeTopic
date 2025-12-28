@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using MaskedUUID.AspNetCore.Types;
 using TreeTopic.Common;
 using TreeTopic.Dtos;
 using TreeTopic.Models;
@@ -63,8 +64,8 @@ public class UsersController : ControllerBase
         return Ok(dto);
     }
 
-    [HttpDelete("{userId:guid}/roles")]
-    public async Task<ActionResult<UserSummaryDto>> RemoveRole(Guid userId, [FromBody] RoleAssignmentRequest request)
+    [HttpDelete("{userId}/roles")]
+    public async Task<ActionResult<UserSummaryDto>> RemoveRole([FromRoute] MaskedGuid userId, [FromBody] RoleAssignmentRequest request)
     {
         var result = await _userManagementService.RemoveRoleFromUserAsync(userId, request);
 

@@ -1,12 +1,13 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
+using MaskedUUID.AspNetCore.Types;
 
 namespace TreeTopic.Dtos;
 
 public class UserSummaryDto
 {
-    public Guid Id { get; set; }
+    public MaskedGuid Id { get; set; }
     public string? UserName { get; set; }
     public string? Email { get; set; }
     public string? DisplayName { get; set; }

@@ -1,11 +1,9 @@
-﻿using Finbuckle.MultiTenant.Abstractions;
-using Finbuckle.MultiTenant;
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using TreeTopic.Dtos;
-using TreeTopic.Models;
 using TreeTopic.Services;
 using System.Security.Claims;
+using MaskedUUID.AspNetCore.Types;
 
 namespace TreeTopic.Controllers;
 
@@ -15,37 +13,33 @@ namespace TreeTopic.Controllers;
 public class MessageController : ControllerBase
 {
     private readonly IMessageManagementService _messageManagementService;
-    private readonly IMultiTenantContextAccessor<ApplicationTenantInfo> _tenantAccessor;
 
     public MessageController(
-        IMessageManagementService messageManagementService,
-        IMultiTenantContextAccessor<ApplicationTenantInfo> tenantAccessor)
+        IMessageManagementService messageManagementService)
     {
         _messageManagementService = messageManagementService;
-        _tenantAccessor = tenantAccessor;
     }
 
-    private Guid CurrentTenantId => Guid.Parse(_tenantAccessor.MultiTenantContext?.TenantInfo?.Id ?? Guid.Empty.ToString());
     private Guid CurrentUserId => Guid.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? Guid.Empty.ToString());
 
     [HttpGet]
     public async Task<IActionResult> GetAll(CancellationToken cancellationToken)
     {
-        var result = await _messageManagementService.GetAllMessagesAsync(CurrentTenantId, cancellationToken);
+        var result = await _messageManagementService.GetAllMessagesAsync(cancellationToken);
         return HandleResult(result);
     }
 
     [HttpGet("topic/{topicId:guid}")]
     public async Task<IActionResult> GetByTopic(Guid topicId, CancellationToken cancellationToken)
     {
-        var result = await _messageManagementService.GetMessagesByTopicAsync(topicId, CurrentTenantId, cancellationToken);
+        var result = await _messageManagementService.GetMessagesByTopicAsync(topicId, cancellationToken);
         return HandleResult(result);
     }
 
     [HttpGet("{messageId:guid}")]
     public async Task<IActionResult> GetById(Guid messageId, CancellationToken cancellationToken)
     {
-        var result = await _messageManagementService.GetMessageByIdAsync(messageId, CurrentTenantId, cancellationToken);
+        var result = await _messageManagementService.GetMessageByIdAsync(messageId, cancellationToken);
         return HandleResult(result);
     }
 
@@ -56,24 +50,24 @@ public class MessageController : ControllerBase
         if (!ModelState.IsValid)
             return ValidationProblem(ModelState);
 
-        var result = await _messageManagementService.CreateMessageAsync(request, CurrentUserId, CurrentTenantId, cancellationToken);
+        var result = await _messageManagementService.CreateMessageAsync(request, CurrentUserId, cancellationToken);
         return HandleResult(result);
     }
 
     [HttpPut("{messageId:guid}")]
-    public async Task<IActionResult> Update(Guid messageId, [FromBody] UpdateMessageRequest request, CancellationToken cancellationToken)
+    public async Task<IActionResult> Update([FromRoute] Guid messageId, [FromBody] UpdateMessageRequest request, CancellationToken cancellationToken)
     {
         if (!ModelState.IsValid)
             return ValidationProblem(ModelState);
 
-        var result = await _messageManagementService.UpdateMessageAsync(messageId, request, CurrentTenantId, cancellationToken);
+        var result = await _messageManagementService.UpdateMessageAsync(messageId, request, cancellationToken);
         return HandleResult(result);
     }
 
-    [HttpDelete("{messageId:guid}")]
-    public async Task<IActionResult> Delete(Guid messageId, CancellationToken cancellationToken)
+    [HttpDelete("{messageId}")]
+    public async Task<IActionResult> Delete([FromRoute] MaskedGuid messageId, CancellationToken cancellationToken)
     {
-        var result = await _messageManagementService.DeleteMessageAsync(messageId, CurrentTenantId, cancellationToken);
+        var result = await _messageManagementService.DeleteMessageAsync(messageId, cancellationToken);
         return HandleResult(result);
     }
 

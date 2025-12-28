@@ -9,12 +9,12 @@ namespace TreeTopic.Services;
 
 public interface IFileManagementService
 {
-    Task<Result<List<FileDto>>> GetAllFilesAsync(Guid tenantId, CancellationToken cancellationToken = default);
-    Task<Result<List<FileDto>>> GetFilesByMessageAsync(Guid messageId, Guid tenantId, CancellationToken cancellationToken = default);
-    Task<Result<FileDto>> GetFileByIdAsync(Guid fileId, Guid tenantId, CancellationToken cancellationToken = default);
-    Task<Result<FileDto>> CreateFileAsync(CreateFileRequest request, Guid tenantId, CancellationToken cancellationToken = default);
-    Task<Result<FileDto>> UpdateFileAsync(Guid fileId, UpdateFileRequest request, Guid tenantId, CancellationToken cancellationToken = default);
-    Task<Result> DeleteFileAsync(Guid fileId, Guid tenantId, CancellationToken cancellationToken = default);
+    Task<Result<List<FileDto>>> GetAllFilesAsync(CancellationToken cancellationToken = default);
+    Task<Result<List<FileDto>>> GetFilesByMessageAsync(Guid messageId, CancellationToken cancellationToken = default);
+    Task<Result<FileDto>> GetFileByIdAsync(Guid fileId, CancellationToken cancellationToken = default);
+    Task<Result<FileDto>> CreateFileAsync(CreateFileRequest request, CancellationToken cancellationToken = default);
+    Task<Result<FileDto>> UpdateFileAsync(Guid fileId, UpdateFileRequest request, CancellationToken cancellationToken = default);
+    Task<Result> DeleteFileAsync(Guid fileId, CancellationToken cancellationToken = default);
 }
 
 public class FileManagementService : BaseService, IFileManagementService
@@ -31,12 +31,11 @@ public class FileManagementService : BaseService, IFileManagementService
         _messageRepository = messageRepository;
     }
 
-    public async Task<Result<List<FileDto>>> GetAllFilesAsync(Guid tenantId, CancellationToken cancellationToken = default)
+    public async Task<Result<List<FileDto>>> GetAllFilesAsync(CancellationToken cancellationToken = default)
     {
         return await ExecuteAsync(async () =>
         {
             var files = await _fileRepository.Query()
-                .Where(f => f.TenantId == tenantId.ToString())
                 .ToListAsync(cancellationToken);
 
             var dtos = files.Select(MapToDto).ToList();
@@ -44,12 +43,12 @@ public class FileManagementService : BaseService, IFileManagementService
         }, nameof(GetAllFilesAsync));
     }
 
-    public async Task<Result<List<FileDto>>> GetFilesByMessageAsync(Guid messageId, Guid tenantId, CancellationToken cancellationToken = default)
+    public async Task<Result<List<FileDto>>> GetFilesByMessageAsync(Guid messageId, CancellationToken cancellationToken = default)
     {
         return await ExecuteAsync(async () =>
         {
             var files = await _fileRepository.Query()
-                .Where(f => f.MessageId == messageId && f.TenantId == tenantId.ToString())
+                .Where(f => f.MessageId == messageId)
                 .ToListAsync(cancellationToken);
 
             var dtos = files.Select(MapToDto).ToList();
@@ -57,13 +56,13 @@ public class FileManagementService : BaseService, IFileManagementService
         }, nameof(GetFilesByMessageAsync));
     }
 
-    public async Task<Result<FileDto>> GetFileByIdAsync(Guid fileId, Guid tenantId, CancellationToken cancellationToken = default)
+    public async Task<Result<FileDto>> GetFileByIdAsync(Guid fileId, CancellationToken cancellationToken = default)
     {
         return await ExecuteAsync(async () =>
         {
             var file = await _fileRepository.GetByIdAsync(fileId, cancellationToken);
 
-            if (file == null || file.TenantId != tenantId.ToString())
+            if (file == null)
                 return Result<FileDto>.NotFound("File not found");
 
             var dto = MapToDto(file);
@@ -73,7 +72,6 @@ public class FileManagementService : BaseService, IFileManagementService
 
     public async Task<Result<FileDto>> CreateFileAsync(
         CreateFileRequest request,
-        Guid tenantId,
         CancellationToken cancellationToken = default)
     {
         return await ExecuteAsync(async () =>
@@ -81,14 +79,14 @@ public class FileManagementService : BaseService, IFileManagementService
             if (request.MessageId.HasValue && request.MessageId != Guid.Empty)
             {
                 var message = await _messageRepository.GetByIdAsync(request.MessageId.Value, cancellationToken);
-                if (message == null || message.TenantId != tenantId.ToString())
+                if (message == null)
                     return Result<FileDto>.NotFound("Message not found");
             }
 
             if (request.SourceFileId.HasValue && request.SourceFileId != Guid.Empty)
             {
                 var sourceFile = await _fileRepository.GetByIdAsync(request.SourceFileId.Value, cancellationToken);
-                if (sourceFile == null || sourceFile.TenantId != tenantId.ToString())
+                if (sourceFile == null)
                     return Result<FileDto>.NotFound("Source file not found");
             }
 
@@ -100,8 +98,7 @@ public class FileManagementService : BaseService, IFileManagementService
                 MessageId = request.MessageId ?? Guid.Empty,
                 SourceFileId = request.SourceFileId ?? Guid.Empty,
                 SourceFile = null,
-                IsLatast = true,
-                TenantId = tenantId.ToString()
+                IsLatast = true
             };
 
             await _fileRepository.AddAsync(file, cancellationToken);
@@ -115,14 +112,13 @@ public class FileManagementService : BaseService, IFileManagementService
     public async Task<Result<FileDto>> UpdateFileAsync(
         Guid fileId,
         UpdateFileRequest request,
-        Guid tenantId,
         CancellationToken cancellationToken = default)
     {
         return await ExecuteAsync(async () =>
         {
             var file = await _fileRepository.GetByIdAsync(fileId, cancellationToken);
 
-            if (file == null || file.TenantId != tenantId.ToString())
+            if (file == null)
                 return Result<FileDto>.NotFound("File not found");
 
             if (!string.IsNullOrEmpty(request.FileName))
@@ -140,13 +136,13 @@ public class FileManagementService : BaseService, IFileManagementService
         }, nameof(UpdateFileAsync));
     }
 
-    public async Task<Result> DeleteFileAsync(Guid fileId, Guid tenantId, CancellationToken cancellationToken = default)
+    public async Task<Result> DeleteFileAsync(Guid fileId, CancellationToken cancellationToken = default)
     {
         return await ExecuteAsync(async () =>
         {
             var file = await _fileRepository.GetByIdAsync(fileId, cancellationToken);
 
-            if (file == null || file.TenantId != tenantId.ToString())
+            if (file == null)
                 return Result.NotFound("File not found");
 
             _fileRepository.Delete(file);
@@ -161,7 +157,6 @@ public class FileManagementService : BaseService, IFileManagementService
         return new FileDto
         {
             Id = file.Id,
-            TenantId = Guid.Parse(file.TenantId),
             FileName = file.FileName,
             SaveFileName = file.SaveFileName,
             FileType = file.FileType,

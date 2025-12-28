@@ -2,6 +2,7 @@
 using Finbuckle.MultiTenant.Abstractions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using MaskedUUID.AspNetCore.Types;
 using System.Linq;
 using TreeTopic.Dtos;
 using TreeTopic.Models;
@@ -75,8 +76,8 @@ public class RoomUsersController : ControllerBase
         return Ok(MapToDto(entity));
     }
 
-    [HttpDelete("{id:guid}")]
-    public async Task<IActionResult> Delete(Guid id)
+    [HttpDelete("{id}")]
+    public async Task<IActionResult> Delete([FromRoute] MaskedGuid id)
     {
         var entity = await _roomUserRepository.GetByIdAsync(id);
         if (entity == null)

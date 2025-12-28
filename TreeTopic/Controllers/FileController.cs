@@ -1,10 +1,8 @@
-﻿using Finbuckle.MultiTenant.Abstractions;
-using Finbuckle.MultiTenant;
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using TreeTopic.Dtos;
-using TreeTopic.Models;
 using TreeTopic.Services;
+using MaskedUUID.AspNetCore.Types;
 
 namespace TreeTopic.Controllers;
 
@@ -14,36 +12,31 @@ namespace TreeTopic.Controllers;
 public class FileController : ControllerBase
 {
     private readonly IFileManagementService _fileManagementService;
-    private readonly IMultiTenantContextAccessor<ApplicationTenantInfo> _tenantAccessor;
 
     public FileController(
-        IFileManagementService fileManagementService,
-        IMultiTenantContextAccessor<ApplicationTenantInfo> tenantAccessor)
+        IFileManagementService fileManagementService)
     {
         _fileManagementService = fileManagementService;
-        _tenantAccessor = tenantAccessor;
     }
-
-    private Guid CurrentTenantId => Guid.Parse(_tenantAccessor.MultiTenantContext?.TenantInfo?.Id ?? Guid.Empty.ToString());
 
     [HttpGet]
     public async Task<IActionResult> GetAll(CancellationToken cancellationToken)
     {
-        var result = await _fileManagementService.GetAllFilesAsync(CurrentTenantId, cancellationToken);
+        var result = await _fileManagementService.GetAllFilesAsync(cancellationToken);
         return HandleResult(result);
     }
 
     [HttpGet("message/{messageId:guid}")]
     public async Task<IActionResult> GetByMessage(Guid messageId, CancellationToken cancellationToken)
     {
-        var result = await _fileManagementService.GetFilesByMessageAsync(messageId, CurrentTenantId, cancellationToken);
+        var result = await _fileManagementService.GetFilesByMessageAsync(messageId, cancellationToken);
         return HandleResult(result);
     }
 
     [HttpGet("{fileId:guid}")]
     public async Task<IActionResult> GetById(Guid fileId, CancellationToken cancellationToken)
     {
-        var result = await _fileManagementService.GetFileByIdAsync(fileId, CurrentTenantId, cancellationToken);
+        var result = await _fileManagementService.GetFileByIdAsync(fileId, cancellationToken);
         return HandleResult(result);
     }
 
@@ -53,24 +46,24 @@ public class FileController : ControllerBase
         if (!ModelState.IsValid)
             return ValidationProblem(ModelState);
 
-        var result = await _fileManagementService.CreateFileAsync(request, CurrentTenantId, cancellationToken);
+        var result = await _fileManagementService.CreateFileAsync(request, cancellationToken);
         return HandleResult(result);
     }
 
     [HttpPut("{fileId:guid}")]
-    public async Task<IActionResult> Update(Guid fileId, [FromBody] UpdateFileRequest request, CancellationToken cancellationToken)
+    public async Task<IActionResult> Update([FromRoute] Guid fileId, [FromBody] UpdateFileRequest request, CancellationToken cancellationToken)
     {
         if (!ModelState.IsValid)
             return ValidationProblem(ModelState);
 
-        var result = await _fileManagementService.UpdateFileAsync(fileId, request, CurrentTenantId, cancellationToken);
+        var result = await _fileManagementService.UpdateFileAsync(fileId, request, cancellationToken);
         return HandleResult(result);
     }
 
-    [HttpDelete("{fileId:guid}")]
-    public async Task<IActionResult> Delete(Guid fileId, CancellationToken cancellationToken)
+    [HttpDelete("{fileId}")]
+    public async Task<IActionResult> Delete([FromRoute] MaskedGuid fileId, CancellationToken cancellationToken)
     {
-        var result = await _fileManagementService.DeleteFileAsync(fileId, CurrentTenantId, cancellationToken);
+        var result = await _fileManagementService.DeleteFileAsync(fileId, cancellationToken);
         return HandleResult(result);
     }
 

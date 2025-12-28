@@ -6,8 +6,6 @@ public class BaseDto
 {
     public MaskedGuid Id { get; set; }
 
-    public Guid TenantId { get; set; }
-
     public DateTime CreatedAt { get; set; }
 
     public DateTime UpdatedAt { get; set; }
@@ -15,14 +13,11 @@ public class BaseDto
 
 public class BaseCreateRequest
 {
-    public Guid? TenantId { get; set; }
 }
 
 public class BaseUpdateRequest
 {
     public MaskedGuid? Id { get; set; }
-
-    public Guid? TenantId { get; set; }
 }
 
 public class BaseResponse
