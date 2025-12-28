@@ -45,11 +45,6 @@ public class TenantManagementService
             throw new ArgumentException("Identifier is required", nameof(request.Identifier));
         }
 
-        if (string.IsNullOrEmpty(request.Name))
-        {
-            throw new ArgumentException("Name is required", nameof(request.Name));
-        }
-
         // 同じ Identifier が既に存在するか確認
         var existingTenant = await _tenantDb.Tenants
             .FirstOrDefaultAsync(t => t.Identifier == request.Identifier);
@@ -128,26 +123,32 @@ public class TenantManagementService
             }
 
             // テナント情報を作成
-            var tenant = new ApplicationTenantInfo
+            var tenantName = request.Identifier;
+            var tenant = new ApplicationTenantInfo(request.Identifier, tenantName)
             {
-                Id = Guid.NewGuid().ToString(),
                 Identifier = request.Identifier,
-                Name = request.Name,
-                DbProvider = dbProvider,
-                TenantEncryptionKey = encryptedTenantKey,
-                ConnectionString = encryptedConnectionString,
-                RoleClaimName = request.RoleClaimName,
-                OpenIdConnectMetadataAddress = request.OpenIdConnectMetadataAddress,
-                OpenIdConnectAuthority = authority,
-                OpenIdConnectAuthorizationEndpoint = authorizationEndpoint,
-                OpenIdConnectTokenEndpoint = tokenEndpoint,
-                OpenIdConnectJwksUri = jwksUri,
-                OpenIdConnectEndSessionEndpoint = endSessionEndpoint,
-                OpenIdConnecClientId = request.OpenIdConnectClientId,
-                OpenIdConnecClientSecret = encryptedClientSecret,
-                TenantObfuscationKeyK0 = k0,
-                TenantObfuscationKeyK1 = k1
+                Name = tenantName,
+                Detail = new ApplicationTenantDetail
+                {
+                    TenantId = string.Empty,
+                    DbProvider = dbProvider,
+                    TenantEncryptionKey = encryptedTenantKey,
+                    ConnectionString = encryptedConnectionString,
+                    RoleClaimName = request.RoleClaimName,
+                    OpenIdConnectMetadataAddress = request.OpenIdConnectMetadataAddress,
+                    OpenIdConnectAuthority = authority,
+                    OpenIdConnectAuthorizationEndpoint = authorizationEndpoint,
+                    OpenIdConnectTokenEndpoint = tokenEndpoint,
+                    OpenIdConnectJwksUri = jwksUri,
+                    OpenIdConnectEndSessionEndpoint = endSessionEndpoint,
+                    OpenIdConnecClientId = request.OpenIdConnectClientId,
+                    OpenIdConnecClientSecret = encryptedClientSecret,
+                    TenantObfuscationKeyK0 = k0,
+                    TenantObfuscationKeyK1 = k1
+                }
             };
+
+            tenant.Detail!.TenantId = tenant.Id!;
 
             // TenantCatalog DB に保存
             _tenantDb.Tenants.Add(tenant);
@@ -208,7 +209,9 @@ public class TenantManagementService
     /// </summary>
     public async Task<List<ApplicationTenantInfo>> GetAllTenantsAsync()
     {
-        return await _tenantDb.Tenants.ToListAsync();
+        return await _tenantDb.Tenants
+            .Include(t => t.Detail)
+            .ToListAsync();
     }
 
     /// <summary>
@@ -217,6 +220,7 @@ public class TenantManagementService
     public async Task<ApplicationTenantInfo?> GetTenantByIdentifierAsync(string identifier)
     {
         return await _tenantDb.Tenants
+            .Include(t => t.Detail)
             .FirstOrDefaultAsync(t => t.Identifier == identifier);
     }
 

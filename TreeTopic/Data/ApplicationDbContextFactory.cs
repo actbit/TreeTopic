@@ -1,4 +1,4 @@
-using Finbuckle.MultiTenant;
+﻿using Finbuckle.MultiTenant;
 using Finbuckle.MultiTenant.Abstractions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
@@ -16,36 +16,34 @@ public class ApplicationDbContextFactory : IDesignTimeDbContextFactory<Applicati
     public ApplicationDbContext CreateDbContext(string[] args)
     {
         var efProvider = Environment.GetEnvironmentVariable("EF_PROVIDER")?.ToLower() ?? "postgresql";
-        var optionsBuilder = new DbContextOptionsBuilder<ApplicationDbContext>();
 
-        if (efProvider == "mysql")
+        var tenantInfo = new ApplicationTenantInfo("migration-dummy", "migration-dummy")
         {
-            // ダミー接続文字列（実際には接続しない）
-            optionsBuilder.UseMySql("Server=dummy;Database=dummy;",
-                new MySqlServerVersion(new Version(8, 0)));
-        }
-        else
-        {
-            // ダミー接続文字列（実際には接続しない）
-            optionsBuilder.UseNpgsql("Host=dummy;Database=dummy;");
-        }
-
-        var tenantInfo = new ApplicationTenantInfo
-        {
-            Id = "migration-dummy",
-            Name = "migration-dummy",
-            DbProvider = efProvider
+            Detail = new ApplicationTenantDetail
+            {
+                TenantId = string.Empty,
+                DbProvider = efProvider
+            }
         };
+
+        tenantInfo.Detail!.TenantId = tenantInfo.Id!;
 
         var accessor = new DesignTimeMultiTenantContextAccessor(tenantInfo);
 
         // マイグレーション専用 DbContext を返す
         if (efProvider == "mysql")
         {
+            var optionsBuilder = new DbContextOptionsBuilder<ApplicationDbContextMySQL>();
+            // ダミー接続文字列（実際には接続しない）
+            optionsBuilder.UseMySql("Server=dummy;Database=dummy;",
+                new MySqlServerVersion(new Version(8, 0)));
             return new ApplicationDbContextMySQL(accessor, optionsBuilder.Options);
         }
         else
         {
+            var optionsBuilder = new DbContextOptionsBuilder<ApplicationDbContextPostgreSQL>();
+            // ダミー接続文字列（実際には接続しない）
+            optionsBuilder.UseNpgsql("Host=dummy;Database=dummy;");
             return new ApplicationDbContextPostgreSQL(accessor, optionsBuilder.Options);
         }
     }
@@ -60,7 +58,7 @@ internal class DesignTimeMultiTenantContextAccessor : IMultiTenantContextAccesso
 
     public DesignTimeMultiTenantContextAccessor(ApplicationTenantInfo tenantInfo)
     {
-        MultiTenantContext = new MultiTenantContext<ApplicationTenantInfo>
+        MultiTenantContext = new MultiTenantContext<ApplicationTenantInfo>()
         {
             TenantInfo = tenantInfo
         };
@@ -71,3 +69,7 @@ internal class DesignTimeMultiTenantContextAccessor : IMultiTenantContextAccesso
         MultiTenantContext = context;
     }
 }
+
+
+
+

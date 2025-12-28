@@ -1,3 +1,4 @@
+﻿using Finbuckle.MultiTenant;
 using Finbuckle.MultiTenant.Abstractions;
 using Microsoft.EntityFrameworkCore;
 
@@ -9,8 +10,12 @@ namespace TreeTopic.Data;
 /// </summary>
 public class ApplicationDbContextMySQL : ApplicationDbContext
 {
-    public ApplicationDbContextMySQL(IMultiTenantContextAccessor multiTenantContextAccessor, DbContextOptions<ApplicationDbContext> options)
+    public ApplicationDbContextMySQL(IMultiTenantContextAccessor multiTenantContextAccessor, DbContextOptions<ApplicationDbContextMySQL> options)
         : base(multiTenantContextAccessor, options)
     {
     }
 }
+
+
+
+

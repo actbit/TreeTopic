@@ -1,4 +1,5 @@
-using Finbuckle.MultiTenant.Abstractions;
+﻿using Finbuckle.MultiTenant.Abstractions;
+using Finbuckle.MultiTenant;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using MaskedUUID.AspNetCore.Types;
@@ -38,7 +39,7 @@ public class RoomController : ControllerBase
     [HttpGet("{roomId}")]
     public async Task<IActionResult> GetById(MaskedGuid roomId, CancellationToken cancellationToken)
     {
-        var result = await _roomManagementService.GetRoomByIdAsync(roomId.Value, CurrentTenantId, cancellationToken);
+        var result = await _roomManagementService.GetRoomByIdAsync((Guid)roomId, CurrentTenantId, cancellationToken);
         return HandleResult(result);
     }
 
@@ -58,14 +59,14 @@ public class RoomController : ControllerBase
         if (!ModelState.IsValid)
             return ValidationProblem(ModelState);
 
-        var result = await _roomManagementService.UpdateRoomAsync(roomId.Value, request, CurrentTenantId, cancellationToken);
+        var result = await _roomManagementService.UpdateRoomAsync((Guid)roomId, request, CurrentTenantId, cancellationToken);
         return HandleResult(result);
     }
 
     [HttpDelete("{roomId}")]
     public async Task<IActionResult> Delete(MaskedGuid roomId, CancellationToken cancellationToken)
     {
-        var result = await _roomManagementService.DeleteRoomAsync(roomId.Value, CurrentTenantId, cancellationToken);
+        var result = await _roomManagementService.DeleteRoomAsync((Guid)roomId, CurrentTenantId, cancellationToken);
         return HandleResult(result);
     }
 
@@ -85,3 +86,7 @@ public class RoomController : ControllerBase
         return StatusCode(result.StatusCode, new { error = result.Error?.Message });
     }
 }
+
+
+
+

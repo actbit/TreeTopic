@@ -1,4 +1,5 @@
-using Finbuckle.MultiTenant.Abstractions;
+﻿using Finbuckle.MultiTenant.Abstractions;
+using Finbuckle.MultiTenant;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using MaskedUUID.AspNetCore.Types;
@@ -36,14 +37,14 @@ public class TopicController : ControllerBase
     [HttpGet("room/{roomId}")]
     public async Task<IActionResult> GetByRoom(MaskedGuid roomId, CancellationToken cancellationToken)
     {
-        var result = await _topicManagementService.GetTopicsByRoomAsync(roomId.Value, CurrentTenantId, cancellationToken);
+        var result = await _topicManagementService.GetTopicsByRoomAsync((Guid)roomId, CurrentTenantId, cancellationToken);
         return HandleResult(result);
     }
 
     [HttpGet("{topicId}")]
     public async Task<IActionResult> GetById(MaskedGuid topicId, CancellationToken cancellationToken)
     {
-        var result = await _topicManagementService.GetTopicByIdAsync(topicId.Value, CurrentTenantId, cancellationToken);
+        var result = await _topicManagementService.GetTopicByIdAsync((Guid)topicId, CurrentTenantId, cancellationToken);
         return HandleResult(result);
     }
 
@@ -63,14 +64,14 @@ public class TopicController : ControllerBase
         if (!ModelState.IsValid)
             return ValidationProblem(ModelState);
 
-        var result = await _topicManagementService.UpdateTopicAsync(topicId.Value, request, CurrentTenantId, cancellationToken);
+        var result = await _topicManagementService.UpdateTopicAsync((Guid)topicId, request, CurrentTenantId, cancellationToken);
         return HandleResult(result);
     }
 
     [HttpDelete("{topicId}")]
     public async Task<IActionResult> Delete(MaskedGuid topicId, CancellationToken cancellationToken)
     {
-        var result = await _topicManagementService.DeleteTopicAsync(topicId.Value, CurrentTenantId, cancellationToken);
+        var result = await _topicManagementService.DeleteTopicAsync((Guid)topicId, CurrentTenantId, cancellationToken);
         return HandleResult(result);
     }
 
@@ -90,3 +91,7 @@ public class TopicController : ControllerBase
         return StatusCode(result.StatusCode, new { error = result.Error?.Message });
     }
 }
+
+
+
+

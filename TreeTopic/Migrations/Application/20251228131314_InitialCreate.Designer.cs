@@ -12,7 +12,7 @@ using TreeTopic.Data;
 namespace TreeTopic.Migrations.Application
 {
     [DbContext(typeof(ApplicationDbContextPostgreSQL))]
-    [Migration("20251218150648_InitialCreate")]
+    [Migration("20251228131314_InitialCreate")]
     partial class InitialCreate
     {
         /// <inheritdoc />
@@ -20,7 +20,7 @@ namespace TreeTopic.Migrations.Application
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "9.0.10")
+                .HasAnnotation("ProductVersion", "9.0.11")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);

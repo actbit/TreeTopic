@@ -95,6 +95,7 @@ public class TreeTopicMaskedUUIDKeyProvider : IMaskedUUIDKeyProvider
         var dbContext = scope.ServiceProvider.GetRequiredService<TenantCatalogDbContext>();
 
         var tenantInfo = await dbContext.Tenants
+            .Include(t => t.Detail)
             .FirstOrDefaultAsync(t => t.Id == tenantId.ToString());
 
         if (tenantInfo == null)
@@ -103,14 +104,16 @@ public class TreeTopicMaskedUUIDKeyProvider : IMaskedUUIDKeyProvider
             throw new InvalidOperationException($"Tenant {tenantId} not found");
         }
 
-        if (tenantInfo.TenantObfuscationKeyK0 == 0 || tenantInfo.TenantObfuscationKeyK1 == 0)
+        if (tenantInfo.Detail == null ||
+            tenantInfo.Detail.TenantObfuscationKeyK0 == 0 ||
+            tenantInfo.Detail.TenantObfuscationKeyK1 == 0)
         {
             _logger.LogWarning("MaskedUUID keys not configured for tenant {TenantId}", tenantId);
             throw new InvalidOperationException($"MaskedUUID keys not configured for tenant {tenantId}");
         }
 
         _logger.LogDebug("MaskedUUID keys loaded from database for tenant {TenantId}", tenantId);
-        return (tenantInfo.TenantObfuscationKeyK0, tenantInfo.TenantObfuscationKeyK1);
+        return (tenantInfo.Detail.TenantObfuscationKeyK0, tenantInfo.Detail.TenantObfuscationKeyK1);
     }
 
     private (ulong K0, ulong K1) FetchKeysFromDatabaseSync(Guid tenantId)
@@ -119,6 +122,7 @@ public class TreeTopicMaskedUUIDKeyProvider : IMaskedUUIDKeyProvider
         var dbContext = scope.ServiceProvider.GetRequiredService<TenantCatalogDbContext>();
 
         var tenantInfo = dbContext.Tenants
+            .Include(t => t.Detail)
             .FirstOrDefault(t => t.Id == tenantId.ToString());
 
         if (tenantInfo == null)
@@ -127,13 +131,15 @@ public class TreeTopicMaskedUUIDKeyProvider : IMaskedUUIDKeyProvider
             throw new InvalidOperationException($"Tenant {tenantId} not found");
         }
 
-        if (tenantInfo.TenantObfuscationKeyK0 == 0 || tenantInfo.TenantObfuscationKeyK1 == 0)
+        if (tenantInfo.Detail == null ||
+            tenantInfo.Detail.TenantObfuscationKeyK0 == 0 ||
+            tenantInfo.Detail.TenantObfuscationKeyK1 == 0)
         {
             _logger.LogWarning("MaskedUUID keys not configured for tenant {TenantId}", tenantId);
             throw new InvalidOperationException($"MaskedUUID keys not configured for tenant {tenantId}");
         }
 
         _logger.LogDebug("MaskedUUID keys loaded from database (sync) for tenant {TenantId}", tenantId);
-        return (tenantInfo.TenantObfuscationKeyK0, tenantInfo.TenantObfuscationKeyK1);
+        return (tenantInfo.Detail.TenantObfuscationKeyK0, tenantInfo.Detail.TenantObfuscationKeyK1);
     }
 }

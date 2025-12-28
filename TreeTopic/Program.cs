@@ -1,5 +1,6 @@
-
+﻿
 using Finbuckle.MultiTenant;
+using Finbuckle.MultiTenant.AspNetCore.Extensions;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using System.Security.Claims;
 using TreeTopic.Models;
@@ -200,7 +201,7 @@ public class Program
         builder.Services.AddScoped<IBrainBoardRepository, BrainBoardRepository>();
         builder.Services.AddScoped<IBrainIdeaRepository, BrainIdeaRepository>();
 
-        builder.Services.AddOpenApi();
+        builder.Services.AddOpenApi(options => options.AddMaskedGuidSchemaTransformer());
 
         var app = builder.Build();
 
@@ -264,3 +265,4 @@ public class Program
         app.Run();
     }
 }
+

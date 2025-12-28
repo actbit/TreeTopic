@@ -1,4 +1,5 @@
 ﻿using Finbuckle.MultiTenant;
+using Finbuckle.MultiTenant.Abstractions;
 using System.ComponentModel.DataAnnotations.Schema;
 
 namespace TreeTopic.Models
@@ -23,3 +24,7 @@ namespace TreeTopic.Models
         public List<File> Files { get; set; } = new List<File>();
     }
 }
+
+
+
+

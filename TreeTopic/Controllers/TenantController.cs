@@ -1,10 +1,10 @@
-using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
 using TreeTopic.Dtos;
 using TreeTopic.Services;
 using Finbuckle.MultiTenant;
-using Finbuckle.MultiTenant.Abstractions;
 using TreeTopic.Models;
+using Finbuckle.MultiTenant.Abstractions;
 
 namespace TreeTopic.Controllers;
 
@@ -92,7 +92,7 @@ public class TenantController : ControllerBase
                 Id = tenant.Id,
                 Identifier = tenant.Identifier,
                 Name = tenant.Name,
-                DbProvider = tenant.DbProvider,
+                DbProvider = tenant.Detail?.DbProvider,
                 CreatedAt = DateTime.UtcNow
             });
         }
@@ -121,7 +121,7 @@ public class TenantController : ControllerBase
                 Id = t.Id,
                 Identifier = t.Identifier,
                 Name = t.Name,
-                DbProvider = t.DbProvider,
+                DbProvider = t.Detail?.DbProvider,
                 CreatedAt = DateTime.UtcNow
             }).ToList();
 
@@ -191,3 +191,7 @@ public class TenantResponse
     public string? DbProvider { get; set; }
     public DateTime CreatedAt { get; set; }
 }
+
+
+
+

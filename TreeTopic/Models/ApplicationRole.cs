@@ -1,4 +1,5 @@
 ﻿using Finbuckle.MultiTenant;
+using Finbuckle.MultiTenant.Abstractions;
 using Microsoft.AspNetCore.Identity;
 
 namespace TreeTopic.Models
@@ -17,3 +18,7 @@ namespace TreeTopic.Models
         public List<Permission> Authorities { get; set; } = new List<Permission>();
     }
 }
+
+
+
+

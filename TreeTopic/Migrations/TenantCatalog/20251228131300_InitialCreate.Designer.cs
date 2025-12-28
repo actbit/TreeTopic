@@ -12,7 +12,7 @@ using TreeTopic;
 namespace TreeTopic.Migrations.TenantCatalog
 {
     [DbContext(typeof(TenantCatalogDbContext))]
-    [Migration("20251128145816_InitialCreate")]
+    [Migration("20251228131300_InitialCreate")]
     partial class InitialCreate
     {
         /// <inheritdoc />
@@ -20,14 +20,14 @@ namespace TreeTopic.Migrations.TenantCatalog
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "9.0.10")
+                .HasAnnotation("ProductVersion", "9.0.11")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
-            modelBuilder.Entity("TreeTopic.Models.ApplicationTenantInfo", b =>
+            modelBuilder.Entity("TreeTopic.Models.ApplicationTenantDetail", b =>
                 {
-                    b.Property<string>("Id")
+                    b.Property<string>("TenantId")
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
 
@@ -38,16 +38,6 @@ namespace TreeTopic.Migrations.TenantCatalog
                     b.Property<string>("DbProvider")
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)");
-
-                    b.Property<string>("Identifier")
-                        .IsRequired()
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(512)
-                        .HasColumnType("character varying(512)");
 
                     b.Property<string>("OpenIdConnecClientId")
                         .HasMaxLength(500)
@@ -95,6 +85,27 @@ namespace TreeTopic.Migrations.TenantCatalog
                     b.Property<decimal>("TenantObfuscationKeyK1")
                         .HasColumnType("numeric(20,0)");
 
+                    b.HasKey("TenantId");
+
+                    b.ToTable("TenantDetails");
+                });
+
+            modelBuilder.Entity("TreeTopic.Models.ApplicationTenantInfo", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("Identifier")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
                     b.HasKey("Id");
 
                     b.HasIndex("Name")
@@ -140,6 +151,17 @@ namespace TreeTopic.Migrations.TenantCatalog
                     b.ToTable("SetupTokens");
                 });
 
+            modelBuilder.Entity("TreeTopic.Models.ApplicationTenantDetail", b =>
+                {
+                    b.HasOne("TreeTopic.Models.ApplicationTenantInfo", "Tenant")
+                        .WithOne("Detail")
+                        .HasForeignKey("TreeTopic.Models.ApplicationTenantDetail", "TenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Tenant");
+                });
+
             modelBuilder.Entity("TreeTopic.Models.SetupToken", b =>
                 {
                     b.HasOne("TreeTopic.Models.ApplicationTenantInfo", null)
@@ -157,6 +179,8 @@ namespace TreeTopic.Migrations.TenantCatalog
 
             modelBuilder.Entity("TreeTopic.Models.ApplicationTenantInfo", b =>
                 {
+                    b.Navigation("Detail");
+
                     b.Navigation("SetupTokens");
                 });
 #pragma warning restore 612, 618
