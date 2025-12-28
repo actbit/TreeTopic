@@ -1,21 +1,22 @@
 using System;
 using System.ComponentModel.DataAnnotations;
+using MaskedUUID.AspNetCore.Types;
 
 namespace TreeTopic.Dtos;
 
 public class RoomUserDto
 {
-    public Guid Id { get; set; }
-    public Guid ApplicationUserId { get; set; }
-    public Guid RoomId { get; set; }
-    public Guid RoomPermissionId { get; set; }
+    public MaskedGuid Id { get; set; }
+    public MaskedGuid ApplicationUserId { get; set; }
+    public MaskedGuid RoomId { get; set; }
+    public MaskedGuid RoomPermissionId { get; set; }
 }
 
 public class CreateRoomUserRequest
 {
     [Required]
-    public Guid ApplicationUserId { get; set; }
+    public MaskedGuid ApplicationUserId { get; set; }
 
     [Required]
-    public Guid RoomPermissionId { get; set; }
+    public MaskedGuid RoomPermissionId { get; set; }
 }

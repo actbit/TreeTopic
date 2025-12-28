@@ -1,10 +1,11 @@
 using System.ComponentModel.DataAnnotations;
+using MaskedUUID.AspNetCore.Types;
 
 namespace TreeTopic.Dtos;
 
 public class RoleDto
 {
-    public Guid Id { get; set; }
+    public MaskedGuid Id { get; set; }
 
     public string? Name { get; set; }
 }

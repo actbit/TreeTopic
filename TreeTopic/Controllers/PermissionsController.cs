@@ -1,3 +1,4 @@
+using MaskedUUID.AspNetCore.Types;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using TreeTopic.Common;
@@ -67,7 +68,7 @@ public class PermissionsController : ControllerBase
     }
 
     [HttpPut("{permissionId:guid}")]
-    public async Task<ActionResult<PermissionDto>> Update(Guid permissionId, [FromBody] PermissionModificationRequest request)
+    public async Task<ActionResult<PermissionDto>> Update([FromRoute] Guid permissionId, [FromBody] PermissionModificationRequest request)
     {
         if (!ModelState.IsValid)
         {
@@ -85,8 +86,8 @@ public class PermissionsController : ControllerBase
         return Ok(dto);
     }
 
-    [HttpDelete("{permissionId:guid}")]
-    public async Task<IActionResult> Delete(Guid permissionId)
+    [HttpDelete("{permissionId}")]
+    public async Task<IActionResult> Delete([FromRoute] MaskedGuid permissionId)
     {
         var result = await _permissionManagementService.DeletePermissionAsync(permissionId);
 

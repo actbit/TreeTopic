@@ -1,0 +1,316 @@
+import { writable, derived } from 'svelte/store';
+
+/**
+ * File version information
+ */
+export interface FileVersion {
+  id: string;
+  versionNumber: number;
+  uploadedAt: Date;
+  uploadedBy: string;
+  size: number;
+  url: string;
+  changeNote?: string;
+}
+
+/**
+ * Material/File information
+ */
+export interface Material {
+  id: string;
+  roomId: string;
+  messageId?: string;
+  fileName: string;
+  originalFileName: string;
+  mimeType: string;
+  size: number;
+  url: string;
+  fileType: 'image' | 'pdf' | 'document' | 'other';
+  uploadedAt: Date;
+  uploadedBy: string;
+  uploadedByName: string;
+  versions: FileVersion[];
+  isArchived: boolean;
+  tags?: string[];
+  description?: string;
+}
+
+/**
+ * File upload progress
+ */
+export interface FileUploadProgress {
+  fileId: string;
+  fileName: string;
+  progress: number;
+  status: 'pending' | 'uploading' | 'completed' | 'failed';
+  error?: string;
+  size: number;
+  uploadedBytes: number;
+}
+
+/**
+ * Files store state
+ */
+export interface FilesState {
+  files: Material[];
+  uploads: Map<string, FileUploadProgress>;
+  isLoading: boolean;
+  error: string | null;
+  lastUpdated: number | null;
+}
+
+/**
+ * Create files store
+ */
+function createFilesStore() {
+  const { subscribe, set, update } = writable<FilesState>({
+    files: [],
+    uploads: new Map(),
+    isLoading: false,
+    error: null,
+    lastUpdated: null,
+  });
+
+  return {
+    subscribe,
+    /**
+     * Set all files
+     */
+    setFiles: (files: Material[]) => {
+      update((state) => ({
+        ...state,
+        files,
+        error: null,
+        lastUpdated: Date.now(),
+      }));
+    },
+    /**
+     * Add a new file
+     */
+    addFile: (file: Material) => {
+      update((state) => ({
+        ...state,
+        files: [file, ...state.files],
+      }));
+    },
+    /**
+     * Update file
+     */
+    updateFile: (fileId: string, updates: Partial<Material>) => {
+      update((state) => ({
+        ...state,
+        files: state.files.map((f) =>
+          f.id === fileId ? { ...f, ...updates } : f
+        ),
+      }));
+    },
+    /**
+     * Delete file
+     */
+    deleteFile: (fileId: string) => {
+      update((state) => ({
+        ...state,
+        files: state.files.filter((f) => f.id !== fileId),
+      }));
+    },
+    /**
+     * Add new file version
+     */
+    addFileVersion: (fileId: string, version: FileVersion) => {
+      update((state) => ({
+        ...state,
+        files: state.files.map((f) =>
+          f.id === fileId
+            ? { ...f, versions: [...f.versions, version], url: version.url }
+            : f
+        ),
+      }));
+    },
+    /**
+     * Update file tags
+     */
+    updateFileTags: (fileId: string, tags: string[]) => {
+      update((state) => ({
+        ...state,
+        files: state.files.map((f) =>
+          f.id === fileId ? { ...f, tags } : f
+        ),
+      }));
+    },
+    /**
+     * Start file upload
+     */
+    startUpload: (fileId: string, progress: FileUploadProgress) => {
+      update((state) => {
+        const uploads = new Map(state.uploads);
+        uploads.set(fileId, progress);
+        return { ...state, uploads };
+      });
+    },
+    /**
+     * Update upload progress
+     */
+    updateUploadProgress: (
+      fileId: string,
+      progress: number,
+      uploadedBytes: number
+    ) => {
+      update((state) => {
+        const uploads = new Map(state.uploads);
+        const current = uploads.get(fileId);
+        if (current) {
+          uploads.set(fileId, { ...current, progress, uploadedBytes });
+        }
+        return { ...state, uploads };
+      });
+    },
+    /**
+     * Complete upload
+     */
+    completeUpload: (fileId: string) => {
+      update((state) => {
+        const uploads = new Map(state.uploads);
+        const current = uploads.get(fileId);
+        if (current) {
+          uploads.set(fileId, { ...current, status: 'completed', progress: 100 });
+        }
+        return { ...state, uploads };
+      });
+    },
+    /**
+     * Fail upload
+     */
+    failUpload: (fileId: string, error: string) => {
+      update((state) => {
+        const uploads = new Map(state.uploads);
+        const current = uploads.get(fileId);
+        if (current) {
+          uploads.set(fileId, { ...current, status: 'failed', error });
+        }
+        return { ...state, uploads };
+      });
+    },
+    /**
+     * Remove upload tracking
+     */
+    removeUpload: (fileId: string) => {
+      update((state) => {
+        const uploads = new Map(state.uploads);
+        uploads.delete(fileId);
+        return { ...state, uploads };
+      });
+    },
+    /**
+     * Set loading state
+     */
+    setLoading: (isLoading: boolean) => {
+      update((state) => ({ ...state, isLoading }));
+    },
+    /**
+     * Set error
+     */
+    setError: (error: string | null) => {
+      update((state) => ({ ...state, error }));
+    },
+    /**
+     * Clear all files
+     */
+    clear: () => {
+      set({
+        files: [],
+        uploads: new Map(),
+        isLoading: false,
+        error: null,
+        lastUpdated: null,
+      });
+    },
+  };
+}
+
+export const files = createFilesStore();
+
+/**
+ * Derived stores
+ */
+export const fileList = derived(files, ($files) => $files.files);
+export const filesLoading = derived(files, ($files) => $files.isLoading);
+export const filesError = derived(files, ($files) => $files.error);
+export const uploads = derived(files, ($files) => $files.uploads);
+
+/**
+ * Get files by type
+ */
+export const imageFiles = derived(fileList, ($files) =>
+  $files.filter((f) => f.fileType === 'image')
+);
+
+export const pdfFiles = derived(fileList, ($files) =>
+  $files.filter((f) => f.fileType === 'pdf')
+);
+
+export const documentFiles = derived(fileList, ($files) =>
+  $files.filter((f) => f.fileType === 'document')
+);
+
+/**
+ * Get files by room
+ */
+export const getFilesByRoom = (roomId: string) =>
+  derived(fileList, ($files) =>
+    $files.filter((f) => f.roomId === roomId)
+  );
+
+/**
+ * Get files by message
+ */
+export const getFilesByMessage = (messageId: string) =>
+  derived(fileList, ($files) =>
+    $files.filter((f) => f.messageId === messageId)
+  );
+
+/**
+ * Get file by ID
+ */
+export const getFileById = (fileId: string) =>
+  derived(fileList, ($files) => $files.find((f) => f.id === fileId));
+
+/**
+ * Get upload progress by file ID
+ */
+export const getUploadProgress = (fileId: string) =>
+  derived(uploads, ($uploads) => $uploads.get(fileId));
+
+/**
+ * Get all active uploads
+ */
+export const activeUploads = derived(uploads, ($uploads) =>
+  Array.from($uploads.values()).filter((u) => u.status === 'uploading')
+);
+
+/**
+ * Get upload completion percentage
+ */
+export const uploadProgress = (fileId: string) =>
+  derived(
+    getUploadProgress(fileId),
+    ($progress) => $progress?.progress ?? 0
+  );
+
+/**
+ * Helper functions to interact with files store
+ */
+export function addFile(file: File) {
+  filesStore.addFile(file);
+}
+
+export function updateFile(fileId: string, updates: Partial<File>) {
+  filesStore.updateFile(fileId, updates);
+}
+
+export function deleteFile(fileId: string) {
+  filesStore.deleteFile(fileId);
+}
+
+export function setFiles(filesList: File[]) {
+  filesStore.setFiles(filesList);
+}

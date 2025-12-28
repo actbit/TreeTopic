@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using MaskedUUID.AspNetCore.Types;
 using TreeTopic.Dtos;
 using TreeTopic.Models;
 using TreeTopic.Models.OpenIdConnect;
@@ -227,9 +228,9 @@ public class TenantManagementService
     /// <summary>
     /// テナント情報を削除
     /// </summary>
-    public async Task DeleteTenantAsync(string tenantId)
+    public async Task DeleteTenantAsync(MaskedGuid tenantId)
     {
-        var tenant = await _tenantDb.Tenants.FindAsync(tenantId);
+        var tenant = await _tenantDb.Tenants.FindAsync(((Guid)tenantId).ToString());
         if (tenant == null)
         {
             throw new InvalidOperationException($"Tenant '{tenantId}' not found");

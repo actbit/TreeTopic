@@ -184,6 +184,35 @@ public class Program
         builder.Services.AddMaskedUUID();
         mvcBuilder.AddMaskedUUIDModelBinder();
 
+        // CORS設定
+        builder.Services.AddCors(options =>
+        {
+            options.AddPolicy("development", policy =>
+            {
+                policy
+                    .WithOrigins("http://localhost:5173", "http://localhost:3000", "http://localhost")
+                    .AllowAnyMethod()
+                    .AllowAnyHeader()
+                    .AllowCredentials(); // クッキーを含む場合に必須
+            });
+
+            options.AddPolicy("production", policy =>
+            {
+                var allowedOrigins = builder.Configuration
+                    .GetSection("Cors:AllowedOrigins")
+                    .Get<string[]>() ?? Array.Empty<string>();
+
+                if (allowedOrigins.Length > 0)
+                {
+                    policy
+                        .WithOrigins(allowedOrigins)
+                        .AllowAnyMethod()
+                        .AllowAnyHeader()
+                        .AllowCredentials();
+                }
+            });
+        });
+
         // ファイルアップロードのサイズ制限（デフォルト: 30MB）
         builder.Services.Configure<FormOptions>(options =>
         {
@@ -251,6 +280,10 @@ public class Program
 
         app.UseRouting();
 
+        // CORS ミドルウェアを使用
+        var corsPolicy = app.Environment.IsDevelopment() ? "development" : "production";
+        app.UseCors(corsPolicy);
+
         app.UseAuthentication();
 
         app.UseAuthorization();
@@ -261,6 +294,8 @@ public class Program
         // Serve static files (SPA) after API routes
         app.UseDefaultFiles();
         app.UseStaticFiles();
+        
+        app.MapFallbackToFile("index.html");
 
         app.Run();
     }
