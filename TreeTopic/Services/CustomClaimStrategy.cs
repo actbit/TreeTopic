@@ -1,5 +1,5 @@
+﻿using Finbuckle.MultiTenant.Abstractions;
 using Finbuckle.MultiTenant;
-using Finbuckle.MultiTenant.Abstractions;
 using System.Security.Claims;
 
 namespace TreeTopic.Services;
@@ -44,3 +44,7 @@ public class CustomClaimStrategy : IMultiTenantStrategy
         return tenantId;
     }
 }
+
+
+
+

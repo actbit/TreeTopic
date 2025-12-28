@@ -1,4 +1,5 @@
-using Finbuckle.MultiTenant.Abstractions;
+﻿using Finbuckle.MultiTenant.Abstractions;
+using Finbuckle.MultiTenant;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using TreeTopic.Common;
@@ -181,3 +182,7 @@ public class PermissionManagementService : BaseService
         }, nameof(DeletePermissionAsync));
     }
 }
+
+
+
+

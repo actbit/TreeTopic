@@ -12,6 +12,7 @@ public class SetupToken
     /// <summary>
     /// テナントID
     /// </summary>
+    [System.ComponentModel.DataAnnotations.Schema.ForeignKey(nameof(Tenant))]
     public string TenantId { get; set; } = null!;
 
     /// <summary>
@@ -32,7 +33,7 @@ public class SetupToken
     /// <summary>
     /// リレーション：所属するテナント
     /// </summary>
-    public virtual ApplicationTenantInfo? Tenant { get; set; }
+    public ApplicationTenantInfo? Tenant { get; set; }
 
     /// <summary>
     /// トークンが有効かどうかをチェック

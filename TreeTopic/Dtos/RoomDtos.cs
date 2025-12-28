@@ -1,11 +1,16 @@
 using System.ComponentModel.DataAnnotations;
+using MaskedUUID.AspNetCore.Types;
 
 namespace TreeTopic.Dtos;
 
 public class RoomDto : BaseDto
 {
+    public new MaskedGuid Id { get; set; }
+
     public string Name { get; set; } = string.Empty;
-    public Guid CreatedUserId { get; set; }
+
+    public MaskedGuid CreatedUserId { get; set; }
+
     public string? CreatedUserName { get; set; }
 }
 

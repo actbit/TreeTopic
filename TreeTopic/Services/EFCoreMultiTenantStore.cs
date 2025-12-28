@@ -1,4 +1,5 @@
-using Finbuckle.MultiTenant.Abstractions;
+﻿using Finbuckle.MultiTenant.Abstractions;
+using Finbuckle.MultiTenant;
 using Microsoft.EntityFrameworkCore;
 using TreeTopic.Models;
 
@@ -22,6 +23,31 @@ public class EFCoreMultiTenantStore : IMultiTenantStore<ApplicationTenantInfo>
         _logger = logger;
     }
 
+    public Task<bool> AddAsync(ApplicationTenantInfo tenantInfo)
+    {
+        throw new NotImplementedException("Use TenantManagementService.CreateTenantAsync instead");
+    }
+
+    public Task<bool> UpdateAsync(ApplicationTenantInfo tenantInfo)
+    {
+        throw new NotImplementedException("Use API endpoints to update tenant");
+    }
+
+    public Task<bool> RemoveAsync(string identifier)
+    {
+        throw new NotImplementedException("Use TenantManagementService.DeleteTenantAsync instead");
+    }
+
+    public Task<ApplicationTenantInfo?> GetByIdentifierAsync(string identifier)
+    {
+        return TryGetAsync(identifier);
+    }
+
+    public Task<ApplicationTenantInfo?> GetAsync(string id)
+    {
+        return TryGetByIdAsync(id);
+    }
+
     /// <summary>
     /// Identifier からテナント情報を取得
     /// </summary>
@@ -36,6 +62,7 @@ public class EFCoreMultiTenantStore : IMultiTenantStore<ApplicationTenantInfo>
         try
         {
             var tenant = await _dbContext.Tenants
+                .Include(t => t.Detail)
                 .FirstOrDefaultAsync(t => t.Identifier == identifier);
 
             if (tenant == null)
@@ -71,6 +98,7 @@ public class EFCoreMultiTenantStore : IMultiTenantStore<ApplicationTenantInfo>
         try
         {
             return await _dbContext.Tenants
+                .Include(t => t.Detail)
                 .FirstOrDefaultAsync(t => t.Id == id);
         }
         catch (Exception ex)
@@ -87,7 +115,9 @@ public class EFCoreMultiTenantStore : IMultiTenantStore<ApplicationTenantInfo>
     {
         try
         {
-            return await _dbContext.Tenants.ToListAsync();
+            return await _dbContext.Tenants
+                .Include(t => t.Detail)
+                .ToListAsync();
         }
         catch (Exception ex)
         {
@@ -104,6 +134,7 @@ public class EFCoreMultiTenantStore : IMultiTenantStore<ApplicationTenantInfo>
         try
         {
             return await _dbContext.Tenants
+                .Include(t => t.Detail)
                 .Skip((pageNumber - 1) * pageSize)
                 .Take(pageSize)
                 .ToListAsync();
@@ -139,3 +170,7 @@ public class EFCoreMultiTenantStore : IMultiTenantStore<ApplicationTenantInfo>
         throw new NotImplementedException("Use TenantManagementService.DeleteTenantAsync instead");
     }
 }
+
+
+
+

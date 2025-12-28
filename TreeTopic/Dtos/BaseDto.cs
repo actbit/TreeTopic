@@ -1,8 +1,10 @@
+using MaskedUUID.AspNetCore.Types;
+
 namespace TreeTopic.Dtos;
 
 public class BaseDto
 {
-    public Guid Id { get; set; }
+    public MaskedGuid Id { get; set; }
 
     public Guid TenantId { get; set; }
 
@@ -18,7 +20,7 @@ public class BaseCreateRequest
 
 public class BaseUpdateRequest
 {
-    public Guid? Id { get; set; }
+    public MaskedGuid? Id { get; set; }
 
     public Guid? TenantId { get; set; }
 }

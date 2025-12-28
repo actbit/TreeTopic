@@ -1,3 +1,4 @@
+﻿using Finbuckle.MultiTenant.Abstractions;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.AspNetCore.Authorization;
@@ -9,7 +10,6 @@ using System.Security.Claims;
 using TreeTopic.Models;
 using TreeTopic.Services;
 using Finbuckle.MultiTenant;
-using Finbuckle.MultiTenant.Abstractions;
 using Microsoft.Extensions.Hosting;
 
 namespace TreeTopic.Extensions;
@@ -112,13 +112,14 @@ public static class OpenIdConnectExtensions
         // IMultiTenantStore から tenant を取得
         var store = ctx.HttpContext.RequestServices
             .GetRequiredService<IMultiTenantStore<ApplicationTenantInfo>>();
-        tenantInfo = await store.TryGetAsync(tenantId);
+        tenantInfo = await store.TryGetByIdentifierAsync(tenantId);
+        var tenantDetail = tenantInfo?.Detail;
 
         // テナント固有の OIDC 設定があるか確認
-        bool hasTenantOidcConfig = tenantInfo != null &&
-            !string.IsNullOrEmpty(tenantInfo.OpenIdConnectAuthority) &&
-            !string.IsNullOrEmpty(tenantInfo.OpenIdConnectAuthorizationEndpoint) &&
-            !string.IsNullOrEmpty(tenantInfo.OpenIdConnecClientId);
+        bool hasTenantOidcConfig = tenantInfo != null && tenantDetail != null &&
+            !string.IsNullOrEmpty(tenantDetail.OpenIdConnectAuthority) &&
+            !string.IsNullOrEmpty(tenantDetail.OpenIdConnectAuthorizationEndpoint) &&
+            !string.IsNullOrEmpty(tenantDetail.OpenIdConnecClientId);
 
         if (hasTenantOidcConfig)
         {
@@ -126,18 +127,18 @@ public static class OpenIdConnectExtensions
             // ctx.Options.Configuration を動的に変更
             ctx.Options.Configuration = new OpenIdConnectConfiguration
             {
-                AuthorizationEndpoint = tenantInfo!.OpenIdConnectAuthorizationEndpoint,
-                TokenEndpoint = tenantInfo.OpenIdConnectTokenEndpoint,
-                JwksUri = tenantInfo.OpenIdConnectJwksUri,
-                EndSessionEndpoint = tenantInfo.OpenIdConnectEndSessionEndpoint,
-                Issuer = tenantInfo.OpenIdConnectAuthority
+                AuthorizationEndpoint = tenantDetail!.OpenIdConnectAuthorizationEndpoint,
+                TokenEndpoint = tenantDetail.OpenIdConnectTokenEndpoint,
+                JwksUri = tenantDetail.OpenIdConnectJwksUri,
+                EndSessionEndpoint = tenantDetail.OpenIdConnectEndSessionEndpoint,
+                Issuer = tenantDetail.OpenIdConnectAuthority
             };
 
             // Authority を設定（TokenValidationParameters.ValidIssuer の自動設定に必要）
-            ctx.Options.Authority = tenantInfo.OpenIdConnectAuthority;
+            ctx.Options.Authority = tenantDetail!.OpenIdConnectAuthority;
 
             // ConfigurationManager を設定して JwksUri から公開鍵を取得できるようにする
-            if (!string.IsNullOrEmpty(tenantInfo.OpenIdConnectMetadataAddress))
+            if (!string.IsNullOrEmpty(tenantDetail!.OpenIdConnectMetadataAddress))
             {
                 var env = ctx.HttpContext.RequestServices.GetRequiredService<IHostEnvironment>();
                 var httpDocumentRetriever = new HttpDocumentRetriever
@@ -146,23 +147,23 @@ public static class OpenIdConnectExtensions
                 };
 
                 ctx.Options.ConfigurationManager = new ConfigurationManager<OpenIdConnectConfiguration>(
-                    tenantInfo.OpenIdConnectMetadataAddress,
+                    tenantDetail.OpenIdConnectMetadataAddress,
                     new OpenIdConnectConfigurationRetriever(),
                     httpDocumentRetriever);
             }
 
             // TokenValidationParameters を直接設定（これが重要！）
-            ctx.Options.TokenValidationParameters.ValidIssuer = tenantInfo.OpenIdConnectAuthority;
+            ctx.Options.TokenValidationParameters.ValidIssuer = tenantDetail!.OpenIdConnectAuthority;
             ctx.Options.TokenValidationParameters.ValidateIssuer = true;
-            ctx.Options.TokenValidationParameters.ValidAudience = tenantInfo.OpenIdConnecClientId;
+            ctx.Options.TokenValidationParameters.ValidAudience = tenantDetail!.OpenIdConnecClientId;
             ctx.Options.TokenValidationParameters.ValidateAudience = true;
 
             // ClientId も変更
-            ctx.Options.ClientId = tenantInfo.OpenIdConnecClientId;
-            ctx.ProtocolMessage.ClientId = tenantInfo.OpenIdConnecClientId;
+            ctx.Options.ClientId = tenantDetail!.OpenIdConnecClientId;
+            ctx.ProtocolMessage.ClientId = tenantDetail!.OpenIdConnecClientId;
 
             // ProtocolMessage を直接設定（既に構築済みのため、これが重要！）
-            ctx.ProtocolMessage.IssuerAddress = tenantInfo.OpenIdConnectAuthorizationEndpoint;
+            ctx.ProtocolMessage.IssuerAddress = tenantDetail!.OpenIdConnectAuthorizationEndpoint;
 
             // ClientSecret は Authorization エンドポイントに送信されないため、ここでは設定しない
             // OnAuthorizationCodeReceived で Token エンドポイント用に設定する
@@ -193,9 +194,11 @@ public static class OpenIdConnectExtensions
 
         // Store からテナント情報を取得
         var store = ctx.HttpContext.RequestServices.GetRequiredService<IMultiTenantStore<ApplicationTenantInfo>>();
-        var tenantInfo = await store.TryGetAsync(tenantId);
+        var tenantInfo = await store.TryGetByIdentifierAsync(tenantId);
 
-        if (tenantInfo != null && !string.IsNullOrEmpty(tenantInfo.OpenIdConnecClientSecret))
+        var tenantDetail = tenantInfo?.Detail;
+
+        if (tenantInfo != null && tenantDetail != null && !string.IsNullOrEmpty(tenantDetail.OpenIdConnecClientSecret))
         {
             try
             {
@@ -203,14 +206,14 @@ public static class OpenIdConnectExtensions
                 var decryptedSecret = DecryptTenantSecret(tenantInfo, masterEncryption, ctx.HttpContext.RequestServices);
 
                 // Options と TokenEndpointRequest の両方を設定（これが重要！）
-                ctx.Options.ClientId = tenantInfo.OpenIdConnecClientId;
+                ctx.Options.ClientId = tenantDetail.OpenIdConnecClientId;
                 ctx.Options.ClientSecret = decryptedSecret;
-                ctx.ProtocolMessage.ClientId = tenantInfo.OpenIdConnecClientId;
+                ctx.ProtocolMessage.ClientId = tenantDetail.OpenIdConnecClientId;
                 ctx.ProtocolMessage.ClientSecret = decryptedSecret;
 
                 // TokenEndpointRequest にも設定（TokenEndpoint が最重要！）
-                ctx.TokenEndpointRequest.TokenEndpoint = tenantInfo.OpenIdConnectTokenEndpoint;
-                ctx.TokenEndpointRequest.ClientId = tenantInfo.OpenIdConnecClientId;
+                ctx.TokenEndpointRequest.TokenEndpoint = tenantDetail.OpenIdConnectTokenEndpoint;
+                ctx.TokenEndpointRequest.ClientId = tenantDetail.OpenIdConnecClientId;
                 ctx.TokenEndpointRequest.ClientSecret = decryptedSecret;
             }
             catch (Exception ex)
@@ -281,15 +284,19 @@ public static class OpenIdConnectExtensions
         EncryptionService masterEncryption,
         IServiceProvider serviceProvider)
     {
-        if (string.IsNullOrEmpty(tenantInfo.TenantEncryptionKey))
+        if (tenantInfo.Detail == null || string.IsNullOrEmpty(tenantInfo.Detail.TenantEncryptionKey))
             throw new InvalidOperationException($"Tenant '{tenantInfo.Identifier}' has no encryption key.");
 
         // 1. マスターキーで テナント用キーを復号
-        var decryptedTenantKey = masterEncryption.Decrypt(tenantInfo.TenantEncryptionKey);
+        var decryptedTenantKey = masterEncryption.Decrypt(tenantInfo.Detail.TenantEncryptionKey);
 
         // 2. テナント用キーでシークレットを復号
         var logger = serviceProvider.GetRequiredService<ILogger<Program>>();
         var tenantEncryption = new EncryptionService(decryptedTenantKey, logger);
-        return tenantEncryption.Decrypt(tenantInfo.OpenIdConnecClientSecret);
+        return tenantEncryption.Decrypt(tenantInfo.Detail.OpenIdConnecClientSecret);
     }
 }
+
+
+
+

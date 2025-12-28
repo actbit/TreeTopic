@@ -1,10 +1,10 @@
+﻿using Finbuckle.MultiTenant.Abstractions;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
 using Finbuckle.MultiTenant;
-using Finbuckle.MultiTenant.Abstractions;
 using TreeTopic.Models;
 
 namespace TreeTopic.Controllers;
@@ -143,3 +143,7 @@ public class AuthController : ControllerBase
         return Ok(new { isAuthenticated = User.Identity?.IsAuthenticated ?? false });
     }
 }
+
+
+
+

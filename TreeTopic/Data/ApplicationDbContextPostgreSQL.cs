@@ -1,4 +1,5 @@
-using Finbuckle.MultiTenant.Abstractions;
+﻿using Finbuckle.MultiTenant.Abstractions;
+using Finbuckle.MultiTenant;
 using Microsoft.EntityFrameworkCore;
 
 namespace TreeTopic.Data;
@@ -9,8 +10,12 @@ namespace TreeTopic.Data;
 /// </summary>
 public class ApplicationDbContextPostgreSQL : ApplicationDbContext
 {
-    public ApplicationDbContextPostgreSQL(IMultiTenantContextAccessor multiTenantContextAccessor, DbContextOptions<ApplicationDbContext> options)
+    public ApplicationDbContextPostgreSQL(IMultiTenantContextAccessor multiTenantContextAccessor, DbContextOptions<ApplicationDbContextPostgreSQL> options)
         : base(multiTenantContextAccessor, options)
     {
     }
 }
+
+
+
+

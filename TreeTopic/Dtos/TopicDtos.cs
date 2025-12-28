@@ -1,22 +1,24 @@
 using System.ComponentModel.DataAnnotations;
+using MaskedUUID.AspNetCore.Types;
 
 namespace TreeTopic.Dtos;
 
 public class TopicDto : BaseDto
 {
-    public Guid RoomId { get; set; }
-    public Guid? ParentId { get; set; }
+    public MaskedGuid RoomId { get; set; }
+
+    public MaskedGuid? ParentId { get; set; }
 }
 
 public class CreateTopicRequest : BaseCreateRequest
 {
     [Required]
-    public Guid RoomId { get; set; }
+    public MaskedGuid RoomId { get; set; }
 
-    public Guid? ParentId { get; set; }
+    public MaskedGuid? ParentId { get; set; }
 }
 
 public class UpdateTopicRequest : BaseUpdateRequest
 {
-    public Guid? ParentId { get; set; }
+    public MaskedGuid? ParentId { get; set; }
 }

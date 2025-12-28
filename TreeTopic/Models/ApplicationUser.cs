@@ -1,4 +1,5 @@
-﻿using Finbuckle.MultiTenant;
+﻿using Finbuckle.MultiTenant.Abstractions;
+using Finbuckle.MultiTenant;
 using Microsoft.AspNetCore.Identity;
 
 namespace TreeTopic.Models
@@ -27,3 +28,7 @@ namespace TreeTopic.Models
 
     }
 }
+
+
+
+

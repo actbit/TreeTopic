@@ -1,5 +1,4 @@
-using Finbuckle.MultiTenant;
-using Finbuckle.MultiTenant.Abstractions;
+﻿using Finbuckle.MultiTenant;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
 using Pomelo.EntityFrameworkCore.MySql.Infrastructure;
@@ -14,18 +13,23 @@ public class ApplicationDbContextMySQLFactory : IDesignTimeDbContextFactory<Appl
 {
     public ApplicationDbContextMySQL CreateDbContext(string[] args)
     {
-        var optionsBuilder = new DbContextOptionsBuilder<ApplicationDbContext>();
+        var optionsBuilder = new DbContextOptionsBuilder<ApplicationDbContextMySQL>();
         optionsBuilder.UseMySql("Server=dummy;Database=dummy;",
             new MySqlServerVersion(new Version(8, 0)));
 
-        var tenantInfo = new ApplicationTenantInfo
+        var tenantInfo = new ApplicationTenantInfo("migration-dummy", "migration-dummy")
         {
-            Id = "migration-dummy",
-            Name = "migration-dummy",
-            DbProvider = "mysql"
+            Detail = new ApplicationTenantDetail
+            {
+                TenantId = string.Empty,
+                DbProvider = "mysql"
+            }
         };
+
+        tenantInfo.Detail!.TenantId = tenantInfo.Id!;
 
         var accessor = new DesignTimeMultiTenantContextAccessor(tenantInfo);
         return new ApplicationDbContextMySQL(accessor, optionsBuilder.Options);
     }
 }
+

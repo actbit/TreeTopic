@@ -1,8 +1,9 @@
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using TreeTopic.Dtos;
 using TreeTopic.Models;
+using Finbuckle.MultiTenant;
 using Finbuckle.MultiTenant.Abstractions;
 
 namespace TreeTopic.Controllers;
@@ -75,3 +76,7 @@ public class DefaultUserController : ControllerBase
     }
 
 }
+
+
+
+

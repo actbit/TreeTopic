@@ -1,4 +1,5 @@
-using Finbuckle.MultiTenant.Abstractions;
+﻿using Finbuckle.MultiTenant.Abstractions;
+using Finbuckle.MultiTenant;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using TreeTopic.Data;
@@ -61,9 +62,10 @@ public class MigrationService
             var decryptedConnectionString = DecryptTenantConnectionString(tenant);
 
             // テナントのDB タイプに応じて、マイグレーション用 DbContext を選択
-            if (tenant.DbProvider?.ToLower() == "mysql")
+            var tenantDetail = tenant.Detail;
+            if (tenantDetail?.DbProvider?.ToLower() == "mysql")
             {
-                var options = new DbContextOptionsBuilder<ApplicationDbContext>()
+                var options = new DbContextOptionsBuilder<ApplicationDbContextMySQL>()
                     .UseMySql(decryptedConnectionString, ServerVersion.AutoDetect(decryptedConnectionString))
                     .Options;
 
@@ -77,7 +79,7 @@ public class MigrationService
             }
             else
             {
-                var options = new DbContextOptionsBuilder<ApplicationDbContext>()
+                var options = new DbContextOptionsBuilder<ApplicationDbContextPostgreSQL>()
                     .UseNpgsql(decryptedConnectionString)
                     .Options;
 
@@ -112,10 +114,11 @@ public class MigrationService
         var decryptedConnectionString = DecryptTenantConnectionString(tenant);
 
         // テナントのDB タイプに応じて、マイグレーション用 DbContext を選択
-        if (tenant.DbProvider?.ToLower() == "mysql")
-        {
+            var tenantDetail = tenant.Detail;
+            if (tenantDetail?.DbProvider?.ToLower() == "mysql")
+            {
             _logger.LogInformation("MySQL マイグレーション実行: テナント '{TenantName}'", tenant.Name);
-            var options = new DbContextOptionsBuilder<ApplicationDbContext>()
+            var options = new DbContextOptionsBuilder<ApplicationDbContextMySQL>()
                 .UseMySql(decryptedConnectionString, ServerVersion.AutoDetect(decryptedConnectionString))
                 .Options;
 
@@ -127,7 +130,7 @@ public class MigrationService
         else
         {
             _logger.LogInformation("PostgreSQL マイグレーション実行: テナント '{TenantName}'", tenant.Name);
-            var options = new DbContextOptionsBuilder<ApplicationDbContext>()
+            var options = new DbContextOptionsBuilder<ApplicationDbContextPostgreSQL>()
                 .UseNpgsql(decryptedConnectionString)
                 .Options;
 
@@ -143,20 +146,20 @@ public class MigrationService
     /// </summary>
     private string DecryptTenantConnectionString(ApplicationTenantInfo tenant)
     {
-        if (string.IsNullOrEmpty(tenant.TenantEncryptionKey))
+        if (tenant.Detail == null || string.IsNullOrEmpty(tenant.Detail.TenantEncryptionKey))
             throw new InvalidOperationException($"Tenant '{tenant.Identifier}' has no encryption key.");
 
-        if (string.IsNullOrEmpty(tenant.ConnectionString))
+        if (string.IsNullOrEmpty(tenant.Detail.ConnectionString))
             throw new InvalidOperationException($"Tenant '{tenant.Identifier}' has no connection string.");
 
         // 1. マスターキーでテナント用キーを復号化
-        var decryptedTenantKey = _encryptionService.Decrypt(tenant.TenantEncryptionKey);
+        var decryptedTenantKey = _encryptionService.Decrypt(tenant.Detail.TenantEncryptionKey);
 
         // 2. テナント用キーで接続文字列を復号化
         var loggerFactory = LoggerFactory.Create(builder => builder.AddConsole());
         var logger = loggerFactory.CreateLogger<EncryptionService>();
         var tenantEncryption = new EncryptionService(decryptedTenantKey, logger);
-        return tenantEncryption.Decrypt(tenant.ConnectionString);
+        return tenantEncryption.Decrypt(tenant.Detail.ConnectionString);
     }
 
     /// <summary>
@@ -164,7 +167,9 @@ public class MigrationService
     /// </summary>
     public async Task MigrateAllTenantsAsync(TenantCatalogDbContext tenantCatalogDb)
     {
-        var tenants = await tenantCatalogDb.Tenants.ToListAsync();
+        var tenants = await tenantCatalogDb.Tenants
+            .Include(t => t.Detail)
+            .ToListAsync();
 
         foreach (var tenant in tenants)
         {
@@ -182,3 +187,7 @@ public class MigrationService
         _logger.LogInformation("✅ {TenantCount} 件のテナントマイグレーション完了", tenants.Count);
     }
 }
+
+
+
+

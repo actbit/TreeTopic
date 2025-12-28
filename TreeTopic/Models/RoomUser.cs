@@ -1,4 +1,5 @@
 ﻿using Finbuckle.MultiTenant;
+using Finbuckle.MultiTenant.Abstractions;
 using System.ComponentModel.DataAnnotations.Schema;
 
 namespace TreeTopic.Models
@@ -17,3 +18,7 @@ namespace TreeTopic.Models
         public List<RoomPermission> RoomPermission { get; set; } = new List<RoomPermission>();
     }
 }
+
+
+
+
