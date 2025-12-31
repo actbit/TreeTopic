@@ -24,6 +24,7 @@ namespace TreeTopic
         public DbSet<RoomPermission> RoomPermissions => Set<RoomPermission>();
         public DbSet<BrainBoard> BrainBoards => Set<BrainBoard>();
         public DbSet<BrainIdea> BrainIdeas => Set<BrainIdea>();
+        public DbSet<BrainIdeaVote> BrainIdeaVotes => Set<BrainIdeaVote>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -84,6 +85,19 @@ namespace TreeTopic
                 .HasOne(bi => bi.ApplicationUser)
                 .WithMany(u => u.BrainIdeas)
                 .HasForeignKey(bi => bi.ApplicationUserId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            modelBuilder.Entity<BrainIdea>()
+                .HasMany(bi => bi.Votes)
+                .WithOne(v => v.BrainIdea)
+                .HasForeignKey(v => v.BrainIdeaId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // BrainIdeaVote リレーション
+            modelBuilder.Entity<BrainIdeaVote>()
+                .HasOne(v => v.ApplicationUser)
+                .WithMany(u => u.BrainIdeaVotes)
+                .HasForeignKey(v => v.ApplicationUserId)
                 .OnDelete(DeleteBehavior.SetNull);
 
             // Message リレーション

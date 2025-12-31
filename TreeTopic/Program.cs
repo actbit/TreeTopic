@@ -161,6 +161,9 @@ public class Program
         // File管理サービスを登録
         builder.Services.AddScoped<IFileManagementService, FileManagementService>();
 
+        // Brainstorm管理サービスを登録
+        builder.Services.AddScoped<IBrainstormManagementService, BrainstormManagementService>();
+
         // メモリキャッシュを登録
         builder.Services.AddMemoryCache();
 
@@ -229,6 +232,7 @@ public class Program
         builder.Services.AddScoped<IRoomPermissionRepository, RoomPermissionRepository>();
         builder.Services.AddScoped<IBrainBoardRepository, BrainBoardRepository>();
         builder.Services.AddScoped<IBrainIdeaRepository, BrainIdeaRepository>();
+        builder.Services.AddScoped<IBrainIdeaVoteRepository, BrainIdeaVoteRepository>();
 
         builder.Services.AddOpenApi(options => options.AddMaskedGuidSchemaTransformer());
 
@@ -294,8 +298,36 @@ public class Program
         // Serve static files (SPA) after API routes
         app.UseDefaultFiles();
         app.UseStaticFiles();
-        
-        app.MapFallbackToFile("index.html");
+
+        static bool IsApiPath(PathString path)
+        {
+            var value = path.Value ?? string.Empty;
+            if (value.StartsWith("/api", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            var trimmed = value.Trim('/');
+            if (trimmed.Length == 0)
+            {
+                return false;
+            }
+
+            var segments = trimmed.Split('/', StringSplitOptions.RemoveEmptyEntries);
+            return segments.Length >= 2 && string.Equals(segments[1], "api", StringComparison.OrdinalIgnoreCase);
+        }
+
+        app.MapFallback(async context =>
+        {
+            if (IsApiPath(context.Request.Path))
+            {
+                context.Response.StatusCode = StatusCodes.Status404NotFound;
+                return;
+            }
+
+            context.Response.ContentType = "text/html";
+            await context.Response.SendFileAsync(Path.Combine(app.Environment.WebRootPath, "index.html"));
+        });
 
         app.Run();
     }

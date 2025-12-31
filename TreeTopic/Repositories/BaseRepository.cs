@@ -47,7 +47,21 @@ public class BaseRepository<T> : IBaseRepository<T> where T : BaseModel
         Entities.Update(entity);
     }
 
+    public virtual async Task<T> UpdateAsync(T entity, CancellationToken cancellationToken = default)
+    {
+        entity.UpdatedAt = DateTime.UtcNow;
+        Entities.Update(entity);
+        await SaveChangesAsync(cancellationToken);
+        return entity;
+    }
+
     public virtual void Delete(T entity) => Entities.Remove(entity);
+
+    public virtual async Task DeleteAsync(T entity, CancellationToken cancellationToken = default)
+    {
+        Entities.Remove(entity);
+        await SaveChangesAsync(cancellationToken);
+    }
 
     public Task<int> SaveChangesAsync(CancellationToken cancellationToken = default) => Context.SaveChangesAsync(cancellationToken);
 }

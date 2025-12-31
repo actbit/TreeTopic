@@ -2,18 +2,21 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
-using TreeTopic.Data;
+using TreeTopic;
 
 #nullable disable
 
-namespace TreeTopic.Migrations.Application
+namespace TreeTopic.Migrations.Application_MySQL
 {
-    [DbContext(typeof(ApplicationDbContextPostgreSQL))]
-    partial class ApplicationDbContextPostgreSQLModelSnapshot : ModelSnapshot
+    [DbContext(typeof(MigrationMySqlDbContext))]
+    [Migration("20251231122909_AddBrainIdeaVoting")]
+    partial class AddBrainIdeaVoting
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -37,7 +40,7 @@ namespace TreeTopic.Migrations.Application
                         .HasColumnType("text");
 
                     b.Property<Guid>("RoleId")
-                        .HasColumnType("uuid");
+                        .HasColumnType("BINARY(16)");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
@@ -73,7 +76,7 @@ namespace TreeTopic.Migrations.Application
                         .HasColumnType("character varying(64)");
 
                     b.Property<Guid>("UserId")
-                        .HasColumnType("uuid");
+                        .HasColumnType("BINARY(16)");
 
                     b.HasKey("Id");
 
@@ -101,7 +104,7 @@ namespace TreeTopic.Migrations.Application
                         .HasColumnType("character varying(64)");
 
                     b.Property<Guid>("UserId")
-                        .HasColumnType("uuid");
+                        .HasColumnType("BINARY(16)");
 
                     b.HasKey("LoginProvider", "ProviderKey");
 
@@ -115,10 +118,10 @@ namespace TreeTopic.Migrations.Application
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityUserRole<System.Guid>", b =>
                 {
                     b.Property<Guid>("UserId")
-                        .HasColumnType("uuid");
+                        .HasColumnType("BINARY(16)");
 
                     b.Property<Guid>("RoleId")
-                        .HasColumnType("uuid");
+                        .HasColumnType("BINARY(16)");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
@@ -137,7 +140,7 @@ namespace TreeTopic.Migrations.Application
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityUserToken<System.Guid>", b =>
                 {
                     b.Property<Guid>("UserId")
-                        .HasColumnType("uuid");
+                        .HasColumnType("BINARY(16)");
 
                     b.Property<string>("LoginProvider")
                         .HasColumnType("text");
@@ -164,7 +167,7 @@ namespace TreeTopic.Migrations.Application
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
+                        .HasColumnType("BINARY(16)");
 
                     b.Property<string>("ConcurrencyStamp")
                         .IsConcurrencyToken()
@@ -198,7 +201,7 @@ namespace TreeTopic.Migrations.Application
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
+                        .HasColumnType("BINARY(16)");
 
                     b.Property<int>("AccessFailedCount")
                         .HasColumnType("integer");
@@ -279,7 +282,7 @@ namespace TreeTopic.Migrations.Application
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
+                        .HasColumnType("BINARY(16)");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -296,7 +299,7 @@ namespace TreeTopic.Migrations.Application
                         .HasColumnType("text");
 
                     b.Property<Guid>("TopicId")
-                        .HasColumnType("uuid");
+                        .HasColumnType("BINARY(16)");
 
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -313,13 +316,13 @@ namespace TreeTopic.Migrations.Application
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
+                        .HasColumnType("BINARY(16)");
 
                     b.Property<Guid?>("ApplicationUserId")
-                        .HasColumnType("uuid");
+                        .HasColumnType("BINARY(16)");
 
                     b.Property<Guid>("BrainBoardId")
-                        .HasColumnType("uuid");
+                        .HasColumnType("BINARY(16)");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -339,7 +342,7 @@ namespace TreeTopic.Migrations.Application
                         .HasColumnType("text");
 
                     b.Property<Guid>("TopicId")
-                        .HasColumnType("uuid");
+                        .HasColumnType("BINARY(16)");
 
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -359,13 +362,13 @@ namespace TreeTopic.Migrations.Application
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
+                        .HasColumnType("BINARY(16)");
 
                     b.Property<Guid?>("ApplicationUserId")
-                        .HasColumnType("uuid");
+                        .HasColumnType("BINARY(16)");
 
                     b.Property<Guid>("BrainIdeaId")
-                        .HasColumnType("uuid");
+                        .HasColumnType("BINARY(16)");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -397,7 +400,7 @@ namespace TreeTopic.Migrations.Application
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
+                        .HasColumnType("BINARY(16)");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -414,14 +417,14 @@ namespace TreeTopic.Migrations.Application
                         .HasColumnType("boolean");
 
                     b.Property<Guid?>("MessageId")
-                        .HasColumnType("uuid");
+                        .HasColumnType("BINARY(16)");
 
                     b.Property<string>("SaveFileName")
                         .IsRequired()
                         .HasColumnType("text");
 
                     b.Property<Guid?>("SourceFileId")
-                        .HasColumnType("uuid");
+                        .HasColumnType("BINARY(16)");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
@@ -446,10 +449,10 @@ namespace TreeTopic.Migrations.Application
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
+                        .HasColumnType("BINARY(16)");
 
                     b.Property<Guid>("ApplicationUserId")
-                        .HasColumnType("uuid");
+                        .HasColumnType("BINARY(16)");
 
                     b.Property<string>("Body")
                         .IsRequired()
@@ -463,7 +466,7 @@ namespace TreeTopic.Migrations.Application
                         .HasColumnType("text");
 
                     b.Property<Guid?>("ReplyId")
-                        .HasColumnType("uuid");
+                        .HasColumnType("BINARY(16)");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
@@ -471,7 +474,7 @@ namespace TreeTopic.Migrations.Application
                         .HasColumnType("character varying(64)");
 
                     b.Property<Guid>("TopicId")
-                        .HasColumnType("uuid");
+                        .HasColumnType("BINARY(16)");
 
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -493,7 +496,7 @@ namespace TreeTopic.Migrations.Application
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
+                        .HasColumnType("BINARY(16)");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -502,7 +505,7 @@ namespace TreeTopic.Migrations.Application
                         .HasColumnType("text");
 
                     b.Property<Guid>("RoleId")
-                        .HasColumnType("uuid");
+                        .HasColumnType("BINARY(16)");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
@@ -525,13 +528,13 @@ namespace TreeTopic.Migrations.Application
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
+                        .HasColumnType("BINARY(16)");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<Guid>("CreatedUserId")
-                        .HasColumnType("uuid");
+                        .HasColumnType("BINARY(16)");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -558,7 +561,7 @@ namespace TreeTopic.Migrations.Application
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
+                        .HasColumnType("BINARY(16)");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -568,7 +571,7 @@ namespace TreeTopic.Migrations.Application
                         .HasColumnType("text");
 
                     b.Property<Guid>("RoomUserId")
-                        .HasColumnType("uuid");
+                        .HasColumnType("BINARY(16)");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
@@ -591,16 +594,16 @@ namespace TreeTopic.Migrations.Application
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
+                        .HasColumnType("BINARY(16)");
 
                     b.Property<Guid>("ApplicationUserId")
-                        .HasColumnType("uuid");
+                        .HasColumnType("BINARY(16)");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<Guid>("RoomId")
-                        .HasColumnType("uuid");
+                        .HasColumnType("BINARY(16)");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
@@ -625,16 +628,16 @@ namespace TreeTopic.Migrations.Application
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
+                        .HasColumnType("BINARY(16)");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<Guid>("ParentId")
-                        .HasColumnType("uuid");
+                        .HasColumnType("BINARY(16)");
 
                     b.Property<Guid>("RoomId")
-                        .HasColumnType("uuid");
+                        .HasColumnType("BINARY(16)");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
