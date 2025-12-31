@@ -38,7 +38,7 @@
 
 <div
   bind:this={messagesContainer}
-  class="flex-1 overflow-y-auto p-4 space-y-3 bg-white"
+  class="flex-1 overflow-y-auto padding-md spacing-md bg-surface"
 >
   {#if $messagesLoading}
     <div class="flex items-center justify-center h-full">
@@ -46,9 +46,9 @@
     </div>
   {:else if $topicMessages.length === 0}
     <div class="flex items-center justify-center h-full">
-      <div class="text-center text-text-light">
-        <p class="text-lg font-semibold mb-2">No messages yet</p>
-        <p class="text-sm">Start the conversation by sending a message</p>
+      <div class="text-center text-light">
+        <p class="text-large text-bold margin-bottom-sm">No messages yet</p>
+        <p class="text-small">Start the conversation by sending a message</p>
       </div>
     </div>
   {:else}

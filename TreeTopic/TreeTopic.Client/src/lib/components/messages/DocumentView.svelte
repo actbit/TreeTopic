@@ -75,8 +75,7 @@
               ? 'bg-primary bg-opacity-10 border-l-4 border-primary'
               : 'hover:bg-white'}"
           >
-            <div class="flex items-center gap-2 w-full min-w-0">
-              <span class="text-lg flex-shrink-0">📄</span>
+            <div class="flex items-center gap-3 w-full min-w-0">
               <p class="text-sm font-medium text-text truncate">{fileName}</p>
             </div>
             <p class="text-xs text-text-light pl-6">

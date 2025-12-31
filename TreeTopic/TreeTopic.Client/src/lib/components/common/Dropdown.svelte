@@ -66,42 +66,35 @@
   });
 </script>
 
-<div class="flex flex-col gap-1">
+<div class="dropdown-group">
   {#if label}
-    <label class="text-sm font-semibold text-text">
+    <label class="dropdown-label">
       {label}
     </label>
   {/if}
 
-  <div class="relative" bind:this={dropdownElement}>
+  <div class="dropdown-wrapper" bind:this={dropdownElement}>
     <button
       type="button"
       on:click={toggleDropdown}
       {disabled}
-      class="w-full px-4 py-2 border border-border rounded-sm text-left text-base bg-white transition-all duration-200
-        hover:border-primary disabled:opacity-60 disabled:cursor-not-allowed
-        flex items-center justify-between
-        {error ? 'border-error' : ''}"
+      class="dropdown-button {error ? 'dropdown-button-error' : ''}"
     >
-      <span class="text-text-light">{selectedLabel}</span>
-      <span class="transition-transform {isOpen ? 'rotate-180' : ''}">▼</span>
+      <span class="dropdown-selected-label">{selectedLabel}</span>
+      <span class="dropdown-arrow {isOpen ? 'dropdown-arrow-open' : ''}">▼</span>
     </button>
 
     {#if isOpen}
-      <div
-        class="absolute top-full left-0 right-0 mt-1 bg-white border border-border rounded-sm shadow-lg z-50 max-h-64 overflow-y-auto slide-in-down"
-      >
+      <div class="dropdown-menu">
         {#each items as item (item.value)}
           <button
             type="button"
             on:click={() => selectItem(item)}
             disabled={item.disabled}
-            class="w-full px-4 py-2 text-left text-base text-text hover:bg-surface transition-colors
-              disabled:opacity-50 disabled:cursor-not-allowed
-              {value === item.value ? 'bg-surface border-l-2 border-primary' : ''}"
+            class="dropdown-menu-item {value === item.value ? 'dropdown-menu-item-selected' : ''}"
           >
             {#if item.icon}
-              <span class="mr-2">{item.icon}</span>
+              <span class="dropdown-menu-item-icon">{item.icon}</span>
             {/if}
             {item.label}
           </button>
@@ -111,13 +104,116 @@
   </div>
 
   {#if error}
-    <p class="text-xs text-error">{error}</p>
+    <p class="dropdown-error">{error}</p>
   {/if}
 </div>
 
 <style>
-  :global(.slide-in-down) {
+  .dropdown-group {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .dropdown-label {
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    color: var(--color-text);
+  }
+
+  .dropdown-wrapper {
+    position: relative;
+  }
+
+  .dropdown-button {
+    width: 100%;
+    padding: 8px 16px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--border-radius-sm);
+    text-align: left;
+    font-size: var(--font-size-base);
+    background-color: var(--color-background);
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    cursor: pointer;
+  }
+
+  .dropdown-button:hover:not(:disabled) {
+    border-color: var(--color-primary);
+  }
+
+  .dropdown-button:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  .dropdown-button-error {
+    border-color: var(--color-error);
+  }
+
+  .dropdown-selected-label {
+    color: var(--color-text-light);
+  }
+
+  .dropdown-arrow {
+    transition: transform 0.2s ease;
+  }
+
+  .dropdown-arrow-open {
+    transform: rotate(180deg);
+  }
+
+  .dropdown-menu {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    margin-top: 4px;
+    background-color: var(--color-background);
+    border: 1px solid var(--color-border);
+    border-radius: var(--border-radius-sm);
+    box-shadow: var(--shadow-lg);
+    z-index: 50;
+    max-height: 256px;
+    overflow-y: auto;
     animation: slideInDown 0.2s ease-out;
+  }
+
+  .dropdown-menu-item {
+    width: 100%;
+    padding: 8px 16px;
+    text-align: left;
+    font-size: var(--font-size-base);
+    color: var(--color-text);
+    background-color: transparent;
+    border: none;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+  }
+
+  .dropdown-menu-item:hover:not(:disabled) {
+    background-color: var(--color-surface);
+  }
+
+  .dropdown-menu-item:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .dropdown-menu-item-selected {
+    background-color: var(--color-surface);
+    border-left: 2px solid var(--color-primary);
+  }
+
+  .dropdown-menu-item-icon {
+    margin-right: 8px;
+  }
+
+  .dropdown-error {
+    font-size: var(--font-size-xs);
+    color: var(--color-error);
   }
 
   @keyframes slideInDown {

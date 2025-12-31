@@ -13,18 +13,20 @@
   ];
 </script>
 
-<div class="flex flex-col gap-2 p-4 bg-surface rounded-lg border border-border">
-  <p class="text-sm font-semibold text-text mb-2">Voting Marks</p>
-
-  <div class="flex flex-col gap-2">
+<div class="panel">
+  <div class="panel-header">
+    <h3 class="panel-title">Voting Marks</h3>
+  </div>
+  <div class="panel-body spacing-sm">
     {#each marks as mark}
       <button
         on:click={() => onVote?.(mark.type)}
-        class="flex items-center gap-3 p-2 rounded hover:bg-white transition-colors text-left"
+        class="list-item clickable hoverable"
+        style="display: flex; align-items: center; gap: var(--spacing-md); text-align: left;"
       >
-        <span class="text-2xl">{mark.icon}</span>
-        <div class="flex-1">
-          <p class="text-sm font-semibold text-text">{mark.label}</p>
+        <span style="font-size: var(--font-size-2xl);">{mark.icon}</span>
+        <div style="flex: 1;">
+          <p class="text-small text-bold">{mark.label}</p>
         </div>
       </button>
     {/each}

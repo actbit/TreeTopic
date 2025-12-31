@@ -77,7 +77,7 @@
 
 <div>
   <div
-    class="flex items-center gap-1 px-2 py-1 rounded hover:bg-surface transition-colors cursor-pointer group"
+    class="list-item clickable hoverable {$selectedTopic?.id === node.id ? 'list-item-active' : ''}"
     on:click={selectTopic}
     on:contextmenu={handleContextMenu}
     style="padding-left: {paddingLeft}px"
@@ -85,36 +85,32 @@
     {#if node.children.length > 0}
       <button
         on:click|stopPropagation={toggleExpand}
-        class="p-0.5 hover:bg-primary-light rounded transition-colors"
+        class="button clickable topic-expand-button"
         title={node.isExpanded ? 'Collapse' : 'Expand'}
       >
-        <span class="text-sm transition-transform {node.isExpanded ? 'rotate-90' : ''}"
+        <span class="topic-expand-arrow {node.isExpanded ? 'topic-expand-arrow-open' : ''}"
           >▶</span
         >
       </button>
     {:else}
-      <div class="w-4"></div>
+      <div class="topic-spacer"></div>
     {/if}
 
-    <div class="flex-1 min-w-0">
-      <div
-        class="text-sm truncate {$selectedTopic?.id === node.id
-          ? 'font-semibold text-primary'
-          : 'text-text'}"
-      >
+    <div class="topic-content">
+      <div class="text-small {$selectedTopic?.id === node.id ? 'text-bold text-primary' : ''}">
         {node.title}
       </div>
     </div>
 
     {#if node.unreadCount > 0}
-      <span class="text-xs bg-error text-white rounded-full px-2 py-0.5">
+      <span class="badge badge-error">
         {node.unreadCount}
       </span>
     {/if}
 
     <button
       on:click|stopPropagation={handleContextMenu}
-      class="p-1 opacity-0 group-hover:opacity-100 text-text-light hover:text-primary rounded hover:bg-surface transition-all"
+      class="button clickable topic-options-button"
       title="Options"
     >
       ⋮
@@ -138,7 +134,59 @@
 {/if}
 
 <style>
-  :global(.text-primary-light) {
+  .list-item {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+  }
+
+  .topic-expand-button {
+    padding: 2px;
+    background-color: transparent;
+    border: none;
+  }
+
+  .topic-expand-button:hover {
     background-color: rgba(74, 144, 226, 0.1);
+  }
+
+  .topic-expand-arrow {
+    font-size: var(--font-size-sm);
+    transition: transform var(--transition-fast);
+    display: inline-block;
+  }
+
+  .topic-expand-arrow-open {
+    transform: rotate(90deg);
+  }
+
+  .topic-spacer {
+    width: 16px;
+  }
+
+  .topic-content {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .topic-options-button {
+    padding: var(--spacing-xs);
+    background-color: transparent;
+    border: none;
+    color: var(--color-text-light);
+    opacity: 0;
+    transition: opacity var(--transition-fast);
+  }
+
+  .list-item:hover .topic-options-button {
+    opacity: 1;
+  }
+
+  .topic-options-button:hover {
+    color: var(--color-primary);
+    background-color: var(--color-surface);
   }
 </style>

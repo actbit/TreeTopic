@@ -58,6 +58,23 @@
     }
   }
 
+  function getMarkLabel(type: string): string {
+    const labels: Record<string, string> = {
+      circle: 'Agree',
+      square: 'Consider',
+      triangle: 'Priority',
+      cross: 'Disagree',
+    };
+    return labels[type] || type;
+  }
+
+  function handleKeyDown(e: KeyboardEvent) {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      handleEdit();
+    }
+  }
+
   const voteCounts = $derived.by(() => {
     const counts: Record<string, number> = {
       circle: 0,
@@ -74,59 +91,61 @@
   });
 </script>
 
-<div
-  class="bg-white border-2 border-primary rounded-lg p-3 shadow-md hover:shadow-lg transition-all {isDragging
-    ? 'opacity-50'
-    : ''}"
-  style="touch-action: none; cursor: move;"
+<article
+  class="card hoverable draggable-card {isDragging ? 'dragging' : ''}"
   draggable={true}
   on:dragstart={onDragStart}
   on:dragend={onDragEnd}
   on:mouseenter={() => (isHovered = true)}
   on:mouseleave={() => (isHovered = false)}
-  role="button"
+  role="region"
+  aria-label="Idea card: {idea.text.substring(0, 50)}"
   tabindex="0"
+  on:keydown={handleKeyDown}
 >
   {#if isEditing}
-    <div class="space-y-2">
+    <div class="spacing-sm">
       <textarea
         value={editedText}
         on:input={(e) => (editedText = (e.target as HTMLTextAreaElement).value)}
-        class="w-full p-2 border border-primary rounded text-sm bg-white focus:outline-none focus:border-primary-hover resize-none"
+        class="form-input w-full text-small"
         rows="2"
+        style="resize: none;"
         autofocus
       />
-      <div class="flex gap-2">
+      <div class="flex spacing-sm">
         <button
           on:click={handleSave}
-          class="flex-1 px-2 py-1 bg-primary text-white text-xs rounded hover:bg-primary-hover transition-colors"
+          class="button button-primary button-small"
+          style="flex: 1;"
         >
           Save
         </button>
         <button
           on:click={handleCancel}
-          class="flex-1 px-2 py-1 bg-surface text-text text-xs rounded hover:bg-white transition-colors border border-border"
+          class="button button-secondary button-small"
+          style="flex: 1;"
         >
           Cancel
         </button>
       </div>
     </div>
   {:else}
-    <div class="space-y-2">
-      <p class="text-sm text-text whitespace-pre-wrap break-words">{idea.text}</p>
+    <div class="spacing-sm">
+      <p class="text-small" style="white-space: pre-wrap; word-break: break-word;">{idea.text}</p>
 
       {#if idea.userName && !idea.isAnonymous}
-        <p class="text-xs text-text-light">By {idea.userName}</p>
+        <p class="text-small text-light">By {idea.userName}</p>
       {/if}
 
-      <div class="flex flex-wrap gap-1">
+      <div class="flex flex-wrap spacing-xs">
         {#each ['circle', 'square', 'triangle', 'cross'] as voteType}
           <button
             on:click={() => toggleVoteMark(voteType)}
-            class="px-2 py-1 text-xs rounded transition-colors {voteCounts[voteType] > 0
-              ? 'bg-primary text-white'
-              : 'bg-surface text-text hover:bg-white border border-border'}"
-            title={`${voteType} votes: ${voteCounts[voteType]}`}
+            class="badge clickable {voteCounts[voteType] > 0 ? 'badge-primary' : 'badge-secondary'}"
+            title={`${getMarkLabel(voteType)} - ${voteCounts[voteType]} votes`}
+            aria-label={`${getMarkLabel(voteType)} vote: ${voteCounts[voteType]}`}
+            aria-pressed={voteCounts[voteType] > 0}
           >
             {getMarkIcon(voteType)} {voteCounts[voteType] > 0 ? voteCounts[voteType] : ''}
           </button>
@@ -134,16 +153,19 @@
       </div>
 
       {#if isHovered && !isEditing}
-        <div class="flex gap-1 pt-1 border-t border-border">
+        <div class="divider margin-top-sm margin-bottom-sm"></div>
+        <div class="flex spacing-xs">
           <button
             on:click={handleEdit}
-            class="flex-1 px-2 py-1 text-xs bg-primary text-white rounded hover:bg-primary-hover transition-colors"
+            class="button button-primary button-small"
+            style="flex: 1;"
           >
             Edit
           </button>
           <button
             on:click={onDelete}
-            class="flex-1 px-2 py-1 text-xs bg-danger text-white rounded hover:bg-opacity-80 transition-colors"
+            class="button button-danger button-small"
+            style="flex: 1;"
           >
             Delete
           </button>
@@ -151,10 +173,16 @@
       {/if}
     </div>
   {/if}
-</div>
+</article>
 
 <style>
-  div {
+  .draggable-card {
     touch-action: none;
+    cursor: move;
+    border: 2px solid var(--color-primary);
+  }
+
+  .draggable-card.dragging {
+    opacity: 0.5;
   }
 </style>

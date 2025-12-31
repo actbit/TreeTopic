@@ -20,12 +20,12 @@
   }
 </script>
 
-<div class="app-container min-h-screen bg-background flex flex-col">
+<div class="app-container min-h-screen flex flex-col">
   <Header onMenuToggle={toggleSidebar}>
     <slot name="headerContent" />
   </Header>
 
-  <div class="flex flex-1 overflow-hidden gap-0">
+  <div class="flex overflow-hidden layout-body">
     <Sidebar>
       <slot name="sidebarContent" />
     </Sidebar>
@@ -41,21 +41,23 @@
 </div>
 
 <style>
-  :global(.app-container) {
+  .app-container {
     display: grid;
     grid-template-columns: 1fr;
     grid-template-rows: auto 1fr;
     height: 100vh;
+    background-color: var(--color-background);
   }
 
-  :global(.app-container > div:last-child) {
+  .layout-body {
+    flex: 1;
     display: grid;
     grid-template-columns: auto 1fr auto;
     gap: 0;
   }
 
   @media (max-width: 1024px) {
-    :global(.app-container > div:last-child) {
+    .layout-body {
       grid-template-columns: 1fr;
     }
   }

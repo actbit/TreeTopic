@@ -7,10 +7,10 @@
   let activeTab = $state('general');
 
   const tabs = [
-    { id: 'general', label: 'General Settings', icon: '⚙️' },
-    { id: 'profile', label: 'Profile', icon: '👤' },
-    { id: 'notifications', label: 'Notifications', icon: '🔔' },
-    { id: 'privacy', label: 'Privacy & Security', icon: '🔒' },
+    { id: 'general', label: 'General Settings' },
+    { id: 'profile', label: 'Profile' },
+    { id: 'notifications', label: 'Notifications' },
+    { id: 'privacy', label: 'Privacy & Security' },
   ];
 </script>
 
@@ -29,17 +29,16 @@
     </svelte:fragment>
 
     <svelte:fragment slot="sidebarContent">
-      <div class="space-y-2 p-4">
+      <div class="space-y-2 p-5">
         {#each tabs as tab}
           <button
             on:click={() => (activeTab = tab.id)}
-            class="w-full flex items-center gap-3 px-4 py-2 rounded transition-colors {activeTab ===
+            class="w-full flex items-center gap-3 px-5 py-3 rounded-lg transition-colors {activeTab ===
             tab.id
               ? 'bg-primary text-white'
               : 'text-text hover:bg-surface'}"
           >
-            <span class="text-lg">{tab.icon}</span>
-            <span class="font-medium">{tab.label}</span>
+            <span class="font-semibold">{tab.label}</span>
           </button>
         {/each}
       </div>

@@ -14,12 +14,6 @@
 
   let dialogElement: HTMLDialogElement | undefined = $state();
 
-  const sizeClasses = {
-    small: 'max-w-sm',
-    medium: 'max-w-md',
-    large: 'max-w-2xl',
-  };
-
   onMount(() => {
     if (dialogElement) {
       if (isOpen) {
@@ -55,21 +49,21 @@
 
 <dialog
   bind:this={dialogElement}
-  class="modal modal-backdrop rounded-lg shadow-xl backdrop:bg-black backdrop:opacity-50 p-0"
+  class="modal"
   on:close={handleClose}
   on:click={handleBackdropClick}
 >
-  <div class="modal-content bg-white rounded-lg max-w-full {sizeClasses[size]} w-full">
+  <div class="modal-content modal-{size}">
     {#if title || closeButton}
-      <div class="flex items-center justify-between px-6 py-4 border-b border-border">
+      <div class="modal-header">
         {#if title}
-          <h2 class="text-xl font-bold text-text">{title}</h2>
+          <h2 class="modal-title">{title}</h2>
         {/if}
 
         {#if closeButton}
           <button
             on:click={handleClose}
-            class="ml-auto p-1 text-text-light hover:text-text hover:bg-surface rounded transition-colors"
+            class="modal-close"
             aria-label="Close modal"
           >
             ✕
@@ -78,7 +72,7 @@
       </div>
     {/if}
 
-    <div class="px-6 py-4 max-h-[calc(100vh-200px)] overflow-y-auto">
+    <div class="modal-body">
       {#if children}
         {@render children()}
       {/if}
@@ -87,7 +81,7 @@
 </dialog>
 
 <style>
-  :global(dialog.modal) {
+  .modal {
     border: none;
     border-radius: 0;
     padding: 0;
@@ -96,13 +90,69 @@
     background: transparent;
   }
 
-  :global(dialog.modal::backdrop) {
+  .modal::backdrop {
     background-color: rgba(0, 0, 0, 0.5);
   }
 
-  :global(dialog.modal[open]) {
+  .modal[open] {
     display: flex;
     animation: modalSlideIn 0.3s ease-out;
+  }
+
+  .modal-content {
+    background-color: var(--color-background);
+    border-radius: var(--border-radius-lg);
+    box-shadow: var(--shadow-xl);
+    width: 100%;
+  }
+
+  .modal-small {
+    max-width: 384px;
+  }
+
+  .modal-medium {
+    max-width: 448px;
+  }
+
+  .modal-large {
+    max-width: 672px;
+  }
+
+  .modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 24px;
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .modal-title {
+    font-size: var(--font-size-xl);
+    font-weight: 700;
+    color: var(--color-text);
+  }
+
+  .modal-close {
+    margin-left: auto;
+    padding: 4px;
+    background: transparent;
+    border: none;
+    color: var(--color-text-light);
+    font-size: var(--font-size-lg);
+    cursor: pointer;
+    border-radius: var(--border-radius-sm);
+    transition: all 0.2s ease;
+  }
+
+  .modal-close:hover {
+    color: var(--color-text);
+    background-color: var(--color-surface);
+  }
+
+  .modal-body {
+    padding: 16px 24px;
+    max-height: calc(100vh - 200px);
+    overflow-y: auto;
   }
 
   @keyframes modalSlideIn {

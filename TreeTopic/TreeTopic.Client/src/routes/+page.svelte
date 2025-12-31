@@ -37,30 +37,32 @@
   <title>Select Workspace - TreeTopic</title>
 </svelte:head>
 
-<div class="min-h-screen bg-gradient-to-br from-primary to-secondary flex items-center justify-center p-4">
-  <div class="max-w-md w-full">
-    <div class="bg-white rounded-lg shadow-xl p-8">
-      <div class="text-center mb-8">
-        <h1 class="text-3xl font-bold text-primary mb-2">🌳 TreeTopic</h1>
-        <p class="text-text-secondary">Select your workspace</p>
+<div class="workspace-container">
+  <div class="workspace-card-wrapper">
+    <div class="workspace-card">
+      <div class="logo-section">
+        <h1>TreeTopic</h1>
+        <p>Collaborative discussion platform</p>
+      </div>
+
+      <div class="welcome-section">
+        <h2>Select workspace</h2>
+        <p>Choose your workspace to continue</p>
       </div>
 
       {#if isLoading}
-        <div class="text-center py-8">
-          <p class="text-text-light">Loading workspaces...</p>
+        <div class="status-message">
+          <p>Loading workspaces...</p>
         </div>
       {:else if error}
-        <div class="text-center py-8">
-          <p class="text-red-500">{error}</p>
+        <div class="status-message error">
+          <p>{error}</p>
         </div>
       {:else if tenants.length > 0}
-        <div class="space-y-4">
-          <label class="block">
-            <span class="text-sm font-semibold text-text mb-2 block">Workspace</span>
-            <select
-              bind:value={selectedTenant}
-              class="w-full px-4 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary bg-white text-text"
-            >
+        <div class="form-section">
+          <label>
+            <span class="label-text">Workspace</span>
+            <select bind:value={selectedTenant}>
               <option value={null}>-- Select a workspace --</option>
               {#each tenants as tenant (tenant.identifier)}
                 <option value={tenant.identifier}>{tenant.name}</option>
@@ -71,32 +73,176 @@
           <button
             on:click={handleSelectTenant}
             disabled={!selectedTenant}
-            class="w-full px-4 py-2 bg-primary text-white font-semibold rounded-lg hover:bg-primary-dark disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+            class="continue-button"
           >
             Continue
           </button>
         </div>
       {:else}
-        <div class="text-center py-8">
-          <p class="text-text-light">No workspaces available</p>
+        <div class="status-message">
+          <p>No workspaces available</p>
         </div>
       {/if}
 
-      <div class="mt-8 pt-8 border-t border-border">
-        <p class="text-center text-sm text-text-light">
-          Secured by OIDC authentication
-        </p>
+      <div class="footer-section">
+        <p>Secured by OIDC authentication</p>
       </div>
     </div>
 
-    <div class="mt-8 text-center text-text-light text-sm">
+    <div class="copyright">
       <p>&copy; 2025 TreeTopic. All rights reserved.</p>
     </div>
   </div>
 </div>
 
 <style>
-  :global(.bg-gradient-to-br) {
-    background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-secondary) 100%);
+  .workspace-container {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--spacing-lg);
+    background-color: #f9fafb;
+  }
+
+  .workspace-card-wrapper {
+    width: 100%;
+    max-width: 400px;
+  }
+
+  .workspace-card {
+    background-color: var(--color-background);
+    border-radius: var(--border-radius-lg);
+    border: 1px solid var(--color-border);
+    box-shadow: var(--shadow-lg);
+    padding: 64px;
+  }
+
+  .logo-section {
+    text-align: center;
+    margin-bottom: 64px;
+  }
+
+  .logo-section h1 {
+    font-size: var(--font-size-2xl);
+    font-weight: 700;
+    color: var(--color-primary);
+    margin-bottom: 24px;
+  }
+
+  .logo-section p {
+    font-size: var(--font-size-base);
+    color: var(--color-text-light);
+  }
+
+  .welcome-section {
+    text-align: center;
+    margin-bottom: 48px;
+  }
+
+  .welcome-section h2 {
+    font-size: var(--font-size-xl);
+    font-weight: 600;
+    color: var(--color-text);
+    margin-bottom: 20px;
+  }
+
+  .welcome-section p {
+    font-size: var(--font-size-base);
+    color: var(--color-text-light);
+  }
+
+  .status-message {
+    text-align: center;
+    padding: 40px 0;
+  }
+
+  .status-message p {
+    font-size: var(--font-size-base);
+    color: var(--color-text-light);
+  }
+
+  .status-message.error p {
+    color: var(--color-error);
+  }
+
+  .form-section {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+  }
+
+  .form-section label {
+    display: block;
+  }
+
+  .label-text {
+    display: block;
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    color: var(--color-text);
+    margin-bottom: 16px;
+  }
+
+  select {
+    width: 100%;
+    padding: 12px 16px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--border-radius-lg);
+    background-color: var(--color-background);
+    color: var(--color-text);
+    font-size: var(--font-size-sm);
+    transition: all 0.2s ease;
+  }
+
+  select:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.1);
+  }
+
+  .continue-button {
+    width: 100%;
+    padding: 12px 20px;
+    background-color: var(--color-primary);
+    color: var(--color-text-inverse);
+    font-weight: 600;
+    border-radius: var(--border-radius-lg);
+    border: none;
+    cursor: pointer;
+    font-size: var(--font-size-sm);
+    transition: all 0.2s ease;
+  }
+
+  .continue-button:hover:not(:disabled) {
+    background-color: var(--color-primary-hover);
+  }
+
+  .continue-button:disabled {
+    background-color: #d1d5db;
+    cursor: not-allowed;
+    opacity: 0.6;
+  }
+
+  .footer-section {
+    margin-top: 48px;
+    padding-top: 40px;
+    border-top: 1px solid var(--color-border);
+  }
+
+  .footer-section p {
+    text-align: center;
+    font-size: var(--font-size-sm);
+    color: var(--color-text-light);
+  }
+
+  .copyright {
+    margin-top: 40px;
+    text-align: center;
+  }
+
+  .copyright p {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-light);
   }
 </style>

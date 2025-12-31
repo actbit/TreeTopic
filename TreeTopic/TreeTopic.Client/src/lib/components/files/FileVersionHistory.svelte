@@ -59,18 +59,18 @@
               href={version.url}
               target="_blank"
               rel="noreferrer"
-              class="p-2 text-text-light hover:text-primary rounded hover:bg-white transition-colors"
+              class="px-3 py-2 text-sm text-text-light hover:text-primary rounded hover:bg-white transition-colors font-medium"
               title="View"
             >
-              👁️
+              View
             </a>
             <button
               type="button"
               on:click={() => handleDownload(version.url, version.fileName)}
-              class="p-2 text-text-light hover:text-primary rounded hover:bg-white transition-colors"
+              class="px-3 py-2 text-sm text-text-light hover:text-primary rounded hover:bg-white transition-colors font-medium"
               title="Download"
             >
-              ⬇️
+              Download
             </button>
           </div>
         </div>

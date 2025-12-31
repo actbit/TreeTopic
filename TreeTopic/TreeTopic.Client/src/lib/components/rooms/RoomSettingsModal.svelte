@@ -70,7 +70,8 @@
 
     try {
       if ($currentRoom) {
-        await api.del(`/api/room/${$currentRoom.id}`);
+        const tenant = api.getCurrentTenant();
+        await api.del(`/${tenant}/api/Room/${$currentRoom.id}`);
         deleteRoomStore($currentRoom.id);
         ui.closeModal(modalId);
       }
@@ -87,7 +88,7 @@
 </script>
 
 <Modal {isOpen} title="Room Settings" onClose={handleClose} size="medium">
-  <form on:submit={handleSave} class="space-y-4">
+  <form on:submit={handleSave} class="space-y-6">
     {#if error}
       <ErrorMessage message={error} onDismiss={() => (error = null)} />
     {/if}
@@ -108,23 +109,19 @@
         bind:value={description}
         placeholder="Enter room description (optional)"
         disabled={isLoading || isDeleting}
-        class="px-4 py-2 border border-border rounded-sm text-base bg-white transition-all
-          placeholder:text-text-light
-          focus:outline-none focus:border-primary
-          disabled:bg-surface disabled:cursor-not-allowed disabled:opacity-60"
       />
     </div>
 
     {#if $currentRoom?.memberCount}
-      <div class="text-sm text-text-light">
-        <span class="font-semibold">{$currentRoom.memberCount}</span> member{$currentRoom
+      <div class="text-sm text-text-light bg-surface rounded-lg p-3">
+        <span class="font-semibold text-text">{$currentRoom.memberCount}</span> member{$currentRoom
           .memberCount !== 1
           ? 's'
-          : ''}
+          : ''} in this room
       </div>
     {/if}
 
-    <div class="flex gap-3 pt-4">
+    <div class="flex gap-4 pt-8">
       <Button
         type="submit"
         variant="primary"
@@ -133,7 +130,11 @@
         loading={isLoading}
         disabled={isLoading || isDeleting}
       >
-        Save Changes
+        {#if isLoading}
+          Saving...
+        {:else}
+          Save Changes
+        {/if}
       </Button>
       <Button
         type="button"
@@ -148,7 +149,7 @@
     </div>
 
     {#if $currentRoom?.canDelete}
-      <div class="border-t border-border pt-4">
+      <div class="border-t border-border pt-8">
         <Button
           type="button"
           variant="danger"
@@ -158,7 +159,11 @@
           disabled={isLoading || isDeleting}
           on:click={handleDelete}
         >
-          Delete Room
+          {#if isDeleting}
+            Deleting...
+          {:else}
+            Delete Room
+          {/if}
         </Button>
       </div>
     {/if}

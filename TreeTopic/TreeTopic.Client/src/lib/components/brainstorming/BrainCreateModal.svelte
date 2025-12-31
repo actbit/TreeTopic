@@ -39,16 +39,8 @@
     isLoading = true;
 
     try {
-      const formData = new FormData();
-      formData.append('roomId', $currentRoom.id);
-      formData.append('title', title.trim());
-      formData.append('description', description.trim());
-      if (backgroundFile) {
-        formData.append('backgroundImage', backgroundFile);
-      }
-
-      // Create brainstorm board via API
-      await api.post('/api/brainstorm', {
+      const tenant = api.getCurrentTenant();
+      await api.post(`/${tenant}/api/brainstorm`, {
         roomId: $currentRoom.id,
         topicId: $selectedTopic?.id,
         title: title.trim(),
@@ -57,8 +49,8 @@
 
       resetForm();
       ui.closeModal(modalId);
-    } catch (err: any) {
-      error = err.message || 'Failed to create brainstorm board';
+    } catch (err: unknown) {
+      error = err instanceof Error ? err.message : 'Failed to create brainstorm board';
     } finally {
       isLoading = false;
     }
@@ -90,7 +82,7 @@
 </script>
 
 <Modal {isOpen} title="Create Brainstorm Board" onClose={handleClose} size="medium">
-  <form on:submit={handleCreate} class="space-y-4">
+  <form on:submit={handleCreate} class="space-y-6">
     {#if error}
       <ErrorMessage message={error} onDismiss={() => (error = null)} />
     {/if}
@@ -105,21 +97,18 @@
       required
     />
 
-    <div class="flex flex-col gap-1">
+    <div class="flex flex-col gap-2">
       <label class="text-sm font-semibold text-text">Description</label>
       <textarea
         bind:value={description}
         placeholder="What is this brainstorm about? (optional)"
         disabled={isLoading}
-        class="px-4 py-2 border border-border rounded-sm text-base bg-white transition-all
-          placeholder:text-text-light
-          focus:outline-none focus:border-primary
-          disabled:bg-surface disabled:cursor-not-allowed disabled:opacity-60"
-        rows="3"
+        rows="4"
+        class="p-3"
       />
     </div>
 
-    <div class="flex flex-col gap-2">
+    <div class="flex flex-col gap-3">
       <label class="text-sm font-semibold text-text">Background Image (Optional)</label>
       <input
         type="file"
@@ -134,13 +123,16 @@
         type="button"
         on:click={() => fileInput?.click()}
         disabled={isLoading}
-        class="px-4 py-2 border-2 border-dashed border-border rounded-lg text-sm text-text-light hover:border-primary hover:text-primary transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+        class="px-6 py-4 border-2 border-dashed border-border rounded-lg text-sm text-text-light hover:border-primary hover:text-primary hover:bg-primary hover:bg-opacity-5 transition-all disabled:opacity-60 disabled:cursor-not-allowed {backgroundFile ? 'border-primary text-primary bg-primary bg-opacity-5' : ''}"
       >
-        {backgroundFile ? `✓ ${backgroundFile.name}` : '📸 Choose background image'}
+        <span class="flex items-center justify-center gap-3">
+          <span class="font-semibold">{backgroundFile ? 'Selected' : 'Browse'}</span>
+          <span>{backgroundFile ? backgroundFile.name : 'Choose background image'}</span>
+        </span>
       </button>
     </div>
 
-    <div class="flex gap-3 pt-4">
+    <div class="flex gap-4 pt-8">
       <Button
         type="submit"
         variant="primary"
@@ -149,7 +141,11 @@
         loading={isLoading}
         disabled={isLoading}
       >
-        Create Board
+        {#if isLoading}
+          Creating...
+        {:else}
+          Create Board
+        {/if}
       </Button>
       <Button
         type="button"

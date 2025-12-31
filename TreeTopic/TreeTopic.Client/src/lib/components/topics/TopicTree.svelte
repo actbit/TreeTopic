@@ -15,39 +15,59 @@
   }
 </script>
 
-<div class="flex flex-col gap-2 h-full">
-  <div class="flex items-center justify-between px-2 mb-2">
-    <h3 class="font-semibold text-text">Topics</h3>
+<div class="panel h-full">
+  <div class="panel-header">
+    <h3 class="panel-title">Topics</h3>
     <button
       on:click={openCreateTopicModal}
-      class="p-1 text-text-light hover:text-primary rounded hover:bg-surface transition-colors"
+      class="button clickable topic-create-button"
       title="Create topic"
     >
       +
     </button>
   </div>
 
-  <div class="flex-1 overflow-y-auto space-y-1">
-    {#each $topicTree as node (node.id)}
-      <TopicNode {node} />
-    {/each}
+  <div class="panel-body overflow-y-auto">
+    <div class="list">
+      {#each $topicTree as node (node.id)}
+        <TopicNode {node} />
+      {/each}
 
-    {#if $topicTree.length === 0}
-      <div class="text-center text-text-light text-sm py-8">
-        <p>No topics yet</p>
-        <button
-          on:click={openCreateTopicModal}
-          class="mt-2 px-3 py-1 bg-primary text-white rounded text-xs font-semibold hover:bg-primary-hover transition-colors"
-        >
-          Create First Topic
-        </button>
-      </div>
-    {/if}
+      {#if $topicTree.length === 0}
+        <div class="text-center text-light topic-tree-empty">
+          <p>No topics yet</p>
+          <button
+            on:click={openCreateTopicModal}
+            class="button button-primary button-small margin-top-sm"
+          >
+            Create First Topic
+          </button>
+        </div>
+      {/if}
+    </div>
   </div>
 </div>
 
 <style>
-  div {
-    min-height: 0;
+  .panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .topic-create-button {
+    padding: var(--spacing-xs);
+    background-color: transparent;
+    border: none;
+    color: var(--color-text-light);
+  }
+
+  .topic-create-button:hover {
+    color: var(--color-primary);
+    background-color: var(--color-surface);
+  }
+
+  .topic-tree-empty {
+    padding: var(--spacing-2xl) 0;
   }
 </style>

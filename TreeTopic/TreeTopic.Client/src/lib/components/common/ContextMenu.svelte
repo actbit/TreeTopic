@@ -67,23 +67,21 @@
 
 <div
   bind:this={menuElement}
-  class="fixed bg-white border border-border rounded-md shadow-lg z-50 min-w-48 py-1 slide-in-up"
+  class="context-menu"
   style="left: {adjustedX}px; top: {adjustedY}px;"
 >
   {#each items as item (item.id)}
     {#if item.divider}
-      <div class="h-px bg-border my-1"></div>
+      <div class="context-menu-divider"></div>
     {:else}
       <button
         type="button"
         on:click={() => handleAction(item.action)}
         disabled={item.isDisabled}
-        class="w-full px-4 py-2 text-left text-sm flex items-center gap-3 text-text transition-colors
-          hover:bg-surface disabled:opacity-50 disabled:cursor-not-allowed
-          {item.isDangerous ? 'text-error hover:bg-red-50' : ''}"
+        class="context-menu-item {item.isDangerous ? 'context-menu-item-danger' : ''}"
       >
         {#if item.icon}
-          <span class="text-base flex-shrink-0">{item.icon}</span>
+          <span class="context-menu-item-icon">{item.icon}</span>
         {/if}
         <span>{item.label}</span>
       </button>
@@ -92,8 +90,59 @@
 </div>
 
 <style>
-  :global(.slide-in-up) {
+  .context-menu {
+    position: fixed;
+    background-color: var(--color-background);
+    border: 1px solid var(--color-border);
+    border-radius: var(--border-radius-md);
+    box-shadow: var(--shadow-lg);
+    z-index: 50;
+    min-width: 192px;
+    padding: var(--spacing-xs) 0;
     animation: slideInUp 0.2s ease-out;
+  }
+
+  .context-menu-divider {
+    height: 1px;
+    background-color: var(--color-border);
+    margin: var(--spacing-xs) 0;
+  }
+
+  .context-menu-item {
+    width: 100%;
+    padding: var(--spacing-sm) var(--spacing-md);
+    text-align: left;
+    font-size: var(--font-size-sm);
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+    color: var(--color-text);
+    background-color: transparent;
+    border: none;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+  }
+
+  .context-menu-item:hover:not(:disabled) {
+    background-color: var(--color-surface);
+  }
+
+  .context-menu-item:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .context-menu-item-danger {
+    color: var(--color-error);
+  }
+
+  .context-menu-item-danger:hover:not(:disabled) {
+    background-color: color-mix(in srgb, var(--color-error) 5%, transparent);
+  }
+
+  .context-menu-item-icon {
+    font-size: var(--font-size-base);
+    flex-shrink: 0;
   }
 
   @keyframes slideInUp {

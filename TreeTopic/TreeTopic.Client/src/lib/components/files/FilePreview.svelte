@@ -39,7 +39,7 @@
         />
       {:else if isPDF(file.fileType) || isPDFUrl(file.url)}
         <div class="text-center text-text-light">
-          <p class="text-lg mb-4">📄 PDF Document</p>
+          <p class="text-lg mb-4 font-semibold">PDF Document</p>
           <p class="text-sm mb-4">{file.fileName}</p>
           <a
             href={file.url}
@@ -52,7 +52,6 @@
         </div>
       {:else}
         <div class="text-center text-text-light">
-          <p class="text-3xl mb-4">📎</p>
           <p class="text-lg font-semibold mb-2">{file.fileName}</p>
           <p class="text-sm mb-4">File type: {file.fileType}</p>
           <a

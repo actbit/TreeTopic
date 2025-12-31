@@ -89,7 +89,7 @@ export interface SortConfig {
  * Filter configuration
  */
 export interface FilterConfig {
-  [key: string]: any;
+  [key: string]: string | number | boolean | null;
 }
 
 /**
@@ -101,7 +101,7 @@ export interface SearchState {
   sort: SortConfig;
   pagination: PaginationState;
   isLoading: boolean;
-  results: any[];
+  results: MessageViewItem[];
   error: string | null;
 }
 

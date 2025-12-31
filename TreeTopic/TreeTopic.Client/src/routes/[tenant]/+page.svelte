@@ -1,6 +1,7 @@
 <script lang="ts">
-  import { isAuthenticated } from '$lib/stores/auth';
-  import { currentRoom, roomList } from '$lib/stores/rooms';
+  import { onMount } from 'svelte';
+  import { auth, isAuthenticated } from '$lib/stores/auth';
+  import { currentRoom, roomList, setRooms, setCurrentRoom } from '$lib/stores/rooms';
   import { selectedTopic } from '$lib/stores/topics';
   import AppLayout from '$lib/components/layout/AppLayout.svelte';
   import RoomSelector from '$lib/components/rooms/RoomSelector.svelte';
@@ -15,13 +16,72 @@
   import MaterialList from '$lib/components/files/MaterialList.svelte';
   import FileUploadModal from '$lib/components/files/FileUploadModal.svelte';
   import { ui } from '$lib/stores/ui';
+  import { api } from '$lib/api/client';
+
+  let isLoading = $state(true);
+  let loadError = $state<string | null>(null);
+
+  function normalizeRoom(raw: any) {
+    const id = raw?.id ?? raw?.Id ?? '';
+    const name = raw?.name ?? raw?.Name ?? '';
+    const createdAt = raw?.createdAt ?? raw?.CreatedAt ?? null;
+    const updatedAt = raw?.updatedAt ?? raw?.UpdatedAt ?? null;
+
+    return {
+      id,
+      name,
+      description: raw?.description ?? raw?.Description,
+      avatar: raw?.avatar ?? raw?.Avatar,
+      createdAt: createdAt ? new Date(createdAt) : new Date(),
+      updatedAt: updatedAt ? new Date(updatedAt) : new Date(),
+      ownerId: raw?.ownerId ?? raw?.OwnerId ?? raw?.createdUserId ?? raw?.CreatedUserId ?? '',
+      memberCount: raw?.memberCount ?? raw?.MemberCount ?? 0,
+      unreadCount: raw?.unreadCount ?? raw?.UnreadCount ?? 0,
+      isArchived: raw?.isArchived ?? raw?.IsArchived ?? false,
+      settings: raw?.settings ?? raw?.Settings,
+    };
+  }
+
+  async function loadTenantData() {
+    isLoading = true;
+    loadError = null;
+
+    try {
+      const tenant = api.getCurrentTenant();
+      await auth.fetchCurrentUser(tenant);
+
+      const response = await api.get<any[]>(`/${tenant}/api/Room`);
+      const rooms = Array.isArray(response) ? response.map(normalizeRoom) : [];
+      setRooms(rooms);
+
+      const savedRoomId = localStorage.getItem('selected_room');
+      const initialRoom =
+        rooms.find((room) => room.id === savedRoomId) ?? rooms[0] ?? null;
+      setCurrentRoom(initialRoom);
+    } catch (error) {
+      loadError = error instanceof Error ? error.message : 'Failed to load tenant data';
+    } finally {
+      isLoading = false;
+    }
+  }
+
+  onMount(() => {
+    loadTenantData();
+  });
 </script>
 
 <svelte:head>
   <title>TreeTopic - Collaborative Discussion</title>
 </svelte:head>
 
-{#if $isAuthenticated}
+{#if isLoading}
+  <div class="flex items-center justify-center h-screen bg-gradient-to-br from-primary to-secondary">
+    <div class="text-center text-white">
+      <h1 class="text-4xl font-bold mb-4">TreeTopic</h1>
+      <p>Loading...</p>
+    </div>
+  </div>
+{:else if $isAuthenticated}
   <AppLayout subPanelTitle="Materials">
     <svelte:fragment slot="headerContent">
       <RoomSelector />
@@ -66,6 +126,11 @@
           <div>
             <h2 class="text-2xl font-bold text-text mb-2">Welcome to TreeTopic</h2>
             <p class="text-text-secondary">Select a room to get started</p>
+            <div class="mt-4">
+              <button class="button button-primary" on:click={() => ui.openModal({ id: 'room-create', title: 'Create Room', type: 'custom' })}>
+                Create your first room
+              </button>
+            </div>
           </div>
         </div>
       {/if}
@@ -80,4 +145,24 @@
   <RoomSettingsModal />
   <TopicCreateModal />
   <FileUploadModal />
+{:else}
+  <div class="flex items-center justify-center h-screen bg-gradient-to-br from-primary to-secondary">
+    <div class="text-center text-white">
+      <h1 class="text-4xl font-bold mb-4">TreeTopic</h1>
+      {#if loadError}
+        <p class="mb-4">{loadError}</p>
+      {:else}
+        <p class="mb-4">Not authenticated</p>
+      {/if}
+      <button
+        class="button button-secondary"
+        on:click={() => {
+          const tenant = api.getCurrentTenant();
+          window.location.href = `/${tenant}/login`;
+        }}
+      >
+        Go to login
+      </button>
+    </div>
+  </div>
 {/if}
