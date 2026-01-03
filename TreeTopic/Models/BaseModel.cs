@@ -6,7 +6,7 @@ namespace TreeTopic.Models
     {
         public BaseModel()
         {
-            Id = Guid.NewGuid();
+            Id = Guid.CreateVersion7();
             CreatedAt = DateTime.UtcNow;
             UpdatedAt = DateTime.UtcNow;
         }

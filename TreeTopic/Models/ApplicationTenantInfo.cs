@@ -22,19 +22,25 @@ namespace TreeTopic.Models
         {
         }
 
-        [Key]
-        public string? Id { get; set; } = Guid.NewGuid().ToString();
 
-        [StringLength(50)]
+        [StringLength(50, MinimumLength = 1, ErrorMessage = "Identifier must be between 1 and 50 characters")]
+        [RegularExpression(@"^[a-zA-Z0-9\-_]+$", ErrorMessage = "Identifier can only contain alphanumeric characters, hyphens, and underscores")]
         public string? Identifier { get; set; }
 
-        [StringLength(255)]
+        [StringLength(255, MinimumLength = 1, ErrorMessage = "Name must be between 1 and 255 characters")]
         public string? Name { get; set; }
 
         public ApplicationTenantDetail? Detail { get; set; }
 
         // リレーション：初期設定トークン
         public ICollection<SetupToken>? SetupTokens { get; set; }
+
+        // Finbuckle.MultiTenant WithPerTenantAuthentication() 用のラッパープロパティ
+        // Detail から OIDC 設定を公開することで、per-tenant 認証が正しく動作する
+        public string? OpenIdConnectAuthority => Detail?.OpenIdConnectAuthority;
+        public string? OpenIdConnectClientId => Detail?.OpenIdConnectClientId;
+        public string? OpenIdConnectClientSecret => Detail?.OpenIdConnectClientSecret;
+        public string? ChallengeScheme => !string.IsNullOrEmpty(OpenIdConnectAuthority) ? "oidc" : null;
     }
 }
 

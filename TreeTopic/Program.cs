@@ -2,6 +2,9 @@
 using Finbuckle.MultiTenant;
 using Finbuckle.MultiTenant.AspNetCore.Extensions;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authentication.OpenIdConnect;
+using Microsoft.IdentityModel.Protocols;
+using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 using System.Security.Claims;
 using TreeTopic.Models;
 using Microsoft.EntityFrameworkCore;
@@ -10,6 +13,7 @@ using TreeTopic.Services;
 using TreeTopic.Repositories;
 using TreeTopic.Middleware;
 using TreeTopic.Authentication;
+using TreeTopic.Constants;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Http.Features;
 using System.Text.Json.Serialization;
@@ -18,6 +22,10 @@ using MaskedUUID.AspNetCore.Extensions;
 using MaskedUUID.AspNetCore.KeyProviders;
 using MaskedUUID.AspNetCore.Services;
 using TreeTopic.KeyProviders;
+using Microsoft.AspNetCore.DataProtection;
+using System.IO;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authentication.Cookies;
 namespace TreeTopic;
 
 public class Program
@@ -26,6 +34,34 @@ public class Program
     {
         var builder = WebApplication.CreateBuilder(args);
         builder.AddServiceDefaults();
+
+        // helper local function
+        static bool IsApiRequest(HttpRequest request)
+        {
+            var path = request.Path.Value ?? string.Empty;
+            if (path.EndsWith("/auth/me", StringComparison.OrdinalIgnoreCase) ||
+                path.EndsWith("/auth/check", StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            if (AuthenticationConstants.Paths.IsApiPath(path))
+                return true;
+
+            var accept = request.Headers["Accept"].ToString();
+            if (!string.IsNullOrEmpty(accept) && accept.Contains("application/json", StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            var xRequestedWith = request.Headers["X-Requested-With"].ToString();
+            if (string.Equals(xRequestedWith, "XMLHttpRequest", StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            return false;
+        }
+
+        // DataProtection キーを永続化（認証クッキー復号の揺らぎ防止）
+        var keysDir = Path.Combine(builder.Environment.ContentRootPath, ".keys");
+        builder.Services.AddDataProtection()
+            .PersistKeysToFileSystem(new DirectoryInfo(keysDir))
+            .SetApplicationName("TreeTopic");
 
         // Register TenantDbContext for tenant management
         // Connection string from AppHost: "ConnectionStrings:treetopic-tenants" or fallback to config
@@ -67,60 +103,405 @@ public class Program
             .AddAuthentication(options =>
             {
                 options.DefaultAuthenticateScheme = CookieAuthenticationDefaults.AuthenticationScheme;
-                options.DefaultChallengeScheme = "oidc";
+                options.DefaultChallengeScheme = CookieAuthenticationDefaults.AuthenticationScheme;
             })
             .AddCookie(options =>
             {
-                options.LoginPath = "/auth/login";
-                options.LogoutPath = "/auth/logout";
-                options.ExpireTimeSpan = TimeSpan.FromHours(8);
+                options.Cookie.Name = builder.Configuration["Authentication:CookieName"] ?? ".TreeTopic.Auth";
+                options.LoginPath = AuthenticationConstants.Paths.LoginPath;
+                options.LogoutPath = AuthenticationConstants.Paths.LogoutPath;
+                options.ExpireTimeSpan = TimeSpan.FromHours(AuthenticationConstants.Cookie.ExpirationHours);
                 options.SlidingExpiration = true;
                 options.Cookie.HttpOnly = true;
                 // SameSite=None is required for the cross-site OIDC redirect round-trip
                 options.Cookie.SameSite = SameSiteMode.None;
-                // Keep Secure in production; allow HTTP during local dev to avoid cookie drop
+                // Always use Secure policy (Secure=true for HTTPS, can be relaxed in dev if HTTPS is not available)
                 options.Cookie.SecurePolicy = builder.Environment.IsDevelopment()
-                    ? CookieSecurePolicy.SameAsRequest
-                    : CookieSecurePolicy.Always;
+                    ? CookieSecurePolicy.SameAsRequest  // 開発環境：HTTP許可（SameSite=Noneの警告を受け入れ）
+                    : CookieSecurePolicy.Always;         // 本番環境：HTTPS必須
 
                 // Set cookie path per tenant to allow multiple tenant logins
                 options.Events = new CookieAuthenticationEvents
                 {
+                    OnRedirectToLogin = ctx =>
+                    {
+                        if (IsApiRequest(ctx.Request))
+                        {
+                            ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                            return Task.CompletedTask;
+                        }
+                        var tenantId = ctx.Request.RouteValues[AuthenticationConstants.TenantClaimType]?.ToString();
+                        if (string.IsNullOrEmpty(tenantId))
+                        {
+                            var pathValue = ctx.Request.Path.Value;
+                            if (!string.IsNullOrEmpty(pathValue))
+                            {
+                                var segments = pathValue.Trim('/').Split('/', StringSplitOptions.RemoveEmptyEntries);
+                                if (segments.Length > 0)
+                                {
+                                    var firstSegment = segments[0];
+                                    if (!string.IsNullOrWhiteSpace(firstSegment) &&
+                                        firstSegment.All(c => char.IsLetterOrDigit(c) || c == '-' || c == '_'))
+                                    {
+                                        tenantId = firstSegment;
+                                    }
+                                }
+                            }
+                        }
+
+                        var loginPath = string.IsNullOrEmpty(tenantId)
+                            ? AuthenticationConstants.Paths.LoginPath
+                            : $"/{tenantId}{AuthenticationConstants.Paths.LoginPath}";
+
+                        ctx.Response.Redirect(loginPath);
+                        return Task.CompletedTask;
+                    },
+                    OnRedirectToAccessDenied = ctx =>
+                    {
+                        if (IsApiRequest(ctx.Request))
+                        {
+                            ctx.Response.StatusCode = StatusCodes.Status403Forbidden;
+                            return Task.CompletedTask;
+                        }
+                        ctx.Response.Redirect(ctx.RedirectUri);
+                        return Task.CompletedTask;
+                    },
+                    OnValidatePrincipal = context =>
+                    {
+                        var logger = context.HttpContext.RequestServices.GetRequiredService<ILogger<Program>>();
+                        logger.LogDebug("[Cookies] Principal validated for path {Path}", context.HttpContext.Request.Path);
+
+                        if (!context.Properties.Items.ContainsKey(AuthenticationConstants.TenantClaimType))
+                        {
+                            var tenantId = context.HttpContext.GetRouteValue("tenant")?.ToString();
+                            if (string.IsNullOrEmpty(tenantId))
+                            {
+                                tenantId = context.HttpContext.Request.Query[AuthenticationConstants.TenantClaimType].ToString();
+                            }
+                            if (string.IsNullOrEmpty(tenantId))
+                            {
+                                var pathValue = context.HttpContext.Request?.Path.Value;
+                                if (!string.IsNullOrEmpty(pathValue))
+                                {
+                                    var segments = pathValue.Trim('/').Split('/', StringSplitOptions.RemoveEmptyEntries);
+                                    if (segments.Length > 0)
+                                    {
+                                        var firstSegment = segments[0];
+                                        if (!string.IsNullOrWhiteSpace(firstSegment) &&
+                                            firstSegment.All(c => char.IsLetterOrDigit(c) || c == '-' || c == '_'))
+                                        {
+                                            tenantId = firstSegment;
+                                        }
+                                    }
+                                }
+                            }
+
+                            if (!string.IsNullOrEmpty(tenantId))
+                            {
+                                context.Properties.Items[AuthenticationConstants.TenantClaimType] = tenantId;
+                                context.HttpContext.Items[AuthenticationConstants.Cookie.TenantForCookieKey] = tenantId;
+                                context.ShouldRenew = true;
+                                logger.LogDebug("[Cookies] Tenant injected into auth properties: {Tenant}", tenantId);
+                            }
+                        }
+
+                        return Task.CompletedTask;
+                    },
                     OnSigningIn = async context =>
                     {
+                        // tenant を route → query → path の順で解決
                         var tenantId = context.HttpContext.GetRouteValue("tenant")?.ToString();
+                        if (string.IsNullOrEmpty(tenantId))
+                        {
+                            tenantId = context.HttpContext.Request.Query[AuthenticationConstants.TenantClaimType].ToString();
+                        }
+                        if (string.IsNullOrEmpty(tenantId))
+                        {
+                            var pathValue = context.HttpContext.Request?.Path.Value;
+                            if (!string.IsNullOrEmpty(pathValue))
+                            {
+                                var segments = pathValue.Trim('/').Split('/', StringSplitOptions.RemoveEmptyEntries);
+                                if (segments.Length > 0)
+                                {
+                                    var firstSegment = segments[0];
+                                    if (!string.IsNullOrWhiteSpace(firstSegment) &&
+                                        firstSegment.All(c => char.IsLetterOrDigit(c) || c == '-' || c == '_'))
+                                    {
+                                        tenantId = firstSegment;
+                                    }
+                                }
+                            }
+                        }
+
                         if (!string.IsNullOrEmpty(tenantId))
                         {
+                            // TenantAwareCookieManager が拾えるように Items に格納
+                            context.HttpContext.Items[AuthenticationConstants.Cookie.TenantForCookieKey] = tenantId;
+                            context.Properties.Items[AuthenticationConstants.TenantClaimType] = tenantId;
+
                             context.Properties.IsPersistent = true;
                             // Set cookie to root path so multiple tenant cookies can coexist
                             // Tenant-specific cookie name is handled by TenantAwareCookieManager
+                            var isSecure = !builder.Environment.IsDevelopment() || context.HttpContext.Request.IsHttps;
                             var cookieOptions = new CookieOptions
                             {
-                                Path = "/",
                                 HttpOnly = true,
                                 SameSite = SameSiteMode.None,
-                                Secure = true,
-                                Expires = DateTimeOffset.UtcNow.AddHours(8)
+                                Secure = isSecure,  // 本番環境またはHTTPS接続時のみSecure=true
+                                Expires = DateTimeOffset.UtcNow.AddHours(AuthenticationConstants.Cookie.ExpirationHours)
                             };
                             context.CookieOptions = cookieOptions;
                         }
-                        await Task.CompletedTask;
                     }
                 };
             })
             .AddOpenIdConnectConfiguration(builder.Configuration, builder.Environment);
 
+        builder.Services.AddAuthorization(options =>
+        {
+            options.DefaultPolicy = new AuthorizationPolicyBuilder(
+                CookieAuthenticationDefaults.AuthenticationScheme)
+                .RequireAuthenticatedUser()
+                .Build();
+        });
+
         builder.Services.AddSingleton<IPostConfigureOptions<CookieAuthenticationOptions>, CookieAuthenticationConfiguration>();
-         
-        builder.Services
+
+        var usePerTenantAuthentication = builder.Configuration.GetValue<bool>("Authentication:UsePerTenantAuthentication");
+
+        var multiTenantBuilder = builder.Services
             .AddMultiTenant<ApplicationTenantInfo>()
             .WithStrategy<CustomClaimStrategy>(ServiceLifetime.Singleton, "tenant")
-            .WithStore<EFCoreMultiTenantStore>(ServiceLifetime.Scoped)  // EF Core Store を使用
-            .WithPerTenantAuthentication();
-        
-        // カスタム Claim Strategy を登録
-        builder.Services.AddSingleton(sp =>
-            new CustomClaimStrategy("tenant", sp.GetRequiredService<ILogger<CustomClaimStrategy>>()));
+            .WithStore<EFCoreMultiTenantStore>(ServiceLifetime.Scoped);  // EF Core Store を使用
+
+        if (usePerTenantAuthentication)
+        {
+            multiTenantBuilder.WithPerTenantAuthentication();
+        }
+
+        // ConfigurePerTenant を使用してテナントごとの OIDC 設定を適用
+        // マスターキーを取得して EncryptionService を直接作成
+        var masterEncryptionKey = builder.Configuration["Encryption:Key"]
+            ?? Environment.GetEnvironmentVariable("ENCRYPTION_KEY");
+
+        if (string.IsNullOrWhiteSpace(masterEncryptionKey))
+        {
+            throw new InvalidOperationException(
+                "Encryption key is not configured. " +
+                "Please set the 'Encryption:Key' configuration value or the 'ENCRYPTION_KEY' environment variable. " +
+                "This key is required for decrypting tenant-specific OIDC ClientSecrets.");
+        }
+
+        // マスターキーが最小限の長さであることを検証（AES-256 では 32 バイト必要）
+        if (masterEncryptionKey.Length < 32)
+        {
+            throw new InvalidOperationException(
+                "Encryption key is too short. " +
+                "The encryption key must be at least 32 characters long for AES-256 encryption.");
+        }
+
+        var masterEncryptionForOidc = new EncryptionService(
+            masterEncryptionKey,
+            Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance);
+
+        builder.Services.ConfigurePerTenant<OpenIdConnectOptions, ApplicationTenantInfo>(
+            AuthenticationConstants.OidcSchemeName,
+            (options, tenantInfo) =>
+            {
+                // テナント固有の OIDC 設定がある場合のみ適用
+                var tenantDetail = tenantInfo.Detail;
+                if (tenantDetail != null &&
+                    !string.IsNullOrEmpty(tenantDetail.OpenIdConnectAuthority) &&
+                    !string.IsNullOrEmpty(tenantDetail.OpenIdConnectClientId))
+                {
+                    // Authority が有効な URI かを検証
+                    if (!Uri.TryCreate(tenantDetail.OpenIdConnectAuthority, UriKind.Absolute, out var authorityUri) ||
+                        (authorityUri.Scheme != Uri.UriSchemeHttps && !builder.Environment.IsDevelopment()))
+                    {
+                        if (builder.Environment.IsDevelopment())
+                        {
+                            System.Diagnostics.Debug.WriteLine($"[ConfigurePerTenant] Invalid Authority for tenant {tenantInfo.Id}");
+                        }
+                    }
+
+                    // テナント固有の OIDC 設定を使用
+                    options.Authority = tenantDetail.OpenIdConnectAuthority;
+                    options.ClientId = tenantDetail.OpenIdConnectClientId;
+
+                    // 必須のエンドポイント情報を検証
+                    if (string.IsNullOrEmpty(tenantDetail.OpenIdConnectAuthorizationEndpoint) ||
+                        string.IsNullOrEmpty(tenantDetail.OpenIdConnectTokenEndpoint))
+                    {
+                        // テナントID以外の機密情報（URL等）は記録しない
+                        if (builder.Environment.IsDevelopment())
+                        {
+                            System.Diagnostics.Debug.WriteLine($"[ConfigurePerTenant] Warning: Required OIDC endpoints not configured for tenant {tenantInfo.Id}");
+                        }
+                    }
+                    else
+                    {
+                        // AuthorizationEndpoint と TokenEndpoint の URI 形式を検証
+                        if (!Uri.TryCreate(tenantDetail.OpenIdConnectAuthorizationEndpoint, UriKind.Absolute, out var authEndpoint) ||
+                            (authEndpoint.Scheme != Uri.UriSchemeHttps && !builder.Environment.IsDevelopment()))
+                        {
+                            if (builder.Environment.IsDevelopment())
+                            {
+                                System.Diagnostics.Debug.WriteLine($"[ConfigurePerTenant] Invalid AuthorizationEndpoint for tenant {tenantInfo.Id}");
+                            }
+                        }
+
+                        if (!Uri.TryCreate(tenantDetail.OpenIdConnectTokenEndpoint, UriKind.Absolute, out var tokenEndpoint) ||
+                            (tokenEndpoint.Scheme != Uri.UriSchemeHttps && !builder.Environment.IsDevelopment()))
+                        {
+                            if (builder.Environment.IsDevelopment())
+                            {
+                                System.Diagnostics.Debug.WriteLine($"[ConfigurePerTenant] Invalid TokenEndpoint for tenant {tenantInfo.Id}");
+                            }
+                        }
+                    }
+
+                    // JwksUri の URI 形式を検証（オプショナル）
+                    if (!string.IsNullOrEmpty(tenantDetail.OpenIdConnectJwksUri))
+                    {
+                        if (!Uri.TryCreate(tenantDetail.OpenIdConnectJwksUri, UriKind.Absolute, out var jwksUri) ||
+                            (jwksUri.Scheme != Uri.UriSchemeHttps && !builder.Environment.IsDevelopment()))
+                        {
+                            if (builder.Environment.IsDevelopment())
+                            {
+                                System.Diagnostics.Debug.WriteLine($"[ConfigurePerTenant] Invalid JwksUri for tenant {tenantInfo.Id}");
+                            }
+                        }
+                    }
+
+                    options.Configuration = new OpenIdConnectConfiguration
+                    {
+                        AuthorizationEndpoint = tenantDetail.OpenIdConnectAuthorizationEndpoint,
+                        TokenEndpoint = tenantDetail.OpenIdConnectTokenEndpoint,
+                        JwksUri = tenantDetail.OpenIdConnectJwksUri,
+                        EndSessionEndpoint = tenantDetail.OpenIdConnectEndSessionEndpoint,
+                        Issuer = tenantDetail.OpenIdConnectAuthority
+                    };
+
+                    // TokenValidationParameters を設定
+                    options.TokenValidationParameters.ValidIssuer = tenantDetail.OpenIdConnectAuthority;
+                    options.TokenValidationParameters.ValidateIssuer = true;
+                    options.TokenValidationParameters.ValidAudience = tenantDetail.OpenIdConnectClientId;
+                    options.TokenValidationParameters.ValidateAudience = true;
+
+                    // ConfigurationManager を設定（JWKS 取得用）
+                    if (!string.IsNullOrEmpty(tenantDetail.OpenIdConnectMetadataAddress))
+                    {
+                        // MetadataAddress が有効な URI かを検証
+                        if (Uri.TryCreate(tenantDetail.OpenIdConnectMetadataAddress, UriKind.Absolute, out var metadataUri) &&
+                            (metadataUri.Scheme == Uri.UriSchemeHttp || metadataUri.Scheme == Uri.UriSchemeHttps))
+                        {
+                            var httpDocumentRetriever = new HttpDocumentRetriever
+                            {
+                                RequireHttps = !builder.Environment.IsDevelopment()
+                            };
+
+                            options.ConfigurationManager = new ConfigurationManager<OpenIdConnectConfiguration>(
+                                tenantDetail.OpenIdConnectMetadataAddress,
+                                new OpenIdConnectConfigurationRetriever(),
+                                httpDocumentRetriever);
+                        }
+                        else
+                        {
+                            // MetadataAddress が無効な形式：テナントID以外の機密情報は記録しない
+                            if (builder.Environment.IsDevelopment())
+                            {
+                                System.Diagnostics.Debug.WriteLine($"[ConfigurePerTenant] Invalid MetadataAddress for tenant {tenantInfo.Id}");
+                            }
+                        }
+                    }
+
+                    // ClientSecret を復号化して設定
+                    if (!string.IsNullOrEmpty(tenantDetail.TenantEncryptionKey) &&
+                        !string.IsNullOrEmpty(tenantDetail.OpenIdConnectClientSecret))
+                    {
+                        try
+                        {
+                            var decryptedSecret = masterEncryptionForOidc.DecryptWithTenantKey(
+                                tenantDetail.TenantEncryptionKey,
+                                tenantDetail.OpenIdConnectClientSecret);
+
+                            if (!string.IsNullOrEmpty(decryptedSecret))
+                            {
+                                options.ClientSecret = decryptedSecret;
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            // 復号化失敗時は、ClientSecret を設定しない（デフォルトでOAuth接続時にエラーが発生）
+                            if (builder.Environment.IsDevelopment())
+                            {
+                                System.Diagnostics.Debug.WriteLine($"[ConfigurePerTenant] ClientSecret decryption failed for tenant {tenantInfo.Id}: {ex.GetType().Name}");
+                            }
+                        }
+                    }
+                    else if (!string.IsNullOrEmpty(tenantDetail.TenantEncryptionKey) || !string.IsNullOrEmpty(tenantDetail.OpenIdConnectClientSecret))
+                    {
+                        // 暗号化キーまたはClientSecretのどちらか一方のみが設定されている（不完全な設定）
+                        if (builder.Environment.IsDevelopment())
+                        {
+                            System.Diagnostics.Debug.WriteLine($"[ConfigurePerTenant] Incomplete ClientSecret configuration for tenant {tenantInfo.Id}");
+                        }
+                    }
+                }
+                else
+                {
+                    // 外部 OIDC が指定されていない場合は Google デフォルト設定
+                    var googleConfig = builder.Configuration.GetSection("OpenIdConnect:Providers:Google");
+                    var googleAuthority = googleConfig["Authority"] ?? "https://accounts.google.com";
+                    var googleClientId = builder.Configuration["Google:ClientId"];
+                    var googleClientSecret = builder.Configuration["Google:ClientSecret"];
+
+                    // Google エンドポイントを appsettings.json から取得（デフォルト値付き）
+                    var googleAuthorizationEndpoint = googleConfig["AuthorizationEndpoint"] ?? "https://accounts.google.com/o/oauth2/v2/auth";
+                    var googleTokenEndpoint = googleConfig["TokenEndpoint"] ?? "https://oauth2.googleapis.com/token";
+                    var googleJwksUri = googleConfig["JwksUri"] ?? "https://www.googleapis.com/oauth2/v3/certs";
+
+                    if (!string.IsNullOrEmpty(googleClientId))
+                    {
+                        // Google の OIDC 設定
+                        options.Authority = googleAuthority;
+                        options.ClientId = googleClientId;
+
+                        // ClientSecret が設定されている場合のみ設定
+                        if (!string.IsNullOrEmpty(googleClientSecret))
+                        {
+                            options.ClientSecret = googleClientSecret;
+                        }
+
+                        options.Configuration = new OpenIdConnectConfiguration
+                        {
+                            AuthorizationEndpoint = googleAuthorizationEndpoint,
+                            TokenEndpoint = googleTokenEndpoint,
+                            JwksUri = googleJwksUri,
+                            Issuer = googleAuthority
+                        };
+
+                        // TokenValidationParameters を設定
+                        options.TokenValidationParameters.ValidIssuer = googleAuthority;
+                        options.TokenValidationParameters.ValidateIssuer = true;
+                        options.TokenValidationParameters.ValidAudience = googleClientId;
+                        options.TokenValidationParameters.ValidateAudience = true;
+                    }
+                    else
+                    {
+                        // テナント OIDC もGoogle設定もない場合
+                        if (builder.Environment.IsDevelopment())
+                        {
+                            System.Diagnostics.Debug.WriteLine($"[ConfigurePerTenant] Warning: No OIDC provider configured for tenant {tenantInfo.Id}");
+                        }
+
+                        // 設定がない場合は空文字列を設定（OnRedirectToIdentityProvider で適切に処理される）
+                        options.Authority = string.Empty;
+                        options.ClientId = string.Empty;
+                        options.ClientSecret = string.Empty;
+                    }
+                }
+            });
 
         // マイグレーションサービスを登録
         builder.Services.AddScoped<MigrationService>();
@@ -192,11 +573,16 @@ public class Program
         {
             options.AddPolicy("development", policy =>
             {
+                var developmentOrigins = builder.Configuration
+                    .GetSection("Cors:DevelopmentOrigins")
+                    .Get<string[]>() ?? new[] { "http://localhost:5173", "http://localhost:3000", "http://localhost" };
+
                 policy
-                    .WithOrigins("http://localhost:5173", "http://localhost:3000", "http://localhost")
+                    .WithOrigins(developmentOrigins)
                     .AllowAnyMethod()
                     .AllowAnyHeader()
-                    .AllowCredentials(); // クッキーを含む場合に必須
+                    .AllowCredentials() // SameSite=None との組み合わせに注意
+                    .SetIsOriginAllowed(origin => true); // 開発環境では許容
             });
 
             options.AddPolicy("production", policy =>
@@ -209,18 +595,33 @@ public class Program
                 {
                     policy
                         .WithOrigins(allowedOrigins)
+                        .WithMethods("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH") // 明示的にメソッドを指定
+                        .WithHeaders("Content-Type", "Authorization") // 明示的にヘッダーを指定
+                        .AllowCredentials()
+                        .SetIsOriginAllowedToAllowWildcardSubdomains();
+                }
+                else
+                {
+                    // 本番環境で AllowedOrigins が設定されていない場合は警告
+                    policy
+                        .WithOrigins() // デフォルトでは何も許可しない
                         .AllowAnyMethod()
-                        .AllowAnyHeader()
-                        .AllowCredentials();
+                        .AllowAnyHeader();
                 }
             });
         });
 
-        // ファイルアップロードのサイズ制限（デフォルト: 30MB）
+        // ファイルアップロードのサイズ制限
+        var maxFileSize = builder.Configuration.GetValue<long>("FileUpload:MaxFileSize", 31457280); // 30MB default
         builder.Services.Configure<FormOptions>(options =>
         {
-            options.ValueLengthLimit = int.MaxValue;
-            options.MultipartBodyLengthLimit = 31457280; // 30MB
+            // ValueLengthLimit：フォーム値（テキストフィールド）の最大長を制限
+            // アップロード最大値の1/10程度に制限（爆弾攻撃の防止）
+            options.ValueLengthLimit = (int)Math.Min(maxFileSize / 10, int.MaxValue);
+            // MultipartBodyLengthLimit：マルチパート本体全体のサイズ制限
+            options.MultipartBodyLengthLimit = maxFileSize;
+            // KeyLengthLimit：フォームキーの最大長
+            options.KeyLengthLimit = 2048;
         });
 
         builder.Services.AddScoped(typeof(IBaseRepository<>), typeof(BaseRepository<>));
@@ -284,6 +685,73 @@ public class Program
 
         app.UseRouting();
 
+        if (app.Environment.IsDevelopment())
+        {
+            app.Use(async (context, next) =>
+            {
+                if (context.Request.Path.Value?.EndsWith("/auth/me", StringComparison.OrdinalIgnoreCase) == true)
+                {
+                    var cookieHeader = context.Request.Headers["Cookie"].ToString();
+                    var hasAuthCookie = context.Request.Cookies.ContainsKey(
+                        builder.Configuration["Authentication:CookieName"] ?? ".TreeTopic.Auth");
+                    bool? ticketUnprotectOk = null;
+                    string? ticketAuthType = null;
+                    int? ticketClaimCount = null;
+                    if (hasAuthCookie)
+                    {
+                        var cookieName = builder.Configuration["Authentication:CookieName"] ?? ".TreeTopic.Auth";
+                        var cookieValue = context.Request.Cookies[cookieName];
+                        var optionsMonitor = context.RequestServices.GetRequiredService<IOptionsMonitor<CookieAuthenticationOptions>>();
+                        var cookieOptions = optionsMonitor.Get(CookieAuthenticationDefaults.AuthenticationScheme);
+                        var ticket = cookieOptions.TicketDataFormat.Unprotect(cookieValue);
+                        ticketUnprotectOk = ticket != null;
+                        ticketAuthType = ticket?.Principal?.Identity?.AuthenticationType;
+                        ticketClaimCount = ticket?.Principal?.Claims?.Count();
+                    }
+                    var logger = context.RequestServices.GetRequiredService<ILogger<Program>>();
+                    logger.LogInformation(
+                        "[AuthMe] CookieHeaderLength={Length}, HasAuthCookie={HasAuthCookie}, TicketUnprotectOk={TicketUnprotectOk}, TicketAuthType={TicketAuthType}, TicketClaimCount={TicketClaimCount}",
+                        cookieHeader.Length, hasAuthCookie, ticketUnprotectOk, ticketAuthType, ticketClaimCount);
+                }
+                await next();
+            });
+        }
+
+        // Cleanup legacy chunked auth cookies so the new single cookie is used.
+        app.Use(async (context, next) =>
+        {
+            var baseCookieName = builder.Configuration["Authentication:CookieName"] ?? ".TreeTopic.Auth";
+            if (context.Request.Cookies.TryGetValue(baseCookieName, out var baseValue) &&
+                baseValue.StartsWith("chunks-", StringComparison.OrdinalIgnoreCase))
+            {
+                context.Response.Cookies.Delete(baseCookieName, new CookieOptions
+                {
+                    Path = "/",
+                    Secure = true,
+                    SameSite = SameSiteMode.None
+                });
+            }
+
+            for (var i = 1; i <= 5; i++)
+            {
+                var chunkName = $"{baseCookieName}C{i}";
+                if (context.Request.Cookies.ContainsKey(chunkName))
+                {
+                    context.Response.Cookies.Delete(chunkName, new CookieOptions
+                    {
+                        Path = "/",
+                        Secure = true,
+                        SameSite = SameSiteMode.None
+                    });
+                }
+            }
+
+            await next();
+        });
+
+        // マルチテナントコンテキストを解決（UseAuthenticationより前に実行）
+        app.UseMultiTenant();
+
         // CORS ミドルウェアを使用
         var corsPolicy = app.Environment.IsDevelopment() ? "development" : "production";
         app.UseCors(corsPolicy);
@@ -299,27 +767,9 @@ public class Program
         app.UseDefaultFiles();
         app.UseStaticFiles();
 
-        static bool IsApiPath(PathString path)
-        {
-            var value = path.Value ?? string.Empty;
-            if (value.StartsWith("/api", StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
-
-            var trimmed = value.Trim('/');
-            if (trimmed.Length == 0)
-            {
-                return false;
-            }
-
-            var segments = trimmed.Split('/', StringSplitOptions.RemoveEmptyEntries);
-            return segments.Length >= 2 && string.Equals(segments[1], "api", StringComparison.OrdinalIgnoreCase);
-        }
-
         app.MapFallback(async context =>
         {
-            if (IsApiPath(context.Request.Path))
+            if (AuthenticationConstants.Paths.IsApiPath(context.Request.Path.Value))
             {
                 context.Response.StatusCode = StatusCodes.Status404NotFound;
                 return;

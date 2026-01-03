@@ -16,7 +16,7 @@
   import MaterialList from '$lib/components/files/MaterialList.svelte';
   import FileUploadModal from '$lib/components/files/FileUploadModal.svelte';
   import { ui } from '$lib/stores/ui';
-  import { api } from '$lib/api/client';
+  import { api, getCurrentTenant } from '$lib/api/client';
 
   let isLoading = $state(true);
   let loadError = $state<string | null>(null);
@@ -47,7 +47,7 @@
     loadError = null;
 
     try {
-      const tenant = api.getCurrentTenant();
+      const tenant = getCurrentTenant();
       await auth.fetchCurrentUser(tenant);
 
       const response = await api.get<any[]>(`/${tenant}/api/Room`);
@@ -157,7 +157,7 @@
       <button
         class="button button-secondary"
         on:click={() => {
-          const tenant = api.getCurrentTenant();
+          const tenant = getCurrentTenant();
           window.location.href = `/${tenant}/login`;
         }}
       >

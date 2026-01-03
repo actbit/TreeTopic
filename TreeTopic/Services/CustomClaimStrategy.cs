@@ -1,6 +1,7 @@
 ﻿using Finbuckle.MultiTenant.Abstractions;
 using Finbuckle.MultiTenant;
 using System.Security.Claims;
+using TreeTopic.Constants;
 
 namespace TreeTopic.Services;
 
@@ -26,22 +27,78 @@ public class CustomClaimStrategy : IMultiTenantStrategy
             return null;
         }
 
-        // OIDC コールバックパスではスキップ（tenant 解決を行わない）
-        if (httpContext.Request.Path.StartsWithSegments("/auth/signin-oidc"))
+        // 静的ファイルは tenant 解決をスキップ
+        if (AuthenticationConstants.StaticFilePaths.IsStaticFile(httpContext.Request.Path.Value ?? string.Empty))
         {
-            _logger.LogInformation("[CustomClaimStrategy] Skipping tenant resolution for /auth/signin-oidc");
+            _logger.LogDebug("[CustomClaimStrategy] Skipping tenant resolution for static file");
             return null;
         }
 
-        // それ以外のパスでは claim から tenant を取得
-        var tenantId = httpContext.User?.FindFirst(_claimType)?.Value;
+        // OIDC コールバックパスでは query から tenant を解決する（per-tenant 認証設定のため）
+        if (httpContext.Request.Path.StartsWithSegments(AuthenticationConstants.Paths.OidcCallbackPath))
+        {
+            var tenantFromQuery = httpContext.Request.Query[AuthenticationConstants.TenantClaimType].ToString();
+            if (!string.IsNullOrWhiteSpace(tenantFromQuery))
+            {
+                _logger.LogInformation("[CustomClaimStrategy] Tenant resolved from query on OIDC callback: {TenantId}", tenantFromQuery);
+                return tenantFromQuery;
+            }
 
+            _logger.LogInformation("[CustomClaimStrategy] OIDC callback without tenant query. Skipping tenant resolution.");
+            return null;
+        }
+
+        // 1. Claim から tenant を取得（認証済みユーザーの場合）
+        var tenantId = httpContext.User?.FindFirst(_claimType)?.Value;
         if (!string.IsNullOrEmpty(tenantId))
         {
             _logger.LogInformation("[CustomClaimStrategy] Tenant resolved from claim: {TenantId}", tenantId);
+            return tenantId;
         }
 
-        return tenantId;
+        // 2. Route parameter から tenant を取得
+        try
+        {
+            var tenantFromRoute = httpContext.GetRouteValue(_claimType)?.ToString();
+            if (!string.IsNullOrEmpty(tenantFromRoute))
+            {
+                _logger.LogInformation("[CustomClaimStrategy] Tenant resolved from route (fallback): {TenantId}", tenantFromRoute);
+                return tenantFromRoute;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[CustomClaimStrategy] Error resolving tenant from route");
+        }
+
+        // 3. URL パスから直接 tenant を抽出（フォールバック）
+        try
+        {
+            var pathValue = httpContext.Request?.Path.Value;
+            if (!string.IsNullOrEmpty(pathValue))
+            {
+                var segments = pathValue.Trim('/').Split('/', StringSplitOptions.RemoveEmptyEntries);
+                if (segments.Length > 0)
+                {
+                    var firstSegment = segments[0];
+                    // tenant IDは英数字とハイフン、アンダースコアのみを許可
+                    if (!string.IsNullOrWhiteSpace(firstSegment) &&
+                        !string.Equals(firstSegment, "_app", StringComparison.OrdinalIgnoreCase) &&
+                        firstSegment.All(c => char.IsLetterOrDigit(c) || c == '-' || c == '_'))
+                    {
+                        _logger.LogInformation("[CustomClaimStrategy] Tenant resolved from path (fallback): {TenantId}", firstSegment);
+                        return firstSegment;
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[CustomClaimStrategy] Error resolving tenant from path");
+        }
+
+        _logger.LogDebug("[CustomClaimStrategy] No tenant identifier found");
+        return null;
     }
 }
 

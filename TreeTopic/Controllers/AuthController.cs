@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
 using Finbuckle.MultiTenant;
 using TreeTopic.Models;
+using TreeTopic.Constants;
 
 namespace TreeTopic.Controllers;
 
@@ -101,9 +102,9 @@ public class AuthController : ControllerBase
     [HttpGet("me")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    [Authorize]
     public async Task<IActionResult> GetCurrentUser()
     {
+        var cs = User.Claims;
         if (!User.Identity?.IsAuthenticated ?? true)
         {
             return Unauthorized();
@@ -118,6 +119,7 @@ public class AuthController : ControllerBase
         string? userName = null;
         if (!string.IsNullOrEmpty(userId))
         {
+            var list = _userManager.Users;
             var user = await _userManager.FindByIdAsync(userId);
             userName = user?.DisplayName ?? user?.UserName;
         }

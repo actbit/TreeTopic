@@ -3,7 +3,6 @@ using Finbuckle.MultiTenant;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
 using TreeTopic.Models;
 using TreeTopic.Services;
 
@@ -75,14 +74,9 @@ namespace TreeTopic.Extensions
             if (string.IsNullOrEmpty(tenantDetail.ConnectionString))
                 throw new InvalidOperationException($"Tenant '{tenant.Identifier}' has no connection string.");
 
-            // 1. マスターキーで テナント用キーを復号
-            var decryptedTenantKey = masterEncryption.Decrypt(tenantDetail.TenantEncryptionKey);
-
-            // 2. テナント用キーで ConnectionString を復号
-            var loggerFactory = LoggerFactory.Create(builder => builder.AddConsole());
-            var logger = loggerFactory.CreateLogger<EncryptionService>();
-            var tenantEncryption = new EncryptionService(decryptedTenantKey, logger);
-            return tenantEncryption.Decrypt(tenantDetail.ConnectionString);
+            return masterEncryption.DecryptWithTenantKey(
+                tenantDetail.TenantEncryptionKey,
+                tenantDetail.ConnectionString);
         }
     }
 }
