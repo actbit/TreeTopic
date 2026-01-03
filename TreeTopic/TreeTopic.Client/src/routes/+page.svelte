@@ -2,40 +2,33 @@
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
   import { onMount } from 'svelte';
-  import { getAllPublicTenants } from '$lib/api/tenants';
-  import type { PublicTenantInfo } from '$lib/api/tenants';
+  import type { PageData } from './$types';
+  import AuthShell from '$lib/components/layout/AuthShell.svelte';
 
-  let tenants: PublicTenantInfo[] = [];
-  let selectedTenant: string | null = null;
-  let isLoading = true;
-  let error: string | null = null;
+  export let data: PageData;
 
-  onMount(async () => {
+  const tenants = data.tenants ?? [];
+  const loadError = data.error;
+
+  let selectedTenant = '';
+  let isNavigating = false;
+
+  onMount(() => {
     const url = new URL($page.url.toString());
     if (url.searchParams.has('room')) {
       url.searchParams.delete('room');
-      await goto(url, { replaceState: true, keepFocus: true, noScroll: true });
-    }
-    try {
-      console.log('Loading tenants...');
-      tenants = await getAllPublicTenants();
-      console.log('Tenants loaded:', tenants);
-      isLoading = false;
-      if (tenants.length === 0) {
-        error = 'No tenants available';
-        console.warn('No tenants returned from API');
-      }
-    } catch (err) {
-      isLoading = false;
-      error = 'Failed to load tenants';
-      console.error('Error loading tenants:', err);
+      goto(url, { replaceState: true, keepFocus: true, noScroll: true });
     }
   });
 
-  function handleSelectTenant() {
-    if (selectedTenant) {
-      goto(`/${selectedTenant}/login`);
-    }
+  async function handleSelectTenant() {
+    if (!selectedTenant || isNavigating) return;
+    isNavigating = true;
+    await goto(`/${selectedTenant}/login`, {
+      keepFocus: true,
+      noScroll: true,
+    });
+    isNavigating = false;
   }
 </script>
 
@@ -43,212 +36,45 @@
   <title>Select Workspace - TreeTopic</title>
 </svelte:head>
 
-<div class="workspace-container">
-  <div class="workspace-card-wrapper">
-    <div class="workspace-card">
-      <div class="logo-section">
-        <h1>TreeTopic</h1>
-        <p>Collaborative discussion platform</p>
-      </div>
+<AuthShell
+  title="TreeTopic"
+  subtitle="Collaborative discussion platform"
+  description="Choose your workspace to continue."
+>
+  {#if loadError}
+    <div class="message message-error">{loadError}</div>
+  {/if}
 
-      <div class="welcome-section">
-        <h2>Select workspace</h2>
-        <p>Choose your workspace to continue</p>
-      </div>
-
-      {#if isLoading}
-        <div class="status-message">
-          <p>Loading workspaces...</p>
-        </div>
-      {:else if error}
-        <div class="status-message error">
-          <p>{error}</p>
-        </div>
-      {:else if tenants.length > 0}
-        <div class="form-section">
-          <label>
-            <span class="label-text">Workspace</span>
-            <select bind:value={selectedTenant}>
-              <option value={null}>-- Select a workspace --</option>
-              {#each tenants as tenant (tenant.identifier)}
-                <option value={tenant.identifier}>{tenant.name}</option>
-              {/each}
-            </select>
-          </label>
-
-          <button
-            on:click={handleSelectTenant}
-            disabled={!selectedTenant}
-            class="continue-button"
-          >
-            Continue
-          </button>
-        </div>
+  {#if tenants.length === 0}
+    <div class="message message-info text-center">
+      {#if !loadError}
+        No workspaces available right now.
       {:else}
-        <div class="status-message">
-          <p>No workspaces available</p>
-        </div>
+        Unable to load workspaces.
       {/if}
-
-      <div class="footer-section">
-        <p>Secured by OIDC authentication</p>
-      </div>
     </div>
+  {:else}
+    <label class="form-group">
+      <span class="form-label">Workspace</span>
+      <select class="form-input" bind:value={selectedTenant}>
+        <option value="">-- Select a workspace --</option>
+        {#each tenants as tenant (tenant.identifier)}
+          <option value={tenant.identifier}>{tenant.name}</option>
+        {/each}
+      </select>
+    </label>
+  {/if}
 
-    <div class="copyright">
-      <p>&copy; 2025 TreeTopic. All rights reserved.</p>
-    </div>
+  <div class="auth-card__actions">
+    <button
+      type="button"
+      class="button button-primary"
+      on:click={handleSelectTenant}
+      disabled={!selectedTenant || tenants.length === 0 || isNavigating}
+    >
+      Continue
+    </button>
   </div>
-</div>
 
-<style>
-  .workspace-container {
-    min-height: 100vh;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: var(--spacing-lg);
-    background-color: #f9fafb;
-  }
-
-  .workspace-card-wrapper {
-    width: 100%;
-    max-width: 400px;
-  }
-
-  .workspace-card {
-    background-color: var(--color-background);
-    border-radius: var(--border-radius-lg);
-    border: 1px solid var(--color-border);
-    box-shadow: var(--shadow-lg);
-    padding: 64px;
-  }
-
-  .logo-section {
-    text-align: center;
-    margin-bottom: 64px;
-  }
-
-  .logo-section h1 {
-    font-size: var(--font-size-2xl);
-    font-weight: 700;
-    color: var(--color-primary);
-    margin-bottom: 24px;
-  }
-
-  .logo-section p {
-    font-size: var(--font-size-base);
-    color: var(--color-text-light);
-  }
-
-  .welcome-section {
-    text-align: center;
-    margin-bottom: 48px;
-  }
-
-  .welcome-section h2 {
-    font-size: var(--font-size-xl);
-    font-weight: 600;
-    color: var(--color-text);
-    margin-bottom: 20px;
-  }
-
-  .welcome-section p {
-    font-size: var(--font-size-base);
-    color: var(--color-text-light);
-  }
-
-  .status-message {
-    text-align: center;
-    padding: 40px 0;
-  }
-
-  .status-message p {
-    font-size: var(--font-size-base);
-    color: var(--color-text-light);
-  }
-
-  .status-message.error p {
-    color: var(--color-error);
-  }
-
-  .form-section {
-    display: flex;
-    flex-direction: column;
-    gap: 24px;
-  }
-
-  .form-section label {
-    display: block;
-  }
-
-  .label-text {
-    display: block;
-    font-size: var(--font-size-sm);
-    font-weight: 600;
-    color: var(--color-text);
-    margin-bottom: 16px;
-  }
-
-  select {
-    width: 100%;
-    padding: 12px 16px;
-    border: 1px solid var(--color-border);
-    border-radius: var(--border-radius-lg);
-    background-color: var(--color-background);
-    color: var(--color-text);
-    font-size: var(--font-size-sm);
-    transition: all 0.2s ease;
-  }
-
-  select:focus {
-    outline: none;
-    border-color: var(--color-primary);
-    box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.1);
-  }
-
-  .continue-button {
-    width: 100%;
-    padding: 12px 20px;
-    background-color: var(--color-primary);
-    color: var(--color-text-inverse);
-    font-weight: 600;
-    border-radius: var(--border-radius-lg);
-    border: none;
-    cursor: pointer;
-    font-size: var(--font-size-sm);
-    transition: all 0.2s ease;
-  }
-
-  .continue-button:hover:not(:disabled) {
-    background-color: var(--color-primary-hover);
-  }
-
-  .continue-button:disabled {
-    background-color: #d1d5db;
-    cursor: not-allowed;
-    opacity: 0.6;
-  }
-
-  .footer-section {
-    margin-top: 48px;
-    padding-top: 40px;
-    border-top: 1px solid var(--color-border);
-  }
-
-  .footer-section p {
-    text-align: center;
-    font-size: var(--font-size-sm);
-    color: var(--color-text-light);
-  }
-
-  .copyright {
-    margin-top: 40px;
-    text-align: center;
-  }
-
-  .copyright p {
-    font-size: var(--font-size-sm);
-    color: var(--color-text-light);
-  }
-</style>
+  <span slot="footer">&copy; 2025 TreeTopic. Secured by OIDC authentication.</span>
+</AuthShell>

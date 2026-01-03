@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { ui } from '$lib/stores';
+  import { sidebarCollapsed } from '$lib/stores/ui';
   import { currentUser } from '$lib/stores/auth';
 
   interface Props {
@@ -14,12 +14,21 @@
   <div class="flex items-center header-left">
     {#if onMenuToggle}
       <button
+        type="button"
         on:click={onMenuToggle}
-        class="button clickable menu-toggle-button"
-        aria-label="Toggle menu"
-        title="Toggle sidebar"
+        class="menu-toggle-button"
+        aria-label={$sidebarCollapsed ? 'Open navigation menu' : 'Close navigation menu'}
+        aria-expanded={!$sidebarCollapsed}
+        title="Toggle navigation"
       >
-        ☰
+        <span class="menu-toggle-icon" aria-hidden="true">
+          <span></span>
+          <span></span>
+          <span></span>
+        </span>
+        <span class="sr-only">
+          {$sidebarCollapsed ? 'Open sidebar navigation' : 'Close sidebar navigation'}
+        </span>
       </button>
     {/if}
 
@@ -74,13 +83,37 @@
   }
 
   .menu-toggle-button {
-    padding: var(--spacing-sm);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    border-radius: var(--border-radius-full);
+    border: 1px solid transparent;
     background-color: transparent;
-    border: none;
+    cursor: pointer;
+    transition: background-color 0.2s ease, border-color 0.2s ease;
   }
 
-  .menu-toggle-button:hover {
+  .menu-toggle-button:hover,
+  .menu-toggle-button:focus-visible {
     background-color: var(--color-surface);
+    border-color: var(--color-border);
+  }
+
+  .menu-toggle-icon {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+  }
+
+  .menu-toggle-icon span {
+    width: 22px;
+    height: 2px;
+    border-radius: 999px;
+    background-color: var(--color-text);
+    display: block;
   }
 
   .header-logo {
@@ -89,6 +122,17 @@
 
   .header-right {
     gap: var(--spacing-xl);
+  }
+
+  @media (max-width: 768px) {
+    .app-header {
+      padding-left: var(--spacing-md);
+      padding-right: var(--spacing-md);
+    }
+
+    .header-right {
+      gap: var(--spacing-sm);
+    }
   }
 
   .header-content {
