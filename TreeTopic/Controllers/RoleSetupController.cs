@@ -49,7 +49,7 @@ public class RoleSetupController : ControllerBase
 
         if (result.IsFailure)
         {
-            return result.ToActionResult();
+            return result.ToApiResult();
         }
 
         return NoContent();
@@ -94,7 +94,7 @@ public class RoleSetupController : ControllerBase
 
         if (result.IsFailure)
         {
-            return result.ToActionResult();
+            return result.ToApiResult();
         }
 
         return NoContent();

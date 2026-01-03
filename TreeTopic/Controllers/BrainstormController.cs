@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using TreeTopic.Common;
 using TreeTopic.Dtos;
 using TreeTopic.Services;
 using System.Security.Claims;
@@ -27,21 +28,21 @@ public class BrainstormController : ControllerBase
     public async Task<IActionResult> GetAllBoards(CancellationToken cancellationToken)
     {
         var result = await _brainstormManagementService.GetAllBoardsAsync(cancellationToken);
-        return HandleResult(result);
+        return result.ToApiResult();
     }
 
     [HttpGet("topic/{topicId}")]
     public async Task<IActionResult> GetBoardsByTopic([FromRoute] MaskedGuid topicId, CancellationToken cancellationToken)
     {
         var result = await _brainstormManagementService.GetBoardsByTopicAsync((Guid)topicId, cancellationToken);
-        return HandleResult(result);
+        return result.ToApiResult();
     }
 
     [HttpGet("{boardId}")]
     public async Task<IActionResult> GetBoardById([FromRoute] MaskedGuid boardId, CancellationToken cancellationToken)
     {
         var result = await _brainstormManagementService.GetBoardByIdAsync((Guid)boardId, cancellationToken);
-        return HandleResult(result);
+        return result.ToApiResult();
     }
 
     [HttpPost]
@@ -51,7 +52,7 @@ public class BrainstormController : ControllerBase
             return ValidationProblem(ModelState);
 
         var result = await _brainstormManagementService.CreateBoardAsync(request, cancellationToken);
-        return HandleResult(result);
+        return result.ToApiResult();
     }
 
     [HttpPut("{boardId}")]
@@ -61,14 +62,14 @@ public class BrainstormController : ControllerBase
             return ValidationProblem(ModelState);
 
         var result = await _brainstormManagementService.UpdateBoardAsync((Guid)boardId, request, cancellationToken);
-        return HandleResult(result);
+        return result.ToApiResult();
     }
 
     [HttpDelete("{boardId}")]
     public async Task<IActionResult> DeleteBoard([FromRoute] MaskedGuid boardId, CancellationToken cancellationToken)
     {
         var result = await _brainstormManagementService.DeleteBoardAsync((Guid)boardId, cancellationToken);
-        return HandleResult(result);
+        return result.ToApiResult();
     }
 
     // Idea endpoints
@@ -76,14 +77,14 @@ public class BrainstormController : ControllerBase
     public async Task<IActionResult> GetIdeasByBoard([FromRoute] MaskedGuid boardId, CancellationToken cancellationToken)
     {
         var result = await _brainstormManagementService.GetIdeasByBoardAsync((Guid)boardId, cancellationToken);
-        return HandleResult(result);
+        return result.ToApiResult();
     }
 
     [HttpGet("ideas/{ideaId}")]
     public async Task<IActionResult> GetIdeaById([FromRoute] MaskedGuid ideaId, CancellationToken cancellationToken)
     {
         var result = await _brainstormManagementService.GetIdeaByIdAsync((Guid)ideaId, cancellationToken);
-        return HandleResult(result);
+        return result.ToApiResult();
     }
 
     [HttpPatch("{boardId}/ideas/{ideaId}")]
@@ -93,14 +94,14 @@ public class BrainstormController : ControllerBase
             return ValidationProblem(ModelState);
 
         var result = await _brainstormManagementService.UpdateIdeaPositionAsync((Guid)ideaId, request, cancellationToken);
-        return HandleResult(result);
+        return result.ToApiResult();
     }
 
     [HttpDelete("{boardId}/ideas/{ideaId}")]
     public async Task<IActionResult> DeleteIdea([FromRoute] MaskedGuid boardId, [FromRoute] MaskedGuid ideaId, CancellationToken cancellationToken)
     {
         var result = await _brainstormManagementService.DeleteIdeaAsync((Guid)ideaId, cancellationToken);
-        return HandleResult(result);
+        return result.ToApiResult();
     }
 
     // Vote endpoints
@@ -111,36 +112,21 @@ public class BrainstormController : ControllerBase
             return ValidationProblem(ModelState);
 
         var result = await _brainstormManagementService.AddVoteAsync((Guid)boardId, (Guid)ideaId, request, CurrentUserId, cancellationToken);
-        return HandleResult(result);
+        return result.ToApiResult();
     }
 
     [HttpDelete("{boardId}/ideas/{ideaId}/votes/{voteId}")]
     public async Task<IActionResult> RemoveVote([FromRoute] MaskedGuid boardId, [FromRoute] MaskedGuid ideaId, [FromRoute] MaskedGuid voteId, CancellationToken cancellationToken)
     {
         var result = await _brainstormManagementService.RemoveVoteAsync((Guid)boardId, (Guid)ideaId, (Guid)voteId, CurrentUserId, cancellationToken);
-        return HandleResult(result);
+        return result.ToApiResult();
     }
 
     [HttpGet("{boardId}/ideas/{ideaId}/votes")]
     public async Task<IActionResult> GetVotesByIdea([FromRoute] MaskedGuid boardId, [FromRoute] MaskedGuid ideaId, CancellationToken cancellationToken)
     {
         var result = await _brainstormManagementService.GetVotesByIdeaAsync((Guid)ideaId, cancellationToken);
-        return HandleResult(result);
+        return result.ToApiResult();
     }
 
-    private IActionResult HandleResult<T>(Common.Result<T> result)
-    {
-        if (result.IsSuccess)
-            return StatusCode(result.StatusCode, result.Data);
-
-        return StatusCode(result.StatusCode, new { error = result.Error?.Message });
-    }
-
-    private IActionResult HandleResult(Common.Result result)
-    {
-        if (result.IsSuccess)
-            return StatusCode(result.StatusCode);
-
-        return StatusCode(result.StatusCode, new { error = result.Error?.Message });
-    }
 }

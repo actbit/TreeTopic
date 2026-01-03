@@ -93,7 +93,7 @@ public class PermissionsController : ControllerBase
 
         if (result.IsFailure)
         {
-            return result.ToActionResult();
+            return result.ToApiResult();
         }
 
         return NoContent();

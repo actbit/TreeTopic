@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using TreeTopic.Common;
 using TreeTopic.Dtos;
 using TreeTopic.Services;
 using MaskedUUID.AspNetCore.Types;
@@ -23,21 +24,21 @@ public class FileController : ControllerBase
     public async Task<IActionResult> GetAll(CancellationToken cancellationToken)
     {
         var result = await _fileManagementService.GetAllFilesAsync(cancellationToken);
-        return HandleResult(result);
+        return result.ToApiResult();
     }
 
     [HttpGet("message/{messageId}")]
     public async Task<IActionResult> GetByMessage([FromRoute] MaskedGuid messageId, CancellationToken cancellationToken)
     {
         var result = await _fileManagementService.GetFilesByMessageAsync((Guid)messageId, cancellationToken);
-        return HandleResult(result);
+        return result.ToApiResult();
     }
 
     [HttpGet("{fileId}")]
     public async Task<IActionResult> GetById([FromRoute] MaskedGuid fileId, CancellationToken cancellationToken)
     {
         var result = await _fileManagementService.GetFileByIdAsync((Guid)fileId, cancellationToken);
-        return HandleResult(result);
+        return result.ToApiResult();
     }
 
     [HttpPost]
@@ -47,7 +48,7 @@ public class FileController : ControllerBase
             return ValidationProblem(ModelState);
 
         var result = await _fileManagementService.CreateFileAsync(request, cancellationToken);
-        return HandleResult(result);
+        return result.ToApiResult();
     }
 
     [HttpPut("{fileId}")]
@@ -57,31 +58,16 @@ public class FileController : ControllerBase
             return ValidationProblem(ModelState);
 
         var result = await _fileManagementService.UpdateFileAsync((Guid)fileId, request, cancellationToken);
-        return HandleResult(result);
+        return result.ToApiResult();
     }
 
     [HttpDelete("{fileId}")]
     public async Task<IActionResult> Delete([FromRoute] MaskedGuid fileId, CancellationToken cancellationToken)
     {
         var result = await _fileManagementService.DeleteFileAsync(fileId, cancellationToken);
-        return HandleResult(result);
+        return result.ToApiResult();
     }
 
-    private IActionResult HandleResult<T>(Common.Result<T> result)
-    {
-        if (result.IsSuccess)
-            return StatusCode(result.StatusCode, result.Data);
-
-        return StatusCode(result.StatusCode, new { error = result.Error?.Message });
-    }
-
-    private IActionResult HandleResult(Common.Result result)
-    {
-        if (result.IsSuccess)
-            return StatusCode(result.StatusCode);
-
-        return StatusCode(result.StatusCode, new { error = result.Error?.Message });
-    }
 }
 
 
