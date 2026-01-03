@@ -1,7 +1,7 @@
 <script lang="ts">
   import MessageItem from './MessageItem.svelte';
   import LoadingSpinner from '../common/LoadingSpinner.svelte';
-  import { getMessagesByTopic, messagesLoading } from '$lib/stores/messages';
+  import { messageList, messagesLoading } from '$lib/stores/messages';
   import { selectedTopic } from '$lib/stores/topics';
 
   let messagesContainer: HTMLDivElement | undefined = $state();
@@ -9,7 +9,7 @@
 
   let topicMessages = $derived.by(() => {
     if (!$selectedTopic) return [];
-    return getMessagesByTopic($selectedTopic.id);
+    return $messageList.filter((m) => m.topicId === $selectedTopic.id);
   });
 
   let messagesWithImages = $derived.by(() => {

@@ -83,9 +83,6 @@ function createRoomsStore() {
         selectedRoomId: room?.id ?? null,
         error: null,
       }));
-      if (room) {
-        localStorage.setItem('selected_room', room.id);
-      }
     },
     /**
      * Add a new room
@@ -194,7 +191,6 @@ function createRoomsStore() {
         error: null,
         lastUpdated: null,
       });
-      localStorage.removeItem('selected_room');
     },
   };
 }

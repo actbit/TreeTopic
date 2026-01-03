@@ -417,6 +417,7 @@ export const api = {
   patch,
   delete: del,
   configureApiClient,
+  getCurrentTenant,
   setApiBaseUrl,
   getApiBaseUrl,
   checkApiHealth,

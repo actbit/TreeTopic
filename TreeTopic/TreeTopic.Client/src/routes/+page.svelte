@@ -1,5 +1,6 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
+  import { page } from '$app/stores';
   import { onMount } from 'svelte';
   import { getAllPublicTenants } from '$lib/api/tenants';
   import type { PublicTenantInfo } from '$lib/api/tenants';
@@ -10,6 +11,11 @@
   let error: string | null = null;
 
   onMount(async () => {
+    const url = new URL($page.url.toString());
+    if (url.searchParams.has('room')) {
+      url.searchParams.delete('room');
+      await goto(url, { replaceState: true, keepFocus: true, noScroll: true });
+    }
     try {
       console.log('Loading tenants...');
       tenants = await getAllPublicTenants();

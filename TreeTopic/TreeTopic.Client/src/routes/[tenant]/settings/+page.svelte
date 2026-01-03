@@ -22,7 +22,7 @@
   <AppLayout>
     <svelte:fragment slot="headerContent">
       <div class="flex items-center justify-between w-full">
-        <RoomSelector />
+        <RoomSelector navigateOnSelect={false} />
         <h1 class="text-xl font-bold text-text">Settings</h1>
         <div></div>
       </div>

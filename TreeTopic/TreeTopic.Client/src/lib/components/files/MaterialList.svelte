@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { files } from '$lib/stores/files';
+  import { fileList } from '$lib/stores/files';
   import { currentRoom } from '$lib/stores/rooms';
   import { formatFileSize } from '$lib/utils/validation';
   import { formatDate } from '$lib/utils/date';
@@ -13,11 +13,11 @@
 
   let filteredFiles = $derived.by(() => {
     if (!$currentRoom) return [];
-    return $files.filter((f) => f.roomId === $currentRoom?.id);
+    return $fileList.filter((f) => f.roomId === $currentRoom?.id);
   });
 
   let groupedByType = $derived.by(() => {
-    const groups: Record<string, typeof $files> = {
+    const groups: Record<string, typeof $fileList> = {
       documents: [],
       images: [],
       other: [],

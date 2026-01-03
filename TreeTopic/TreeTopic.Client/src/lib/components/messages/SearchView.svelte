@@ -1,6 +1,6 @@
 <script lang="ts">
   import MessageItem from './MessageItem.svelte';
-  import { getMessagesByTopic, messagesLoading } from '$lib/stores/messages';
+  import { messageList, messagesLoading } from '$lib/stores/messages';
   import { selectedTopic } from '$lib/stores/topics';
   import { ui } from '$lib/stores/ui';
 
@@ -9,7 +9,7 @@
 
   let topicMessages = $derived.by(() => {
     if (!$selectedTopic) return [];
-    return getMessagesByTopic($selectedTopic.id);
+    return $messageList.filter((m) => m.topicId === $selectedTopic.id);
   });
 
   let searchResults = $derived.by(() => {

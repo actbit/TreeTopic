@@ -1,13 +1,15 @@
 <script lang="ts">
   import MessageItem from './MessageItem.svelte';
   import LoadingSpinner from '../common/LoadingSpinner.svelte';
-  import { getMessagesByTopic, messagesLoading } from '$lib/stores/messages';
+  import { messageList, messagesLoading } from '$lib/stores/messages';
   import { selectedTopic } from '$lib/stores/topics';
   import { onMount } from 'svelte';
 
   let messagesContainer: HTMLDivElement | undefined = $state();
   let topicMessages = $derived.by(() => {
-    return $selectedTopic ? getMessagesByTopic($selectedTopic.id) : [];
+    return $selectedTopic
+      ? $messageList.filter((m) => m.topicId === $selectedTopic.id)
+      : [];
   });
 
   onMount(() => {

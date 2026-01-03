@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { topics, updateTopic, toggleTopicExpansion, selectedTopic } from '$lib/stores/topics';
+  import { topicList, updateTopic, toggleTopicExpansion, selectedTopic } from '$lib/stores/topics';
   import { ui } from '$lib/stores/ui';
   import type { TopicTreeNode } from '$lib/types/ui';
   import type { ModalConfig } from '$lib/types/ui';
@@ -23,7 +23,7 @@
   }
 
   function selectTopic() {
-    const topic = ($topics).find((t) => t.id === node.id);
+    const topic = $topicList.find((t) => t.id === node.id);
     if (topic) {
       // selectedTopic.set(topic);
     }

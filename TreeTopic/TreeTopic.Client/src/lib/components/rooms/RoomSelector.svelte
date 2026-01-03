@@ -4,8 +4,11 @@
   import { ui } from '$lib/stores/ui';
   import type { ModalConfig } from '$lib/types/ui';
   import { get } from 'svelte/store';
+  import { page } from '$app/stores';
+  import { goto } from '$app/navigation';
 
   let isOpen = $state(false);
+  let { navigateOnSelect = true }: { navigateOnSelect?: boolean } = $props();
 
   function openCreateModal() {
     const modal: ModalConfig = {
@@ -21,8 +24,20 @@
     const room = get(roomList).find((r) => r.id === roomId);
     if (room) {
       setCurrentRoom(room);
+      if (navigateOnSelect) {
+        syncRoomToUrl(room.id);
+      }
     }
     isOpen = false;
+  }
+
+  function syncRoomToUrl(roomId: string | null) {
+    const tenant = $page.params.tenant;
+    if (!tenant || !roomId) return;
+    const target = `/${tenant}/room/${roomId}`;
+    if ($page.url.pathname !== target) {
+      goto(target, { replaceState: false, keepFocus: true, noScroll: true });
+    }
   }
 
   function openRoomSettings(roomId: string, e: Event) {

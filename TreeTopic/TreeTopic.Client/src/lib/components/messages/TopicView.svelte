@@ -1,8 +1,8 @@
 <script lang="ts">
   import MessageItem from './MessageItem.svelte';
   import LoadingSpinner from '../common/LoadingSpinner.svelte';
-  import { messages, getMessagesByTopic, messagesLoading } from '$lib/stores/messages';
-  import { topics } from '$lib/stores/topics';
+  import { messages, messageList, messagesLoading } from '$lib/stores/messages';
+  import { topicList } from '$lib/stores/topics';
   import { currentRoom } from '$lib/stores/rooms';
 
   let messagesContainer: HTMLDivElement | undefined = $state();
@@ -10,14 +10,14 @@
 
   let roomTopics = $derived.by(() => {
     if (!$currentRoom) return [];
-    return $topics.filter((t) => t.roomId === $currentRoom?.id);
+    return $topicList.filter((t) => t.roomId === $currentRoom?.id);
   });
 
   let topicsWithMessages = $derived.by(() => {
     return roomTopics
       .map((topic) => ({
         topic,
-        messageCount: $messages.filter((m) => m.topicId === topic.id).length,
+        messageCount: $messageList.filter((m) => m.topicId === topic.id).length,
       }))
       .filter((item) => item.messageCount > 0)
       .sort((a, b) => b.messageCount - a.messageCount);
@@ -25,7 +25,7 @@
 
   let filteredMessages = $derived.by(() => {
     if (!selectedTopic) return [];
-    return getMessagesByTopic(selectedTopic);
+    return $messageList.filter((m) => m.topicId === selectedTopic);
   });
 </script>
 

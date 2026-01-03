@@ -4,7 +4,7 @@
   import Input from '../common/Input.svelte';
   import ErrorMessage from '../common/ErrorMessage.svelte';
   import { ui, activeModals } from '$lib/stores/ui';
-  import { topics, addTopic, selectedTopic } from '$lib/stores/topics';
+  import { topicList, addTopic, selectedTopic } from '$lib/stores/topics';
   import { currentRoom } from '$lib/stores/rooms';
   import { isRequired, minLength } from '$lib/utils/validation';
   import { api } from '$lib/api/client';
@@ -109,7 +109,7 @@
         class="form-input"
       >
         <option value={null}>None (Root level)</option>
-        {#each $topics as topic (topic.id)}
+        {#each $topicList as topic (topic.id)}
           {#if !topic.parentId}
             <option value={topic.id}>{topic.title}</option>
           {/if}

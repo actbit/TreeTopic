@@ -1,7 +1,7 @@
 <script lang="ts">
   import MessageItem from './MessageItem.svelte';
   import LoadingSpinner from '../common/LoadingSpinner.svelte';
-  import { getMessagesByTopic, messagesLoading, updateMessageOrder } from '$lib/stores/messages';
+  import { messageList, messagesLoading, updateMessageOrder } from '$lib/stores/messages';
   import { selectedTopic } from '$lib/stores/topics';
   import { onMount } from 'svelte';
   import { api } from '$lib/api/client';
@@ -11,7 +11,9 @@
   let dragOverMessageId: string | null = $state(null);
 
   let topicMessages = $derived.by(() => {
-    return $selectedTopic ? getMessagesByTopic($selectedTopic.id) : [];
+    return $selectedTopic
+      ? $messageList.filter((m) => m.topicId === $selectedTopic.id)
+      : [];
   });
 
   onMount(() => {

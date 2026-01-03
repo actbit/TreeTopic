@@ -1,7 +1,7 @@
 <script lang="ts">
   import MessageItem from './MessageItem.svelte';
   import LoadingSpinner from '../common/LoadingSpinner.svelte';
-  import { getMessagesByTopic, messagesLoading } from '$lib/stores/messages';
+  import { messageList, messagesLoading } from '$lib/stores/messages';
   import { selectedTopic } from '$lib/stores/topics';
   import { currentRoom } from '$lib/stores/rooms';
 
@@ -9,7 +9,7 @@
 
   let topicMessages = $derived.by(() => {
     if (!$selectedTopic) return [];
-    const messages = getMessagesByTopic($selectedTopic.id);
+    const messages = $messageList.filter((m) => m.topicId === $selectedTopic.id);
     // Sort by creation date (newest first)
     return [...messages].sort(
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
