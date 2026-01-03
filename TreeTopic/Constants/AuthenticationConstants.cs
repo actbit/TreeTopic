@@ -187,6 +187,11 @@ public static class AuthenticationConstants
         public const string TenantCookieNameSeparator = "_";
 
         /// <summary>
+        /// テナント別 Cookie 名の末尾サフィックス
+        /// </summary>
+        public const string TenantCookieSuffix = ".Tenant";
+
+        /// <summary>
         /// HttpContext.Items に一時保存するテナント情報キー
         /// OnSigningIn イベント内で使用
         /// </summary>

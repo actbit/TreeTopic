@@ -93,7 +93,7 @@ public class TenantAwareCookieManager : ICookieManager
                 return baseCookieName;
             }
 
-            var tenantCookieName = $"{baseCookieName}{AuthenticationConstants.Cookie.TenantCookieNameSeparator}{tenant}";
+            var tenantCookieName = $"{baseCookieName}{AuthenticationConstants.Cookie.TenantCookieNameSeparator}{tenant}{AuthenticationConstants.Cookie.TenantCookieSuffix}";
             _logger.LogDebug("Using tenant-specific cookie: {CookieName}", tenantCookieName);
             return tenantCookieName;
         }

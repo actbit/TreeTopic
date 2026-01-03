@@ -107,7 +107,7 @@ public class Program
             })
             .AddCookie(options =>
             {
-                options.Cookie.Name = builder.Configuration["Authentication:CookieName"] ?? ".TreeTopic.Auth";
+                options.Cookie.Name = builder.Configuration["Authentication:CookieName"] ?? "TreeTopic.Cookie";
                 options.LoginPath = AuthenticationConstants.Paths.LoginPath;
                 options.LogoutPath = AuthenticationConstants.Paths.LogoutPath;
                 options.ExpireTimeSpan = TimeSpan.FromHours(AuthenticationConstants.Cookie.ExpirationHours);
@@ -248,6 +248,7 @@ public class Program
                                 HttpOnly = true,
                                 SameSite = SameSiteMode.None,
                                 Secure = isSecure,  // 本番環境またはHTTPS接続時のみSecure=true
+                                Path = AuthenticationConstants.Cookie.CookiePath,
                                 Expires = DateTimeOffset.UtcNow.AddHours(AuthenticationConstants.Cookie.ExpirationHours)
                             };
                             context.CookieOptions = cookieOptions;
@@ -693,13 +694,13 @@ public class Program
                 {
                     var cookieHeader = context.Request.Headers["Cookie"].ToString();
                     var hasAuthCookie = context.Request.Cookies.ContainsKey(
-                        builder.Configuration["Authentication:CookieName"] ?? ".TreeTopic.Auth");
+                        builder.Configuration["Authentication:CookieName"] ?? "TreeTopic.Cookie");
                     bool? ticketUnprotectOk = null;
                     string? ticketAuthType = null;
                     int? ticketClaimCount = null;
                     if (hasAuthCookie)
                     {
-                        var cookieName = builder.Configuration["Authentication:CookieName"] ?? ".TreeTopic.Auth";
+                        var cookieName = builder.Configuration["Authentication:CookieName"] ?? "TreeTopic.Cookie";
                         var cookieValue = context.Request.Cookies[cookieName];
                         var optionsMonitor = context.RequestServices.GetRequiredService<IOptionsMonitor<CookieAuthenticationOptions>>();
                         var cookieOptions = optionsMonitor.Get(CookieAuthenticationDefaults.AuthenticationScheme);
@@ -720,29 +721,93 @@ public class Program
         // Cleanup legacy chunked auth cookies so the new single cookie is used.
         app.Use(async (context, next) =>
         {
-            var baseCookieName = builder.Configuration["Authentication:CookieName"] ?? ".TreeTopic.Auth";
-            if (context.Request.Cookies.TryGetValue(baseCookieName, out var baseValue) &&
-                baseValue.StartsWith("chunks-", StringComparison.OrdinalIgnoreCase))
+            var baseCookieName = builder.Configuration["Authentication:CookieName"] ?? "TreeTopic.Cookie";
+            var deleteOptions = new CookieOptions
             {
-                context.Response.Cookies.Delete(baseCookieName, new CookieOptions
+                Path = AuthenticationConstants.Cookie.CookiePath,
+                Secure = true,
+                SameSite = SameSiteMode.None
+            };
+
+            void DeleteChunkedCookieSet(string cookieKey)
+            {
+                context.Response.Cookies.Delete(cookieKey, deleteOptions);
+                for (var i = 1; i <= 5; i++)
                 {
-                    Path = "/",
-                    Secure = true,
-                    SameSite = SameSiteMode.None
-                });
+                    var chunkName = $"{cookieKey}C{i}";
+                    context.Response.Cookies.Delete(chunkName, deleteOptions);
+                }
             }
 
-            for (var i = 1; i <= 5; i++)
+            var tenantSeparator = AuthenticationConstants.Cookie.TenantCookieNameSeparator;
+            var tenantSuffix = AuthenticationConstants.Cookie.TenantCookieSuffix;
+
+            foreach (var cookie in context.Request.Cookies)
             {
-                var chunkName = $"{baseCookieName}C{i}";
-                if (context.Request.Cookies.ContainsKey(chunkName))
+                var key = cookie.Key;
+                if (!key.StartsWith(baseCookieName, StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                // Only handle base cookie or tenant-suffixed cookie: ".TreeTopic.Auth" or ".TreeTopic.Auth_{tenant}"
+                var baseKey = key;
+                if (!string.Equals(key, baseCookieName, StringComparison.OrdinalIgnoreCase))
                 {
-                    context.Response.Cookies.Delete(chunkName, new CookieOptions
+                    if (key.Length <= baseCookieName.Length + 1 || key[baseCookieName.Length] != tenantSeparator[0])
+                        continue;
+
+                    // validate tenant suffix chars
+                    if (!key.EndsWith(tenantSuffix, StringComparison.OrdinalIgnoreCase))
+                        continue;
+
+                    var tenantPart = key.Substring(baseCookieName.Length + 1, key.Length - baseCookieName.Length - 1 - tenantSuffix.Length);
+                    var tenantValid = tenantPart.Length > 0;
+                    if (tenantValid)
                     {
-                        Path = "/",
-                        Secure = true,
-                        SameSite = SameSiteMode.None
-                    });
+                        foreach (var ch in tenantPart)
+                        {
+                            if (!(char.IsLetterOrDigit(ch) || ch == '-' || ch == '_'))
+                            {
+                                tenantValid = false;
+                                break;
+                            }
+                        }
+                    }
+                    if (!tenantValid)
+                        continue;
+                }
+
+                if (cookie.Value.StartsWith("chunks-", StringComparison.OrdinalIgnoreCase))
+                {
+                    DeleteChunkedCookieSet(baseKey);
+                    continue;
+                }
+
+                // If this is a chunk cookie (ends with C + digits), delete the chunk set for its base.
+                var lastIndex = key.LastIndexOf('C');
+                if (lastIndex > baseCookieName.Length &&
+                    lastIndex < key.Length - 1)
+                {
+                    var digitOk = true;
+                    for (var i = lastIndex + 1; i < key.Length; i++)
+                    {
+                        if (!char.IsDigit(key[i]))
+                        {
+                            digitOk = false;
+                            break;
+                        }
+                    }
+                    if (!digitOk)
+                        continue;
+
+                    baseKey = key.Substring(0, lastIndex);
+                    // Ensure baseKey still matches base cookie pattern to avoid accidental deletions.
+                    if (string.Equals(baseKey, baseCookieName, StringComparison.OrdinalIgnoreCase) ||
+                        (baseKey.Length > baseCookieName.Length + 1 &&
+                         baseKey.StartsWith(baseCookieName + tenantSeparator, StringComparison.OrdinalIgnoreCase) &&
+                         baseKey.EndsWith(tenantSuffix, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        DeleteChunkedCookieSet(baseKey);
+                    }
                 }
             }
 
