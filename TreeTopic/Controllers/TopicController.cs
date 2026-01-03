@@ -1,8 +1,7 @@
-using Finbuckle.MultiTenant.Abstractions;
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using MaskedUUID.AspNetCore.Types;
 using TreeTopic.Dtos;
-using TreeTopic.Models;
 using TreeTopic.Services;
 
 namespace TreeTopic.Controllers;
@@ -13,36 +12,31 @@ namespace TreeTopic.Controllers;
 public class TopicController : ControllerBase
 {
     private readonly ITopicManagementService _topicManagementService;
-    private readonly IMultiTenantContextAccessor<ApplicationTenantInfo> _tenantAccessor;
 
     public TopicController(
-        ITopicManagementService topicManagementService,
-        IMultiTenantContextAccessor<ApplicationTenantInfo> tenantAccessor)
+        ITopicManagementService topicManagementService)
     {
         _topicManagementService = topicManagementService;
-        _tenantAccessor = tenantAccessor;
     }
-
-    private Guid CurrentTenantId => Guid.Parse(_tenantAccessor.MultiTenantContext?.TenantInfo?.Id ?? Guid.Empty.ToString());
 
     [HttpGet]
     public async Task<IActionResult> GetAll(CancellationToken cancellationToken)
     {
-        var result = await _topicManagementService.GetAllTopicsAsync(CurrentTenantId, cancellationToken);
+        var result = await _topicManagementService.GetAllTopicsAsync(cancellationToken);
         return HandleResult(result);
     }
 
-    [HttpGet("room/{roomId:guid}")]
-    public async Task<IActionResult> GetByRoom(Guid roomId, CancellationToken cancellationToken)
+    [HttpGet("room/{roomId}")]
+    public async Task<IActionResult> GetByRoom([FromRoute] MaskedGuid roomId, CancellationToken cancellationToken)
     {
-        var result = await _topicManagementService.GetTopicsByRoomAsync(roomId, CurrentTenantId, cancellationToken);
+        var result = await _topicManagementService.GetTopicsByRoomAsync((Guid)roomId, cancellationToken);
         return HandleResult(result);
     }
 
-    [HttpGet("{topicId:guid}")]
-    public async Task<IActionResult> GetById(Guid topicId, CancellationToken cancellationToken)
+    [HttpGet("{topicId}")]
+    public async Task<IActionResult> GetById([FromRoute] MaskedGuid topicId, CancellationToken cancellationToken)
     {
-        var result = await _topicManagementService.GetTopicByIdAsync(topicId, CurrentTenantId, cancellationToken);
+        var result = await _topicManagementService.GetTopicByIdAsync((Guid)topicId, cancellationToken);
         return HandleResult(result);
     }
 
@@ -52,24 +46,24 @@ public class TopicController : ControllerBase
         if (!ModelState.IsValid)
             return ValidationProblem(ModelState);
 
-        var result = await _topicManagementService.CreateTopicAsync(request, CurrentTenantId, cancellationToken);
+        var result = await _topicManagementService.CreateTopicAsync(request, cancellationToken);
         return HandleResult(result);
     }
 
-    [HttpPut("{topicId:guid}")]
-    public async Task<IActionResult> Update(Guid topicId, [FromBody] UpdateTopicRequest request, CancellationToken cancellationToken)
+    [HttpPut("{topicId}")]
+    public async Task<IActionResult> Update([FromRoute] MaskedGuid topicId, [FromBody] UpdateTopicRequest request, CancellationToken cancellationToken)
     {
         if (!ModelState.IsValid)
             return ValidationProblem(ModelState);
 
-        var result = await _topicManagementService.UpdateTopicAsync(topicId, request, CurrentTenantId, cancellationToken);
+        var result = await _topicManagementService.UpdateTopicAsync((Guid)topicId, request, cancellationToken);
         return HandleResult(result);
     }
 
-    [HttpDelete("{topicId:guid}")]
-    public async Task<IActionResult> Delete(Guid topicId, CancellationToken cancellationToken)
+    [HttpDelete("{topicId}")]
+    public async Task<IActionResult> Delete([FromRoute] MaskedGuid topicId, CancellationToken cancellationToken)
     {
-        var result = await _topicManagementService.DeleteTopicAsync(topicId, CurrentTenantId, cancellationToken);
+        var result = await _topicManagementService.DeleteTopicAsync((Guid)topicId, cancellationToken);
         return HandleResult(result);
     }
 
@@ -89,3 +83,7 @@ public class TopicController : ControllerBase
         return StatusCode(result.StatusCode, new { error = result.Error?.Message });
     }
 }
+
+
+
+

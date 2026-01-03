@@ -1,6 +1,8 @@
+﻿using Finbuckle.MultiTenant;
 using Finbuckle.MultiTenant.Abstractions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using MaskedUUID.AspNetCore.Types;
 using System.Linq;
 using TreeTopic.Dtos;
 using TreeTopic.Models;
@@ -26,24 +28,24 @@ public class RoomUsersController : ControllerBase
 
     private string? CurrentTenantId => _tenantAccessor.MultiTenantContext?.TenantInfo?.Id;
 
-    [HttpGet("room/{roomId:guid}")]
-    public async Task<IActionResult> ListByRoom(Guid roomId, CancellationToken cancellationToken)
+    [HttpGet("room/{roomId}")]
+    public async Task<IActionResult> ListByRoom([FromRoute] MaskedGuid roomId, CancellationToken cancellationToken)
     {
-        var entities = await _roomUserRepository.GetByRoomIdAsync(roomId, cancellationToken);
+        var entities = await _roomUserRepository.GetByRoomIdAsync((Guid)roomId, cancellationToken);
         var dtos = entities.Select(MapToDto).ToList();
         return Ok(dtos);
     }
 
-    [HttpGet("user/{userId:guid}")]
-    public async Task<IActionResult> ListByUser(Guid userId, CancellationToken cancellationToken)
+    [HttpGet("user/{userId}")]
+    public async Task<IActionResult> ListByUser([FromRoute] MaskedGuid userId, CancellationToken cancellationToken)
     {
-        var entities = await _roomUserRepository.GetByUserIdAsync(userId, cancellationToken);
+        var entities = await _roomUserRepository.GetByUserIdAsync((Guid)userId, cancellationToken);
         var dtos = entities.Select(MapToDto).ToList();
         return Ok(dtos);
     }
 
-    [HttpPost("room/{roomId:guid}")]
-    public async Task<IActionResult> Create(Guid roomId, [FromBody] CreateRoomUserRequest request)
+    [HttpPost("room/{roomId}")]
+    public async Task<IActionResult> Create([FromRoute] MaskedGuid roomId, [FromBody] CreateRoomUserRequest request)
     {
         if (!ModelState.IsValid)
         {
@@ -52,8 +54,8 @@ public class RoomUsersController : ControllerBase
 
         var toCreate = new RoomUser
         {
-            ApplicationUserId = request.ApplicationUserId,
-            RoomId = roomId
+            ApplicationUserId = (Guid)request.ApplicationUserId,
+            RoomId = (Guid)roomId
         };
 
         await _roomUserRepository.AddAsync(toCreate);
@@ -62,10 +64,10 @@ public class RoomUsersController : ControllerBase
         return CreatedAtAction(nameof(GetById), new { id = toCreate.Id }, MapToDto(toCreate));
     }
 
-    [HttpGet("{id:guid}")]
-    public async Task<IActionResult> GetById(Guid id, CancellationToken cancellationToken)
+    [HttpGet("{id}")]
+    public async Task<IActionResult> GetById([FromRoute] MaskedGuid id, CancellationToken cancellationToken)
     {
-        var entity = await _roomUserRepository.GetByIdAsync(id, cancellationToken);
+        var entity = await _roomUserRepository.GetByIdAsync((Guid)id, cancellationToken);
         if (entity == null)
         {
             return NotFound();
@@ -74,8 +76,8 @@ public class RoomUsersController : ControllerBase
         return Ok(MapToDto(entity));
     }
 
-    [HttpDelete("{id:guid}")]
-    public async Task<IActionResult> Delete(Guid id)
+    [HttpDelete("{id}")]
+    public async Task<IActionResult> Delete([FromRoute] MaskedGuid id)
     {
         var entity = await _roomUserRepository.GetByIdAsync(id);
         if (entity == null)
@@ -98,3 +100,7 @@ public class RoomUsersController : ControllerBase
         };
     }
 }
+
+
+
+

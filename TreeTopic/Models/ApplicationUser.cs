@@ -1,4 +1,5 @@
-﻿using Finbuckle.MultiTenant;
+﻿using Finbuckle.MultiTenant.Abstractions;
+using Finbuckle.MultiTenant;
 using Microsoft.AspNetCore.Identity;
 
 namespace TreeTopic.Models
@@ -11,8 +12,7 @@ namespace TreeTopic.Models
         public string? TenantId { get; set; }
         public ApplicationUser() : base()
         {
-            Id = Guid.NewGuid();
-
+            Id = Guid.CreateVersion7();
         }
         public ApplicationUser(string userName) : this()
         {
@@ -24,6 +24,11 @@ namespace TreeTopic.Models
         public List<Message> Messages { get; set; } = new List<Message>();
         public List<RoomUser> RoomUsers { get; set; } = new List<RoomUser>();
         public List<BrainIdea> BrainIdeas { get; set; } = new List<BrainIdea>();
+        public List<BrainIdeaVote> BrainIdeaVotes { get; set; } = new List<BrainIdeaVote>();
 
     }
 }
+
+
+
+

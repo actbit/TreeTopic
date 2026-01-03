@@ -2,6 +2,7 @@ using System.Linq;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Finbuckle.MultiTenant.Abstractions;
 using TreeTopic.Models;
 
 namespace TreeTopic.Services;
@@ -39,9 +40,13 @@ namespace TreeTopic.Services;
                 return;
             }
 
-            var sub = principal.FindFirst("sub")?.Value;
-            var email = principal.FindFirst("email")?.Value;
-            var name = principal.FindFirst("name")?.Value;
+            var sub = principal.FindFirst("sub")?.Value
+                ?? principal.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            var email = principal.FindFirst("email")?.Value
+                ?? principal.FindFirst(ClaimTypes.Email)?.Value;
+            var name = principal.FindFirst("name")?.Value
+                ?? principal.FindFirst("preferred_username")?.Value
+                ?? principal.FindFirst(ClaimTypes.Name)?.Value;
 
             if (string.IsNullOrEmpty(sub))
             {
@@ -78,8 +83,17 @@ namespace TreeTopic.Services;
                     user.Email = email;
                     user.DisplayName = name;
                     user.UserName = name ?? sub;
-                    await _userManager.UpdateAsync(user);
-                    _logger.LogInformation("User updated: {Sub}", sub);
+
+                    var updateResult = await _userManager.UpdateAsync(user);
+                    if (!updateResult.Succeeded)
+                    {
+                        _logger.LogError("Failed to update user: {Sub} - {Errors}", sub,
+                            string.Join(", ", updateResult.Errors.Select(e => e.Description)));
+                    }
+                    else
+                    {
+                        _logger.LogInformation("User updated: {Sub}", sub);
+                    }
                 }
 
                 await EnsureOidcLoginAsync(user, sub);
@@ -87,7 +101,7 @@ namespace TreeTopic.Services;
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error syncing user: {Sub}", sub);
-                throw;
+                // ユーザー同期エラーで認証全体を失敗させない。ログに記録して継続
             }
         }
 

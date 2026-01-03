@@ -1,4 +1,5 @@
-﻿using Finbuckle.MultiTenant;
+﻿using Finbuckle.MultiTenant.Abstractions;
+using Finbuckle.MultiTenant;
 using System.ComponentModel.DataAnnotations.Schema;
 
 namespace TreeTopic.Models
@@ -12,3 +13,7 @@ namespace TreeTopic.Models
         public string Name { get; set; } = string.Empty;
     }
 }
+
+
+
+

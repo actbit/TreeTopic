@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using MaskedUUID.AspNetCore.Types;
 using TreeTopic.Common;
 using TreeTopic.Dtos;
 using TreeTopic.Models;
@@ -33,10 +34,10 @@ public class UsersController : ControllerBase
         return Ok(userDtos);
     }
 
-    [HttpGet("{userId:guid}")]
-    public async Task<ActionResult<UserSummaryDto>> GetById(Guid userId)
+    [HttpGet("{userId}")]
+    public async Task<ActionResult<UserSummaryDto>> GetById([FromRoute] MaskedGuid userId)
     {
-        var result = await _userManagementService.GetUserByIdAsync(userId);
+        var result = await _userManagementService.GetUserByIdAsync((Guid)userId);
 
         if (result.IsFailure)
         {
@@ -48,10 +49,10 @@ public class UsersController : ControllerBase
         return Ok(dto);
     }
 
-    [HttpPost("{userId:guid}/roles")]
-    public async Task<ActionResult<UserSummaryDto>> AddRole(Guid userId, [FromBody] RoleAssignmentRequest request)
+    [HttpPost("{userId}/roles")]
+    public async Task<ActionResult<UserSummaryDto>> AddRole([FromRoute] MaskedGuid userId, [FromBody] RoleAssignmentRequest request)
     {
-        var result = await _userManagementService.AddRoleToUserAsync(userId, request);
+        var result = await _userManagementService.AddRoleToUserAsync((Guid)userId, request);
 
         if (result.IsFailure)
         {
@@ -63,8 +64,8 @@ public class UsersController : ControllerBase
         return Ok(dto);
     }
 
-    [HttpDelete("{userId:guid}/roles")]
-    public async Task<ActionResult<UserSummaryDto>> RemoveRole(Guid userId, [FromBody] RoleAssignmentRequest request)
+    [HttpDelete("{userId}/roles")]
+    public async Task<ActionResult<UserSummaryDto>> RemoveRole([FromRoute] MaskedGuid userId, [FromBody] RoleAssignmentRequest request)
     {
         var result = await _userManagementService.RemoveRoleFromUserAsync(userId, request);
 

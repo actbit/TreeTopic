@@ -1,4 +1,5 @@
-﻿using Finbuckle.MultiTenant;
+﻿using Finbuckle.MultiTenant.Abstractions;
+using Finbuckle.MultiTenant;
 using System.ComponentModel.DataAnnotations.Schema;
 
 namespace TreeTopic.Models
@@ -13,3 +14,7 @@ namespace TreeTopic.Models
         public ApplicationRole Role { get; set; }
     }
 }
+
+
+
+

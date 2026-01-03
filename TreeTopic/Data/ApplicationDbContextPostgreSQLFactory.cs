@@ -1,5 +1,4 @@
-using Finbuckle.MultiTenant;
-using Finbuckle.MultiTenant.Abstractions;
+﻿using Finbuckle.MultiTenant;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
 using TreeTopic.Models;
@@ -13,17 +12,22 @@ public class ApplicationDbContextPostgreSQLFactory : IDesignTimeDbContextFactory
 {
     public ApplicationDbContextPostgreSQL CreateDbContext(string[] args)
     {
-        var optionsBuilder = new DbContextOptionsBuilder<ApplicationDbContext>();
+        var optionsBuilder = new DbContextOptionsBuilder<ApplicationDbContextPostgreSQL>();
         optionsBuilder.UseNpgsql("Host=dummy;Database=dummy;");
 
-        var tenantInfo = new ApplicationTenantInfo
+        var tenantInfo = new ApplicationTenantInfo("migration-dummy", "migration-dummy")
         {
-            Id = "migration-dummy",
-            Name = "migration-dummy",
-            DbProvider = "postgresql"
+            Detail = new ApplicationTenantDetail
+            {
+                TenantId = string.Empty,
+                DbProvider = "postgresql"
+            }
         };
+
+        tenantInfo.Detail!.TenantId = tenantInfo.Id!;
 
         var accessor = new DesignTimeMultiTenantContextAccessor(tenantInfo);
         return new ApplicationDbContextPostgreSQL(accessor, optionsBuilder.Options);
     }
 }
+

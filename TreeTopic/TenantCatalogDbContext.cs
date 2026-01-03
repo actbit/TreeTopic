@@ -6,6 +6,7 @@ namespace TreeTopic
     public class TenantCatalogDbContext : DbContext
     {
         public DbSet<ApplicationTenantInfo> Tenants => Set<ApplicationTenantInfo>();
+        public DbSet<ApplicationTenantDetail> TenantDetails => Set<ApplicationTenantDetail>();
         public DbSet<SetupToken> SetupTokens => Set<SetupToken>();
 
         public TenantCatalogDbContext(DbContextOptions<TenantCatalogDbContext> options)
@@ -31,14 +32,56 @@ namespace TreeTopic
                 b.Property(t => t.Identifier)
                     .HasMaxLength(256)
                     .IsRequired();
-                b.Property(t => t.RoleClaimName)
-                    .HasMaxLength(256);
+
+                b.HasOne(t => t.Detail)
+                    .WithOne(d => d.Tenant)
+                    .HasForeignKey<ApplicationTenantDetail>(d => d.TenantId)
+                    .OnDelete(DeleteBehavior.Cascade)
+                    .IsRequired();
 
                 // SetupToken リレーション
                 b.HasMany<SetupToken>()
                     .WithOne(st => st.Tenant)
                     .HasForeignKey(st => st.TenantId)
                     .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            modelBuilder.Entity<ApplicationTenantDetail>(b =>
+            {
+                b.HasKey(d => d.TenantId);
+
+                b.Property(d => d.TenantId)
+                    .HasMaxLength(64)
+                    .IsRequired();
+
+                b.Property(d => d.DbProvider)
+                    .HasMaxLength(20);
+
+                b.Property(d => d.TenantEncryptionKey)
+                    .HasMaxLength(200);
+
+                b.Property(d => d.ConnectionString)
+                    .HasMaxLength(5000);
+
+                b.Property(d => d.OpenIdConnectMetadataAddress)
+                    .HasMaxLength(500);
+                b.Property(d => d.OpenIdConnectAuthority)
+                    .HasMaxLength(500);
+                b.Property(d => d.OpenIdConnectAuthorizationEndpoint)
+                    .HasMaxLength(500);
+                b.Property(d => d.OpenIdConnectTokenEndpoint)
+                    .HasMaxLength(500);
+                b.Property(d => d.OpenIdConnectJwksUri)
+                    .HasMaxLength(500);
+                b.Property(d => d.OpenIdConnectEndSessionEndpoint)
+                    .HasMaxLength(500);
+                b.Property(d => d.OpenIdConnectClientId)
+                    .HasMaxLength(500);
+                b.Property(d => d.OpenIdConnectClientSecret)
+                    .HasMaxLength(1000);
+
+                b.Property(d => d.RoleClaimName)
+                    .HasMaxLength(256);
             });
 
             modelBuilder.Entity<SetupToken>(b =>

@@ -1,8 +1,7 @@
-using Finbuckle.MultiTenant.Abstractions;
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using MaskedUUID.AspNetCore.Types;
 using TreeTopic.Dtos;
-using TreeTopic.Models;
 using TreeTopic.Services;
 using System.Security.Claims;
 
@@ -14,30 +13,26 @@ namespace TreeTopic.Controllers;
 public class RoomController : ControllerBase
 {
     private readonly IRoomManagementService _roomManagementService;
-    private readonly IMultiTenantContextAccessor<ApplicationTenantInfo> _tenantAccessor;
 
     public RoomController(
-        IRoomManagementService roomManagementService,
-        IMultiTenantContextAccessor<ApplicationTenantInfo> tenantAccessor)
+        IRoomManagementService roomManagementService)
     {
         _roomManagementService = roomManagementService;
-        _tenantAccessor = tenantAccessor;
     }
 
-    private Guid CurrentTenantId => Guid.Parse(_tenantAccessor.MultiTenantContext?.TenantInfo?.Id ?? Guid.Empty.ToString());
     private Guid CurrentUserId => Guid.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? Guid.Empty.ToString());
 
     [HttpGet]
     public async Task<IActionResult> GetAll(CancellationToken cancellationToken)
     {
-        var result = await _roomManagementService.GetAllRoomsAsync(CurrentTenantId, cancellationToken);
+        var result = await _roomManagementService.GetAllRoomsAsync(cancellationToken);
         return HandleResult(result);
     }
 
-    [HttpGet("{roomId:guid}")]
-    public async Task<IActionResult> GetById(Guid roomId, CancellationToken cancellationToken)
+    [HttpGet("{roomId}")]
+    public async Task<IActionResult> GetById([FromRoute] MaskedGuid roomId, CancellationToken cancellationToken)
     {
-        var result = await _roomManagementService.GetRoomByIdAsync(roomId, CurrentTenantId, cancellationToken);
+        var result = await _roomManagementService.GetRoomByIdAsync((Guid)roomId, cancellationToken);
         return HandleResult(result);
     }
 
@@ -47,24 +42,24 @@ public class RoomController : ControllerBase
         if (!ModelState.IsValid)
             return ValidationProblem(ModelState);
 
-        var result = await _roomManagementService.CreateRoomAsync(request, CurrentUserId, CurrentTenantId, cancellationToken);
+        var result = await _roomManagementService.CreateRoomAsync(request, CurrentUserId, cancellationToken);
         return HandleResult(result);
     }
 
-    [HttpPut("{roomId:guid}")]
-    public async Task<IActionResult> Update(Guid roomId, [FromBody] UpdateRoomRequest request, CancellationToken cancellationToken)
+    [HttpPut("{roomId}")]
+    public async Task<IActionResult> Update([FromRoute] MaskedGuid roomId, [FromBody] UpdateRoomRequest request, CancellationToken cancellationToken)
     {
         if (!ModelState.IsValid)
             return ValidationProblem(ModelState);
 
-        var result = await _roomManagementService.UpdateRoomAsync(roomId, request, CurrentTenantId, cancellationToken);
+        var result = await _roomManagementService.UpdateRoomAsync((Guid)roomId, request, cancellationToken);
         return HandleResult(result);
     }
 
-    [HttpDelete("{roomId:guid}")]
-    public async Task<IActionResult> Delete(Guid roomId, CancellationToken cancellationToken)
+    [HttpDelete("{roomId}")]
+    public async Task<IActionResult> Delete([FromRoute] MaskedGuid roomId, CancellationToken cancellationToken)
     {
-        var result = await _roomManagementService.DeleteRoomAsync(roomId, CurrentTenantId, cancellationToken);
+        var result = await _roomManagementService.DeleteRoomAsync((Guid)roomId, cancellationToken);
         return HandleResult(result);
     }
 
@@ -84,3 +79,7 @@ public class RoomController : ControllerBase
         return StatusCode(result.StatusCode, new { error = result.Error?.Message });
     }
 }
+
+
+
+

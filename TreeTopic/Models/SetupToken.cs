@@ -7,11 +7,12 @@ namespace TreeTopic.Models;
 /// </summary>
 public class SetupToken
 {
-    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid Id { get; set; } = Guid.CreateVersion7();
 
     /// <summary>
     /// テナントID
     /// </summary>
+    [System.ComponentModel.DataAnnotations.Schema.ForeignKey(nameof(Tenant))]
     public string TenantId { get; set; } = null!;
 
     /// <summary>
@@ -32,7 +33,7 @@ public class SetupToken
     /// <summary>
     /// リレーション：所属するテナント
     /// </summary>
-    public virtual ApplicationTenantInfo? Tenant { get; set; }
+    public ApplicationTenantInfo? Tenant { get; set; }
 
     /// <summary>
     /// トークンが有効かどうかをチェック

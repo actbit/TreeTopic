@@ -8,11 +8,11 @@ namespace TreeTopic.Services;
 
 public interface IRoomManagementService
 {
-    Task<Result<List<RoomDto>>> GetAllRoomsAsync(Guid tenantId, CancellationToken cancellationToken = default);
-    Task<Result<RoomDto>> GetRoomByIdAsync(Guid roomId, Guid tenantId, CancellationToken cancellationToken = default);
-    Task<Result<RoomDto>> CreateRoomAsync(CreateRoomRequest request, Guid createdUserId, Guid tenantId, CancellationToken cancellationToken = default);
-    Task<Result<RoomDto>> UpdateRoomAsync(Guid roomId, UpdateRoomRequest request, Guid tenantId, CancellationToken cancellationToken = default);
-    Task<Result> DeleteRoomAsync(Guid roomId, Guid tenantId, CancellationToken cancellationToken = default);
+    Task<Result<List<RoomDto>>> GetAllRoomsAsync(CancellationToken cancellationToken = default);
+    Task<Result<RoomDto>> GetRoomByIdAsync(Guid roomId, CancellationToken cancellationToken = default);
+    Task<Result<RoomDto>> CreateRoomAsync(CreateRoomRequest request, Guid createdUserId, CancellationToken cancellationToken = default);
+    Task<Result<RoomDto>> UpdateRoomAsync(Guid roomId, UpdateRoomRequest request, CancellationToken cancellationToken = default);
+    Task<Result> DeleteRoomAsync(Guid roomId, CancellationToken cancellationToken = default);
 }
 
 public class RoomManagementService : BaseService, IRoomManagementService
@@ -26,12 +26,11 @@ public class RoomManagementService : BaseService, IRoomManagementService
         _roomRepository = roomRepository;
     }
 
-    public async Task<Result<List<RoomDto>>> GetAllRoomsAsync(Guid tenantId, CancellationToken cancellationToken = default)
+    public async Task<Result<List<RoomDto>>> GetAllRoomsAsync(CancellationToken cancellationToken = default)
     {
         return await ExecuteAsync(async () =>
         {
             var rooms = await _roomRepository.Query()
-                .Where(r => r.TenantId == tenantId.ToString())
                 .ToListAsync(cancellationToken);
 
             var dtos = rooms.Select(MapToDto).ToList();
@@ -39,13 +38,13 @@ public class RoomManagementService : BaseService, IRoomManagementService
         }, nameof(GetAllRoomsAsync));
     }
 
-    public async Task<Result<RoomDto>> GetRoomByIdAsync(Guid roomId, Guid tenantId, CancellationToken cancellationToken = default)
+    public async Task<Result<RoomDto>> GetRoomByIdAsync(Guid roomId, CancellationToken cancellationToken = default)
     {
         return await ExecuteAsync(async () =>
         {
             var room = await _roomRepository.GetByIdAsync(roomId, cancellationToken);
 
-            if (room == null || room.TenantId != tenantId.ToString())
+            if (room == null)
                 return Result<RoomDto>.NotFound("Room not found");
 
             var dto = MapToDto(room);
@@ -56,7 +55,6 @@ public class RoomManagementService : BaseService, IRoomManagementService
     public async Task<Result<RoomDto>> CreateRoomAsync(
         CreateRoomRequest request,
         Guid createdUserId,
-        Guid tenantId,
         CancellationToken cancellationToken = default)
     {
         return await ExecuteAsync(async () =>
@@ -64,8 +62,7 @@ public class RoomManagementService : BaseService, IRoomManagementService
             var room = new Room
             {
                 Name = request.Name,
-                CreatedUserId = createdUserId,
-                TenantId = tenantId.ToString()
+                CreatedUserId = createdUserId
             };
 
             await _roomRepository.AddAsync(room, cancellationToken);
@@ -79,14 +76,13 @@ public class RoomManagementService : BaseService, IRoomManagementService
     public async Task<Result<RoomDto>> UpdateRoomAsync(
         Guid roomId,
         UpdateRoomRequest request,
-        Guid tenantId,
         CancellationToken cancellationToken = default)
     {
         return await ExecuteAsync(async () =>
         {
             var room = await _roomRepository.GetByIdAsync(roomId, cancellationToken);
 
-            if (room == null || room.TenantId != tenantId.ToString())
+            if (room == null)
                 return Result<RoomDto>.NotFound("Room not found");
 
             if (!string.IsNullOrEmpty(request.Name))
@@ -101,13 +97,13 @@ public class RoomManagementService : BaseService, IRoomManagementService
         }, nameof(UpdateRoomAsync));
     }
 
-    public async Task<Result> DeleteRoomAsync(Guid roomId, Guid tenantId, CancellationToken cancellationToken = default)
+    public async Task<Result> DeleteRoomAsync(Guid roomId, CancellationToken cancellationToken = default)
     {
         return await ExecuteAsync(async () =>
         {
             var room = await _roomRepository.GetByIdAsync(roomId, cancellationToken);
 
-            if (room == null || room.TenantId != tenantId.ToString())
+            if (room == null)
                 return Result.NotFound("Room not found");
 
             _roomRepository.Delete(room);
@@ -122,7 +118,6 @@ public class RoomManagementService : BaseService, IRoomManagementService
         return new RoomDto
         {
             Id = room.Id,
-            TenantId = Guid.Parse(room.TenantId),
             Name = room.Name,
             CreatedUserId = room.CreatedUserId,
             CreatedUserName = room.CreatedUser?.UserName,

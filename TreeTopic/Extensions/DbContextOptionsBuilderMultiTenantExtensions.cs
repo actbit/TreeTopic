@@ -1,8 +1,8 @@
 ﻿using Finbuckle.MultiTenant.Abstractions;
+using Finbuckle.MultiTenant;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
 using TreeTopic.Models;
 using TreeTopic.Services;
 
@@ -24,21 +24,22 @@ namespace TreeTopic.Extensions
                 .GetRequiredService<EncryptionService>();
 
             var tenant = accessor.MultiTenantContext?.TenantInfo;
+            var tenantDetail = tenant?.Detail;
 
             // 1) どのプロバイダを使うか
-            var provider = (tenant?.DbProvider
+            var provider = (tenantDetail?.DbProvider
                             ?? configuration["ConnectionStrings:SharedAppProvider"]
                             ?? "postgres")
                            .ToLowerInvariant();
 
             // 2) どの接続文字列を使うか
-            var encryptedConn = tenant?.ConnectionString
+            var encryptedConn = tenantDetail?.ConnectionString
                        ?? configuration.GetConnectionString("SharedApp")
                        ?? throw new InvalidOperationException("No connection string for ApplicationDbContext.");
 
             // テナント用の接続文字列は 2 段階で復号
-            var conn = tenant?.ConnectionString != null
-                ? DecryptTenantConnectionString(tenant, encryption)
+            var conn = tenantDetail?.ConnectionString != null
+                ? DecryptTenantConnectionString(tenant, tenantDetail, encryption)
                 : encryptedConn;
 
             switch (provider)
@@ -64,22 +65,22 @@ namespace TreeTopic.Extensions
         /// </summary>
         private static string DecryptTenantConnectionString(
             ApplicationTenantInfo tenant,
+            ApplicationTenantDetail tenantDetail,
             EncryptionService masterEncryption)
         {
-            if (string.IsNullOrEmpty(tenant.TenantEncryptionKey))
+            if (string.IsNullOrEmpty(tenantDetail.TenantEncryptionKey))
                 throw new InvalidOperationException($"Tenant '{tenant.Identifier}' has no encryption key.");
 
-            if (string.IsNullOrEmpty(tenant.ConnectionString))
+            if (string.IsNullOrEmpty(tenantDetail.ConnectionString))
                 throw new InvalidOperationException($"Tenant '{tenant.Identifier}' has no connection string.");
 
-            // 1. マスターキーで テナント用キーを復号
-            var decryptedTenantKey = masterEncryption.Decrypt(tenant.TenantEncryptionKey);
-
-            // 2. テナント用キーで ConnectionString を復号
-            var loggerFactory = LoggerFactory.Create(builder => builder.AddConsole());
-            var logger = loggerFactory.CreateLogger<EncryptionService>();
-            var tenantEncryption = new EncryptionService(decryptedTenantKey, logger);
-            return tenantEncryption.Decrypt(tenant.ConnectionString);
+            return masterEncryption.DecryptWithTenantKey(
+                tenantDetail.TenantEncryptionKey,
+                tenantDetail.ConnectionString);
         }
     }
 }
+
+
+
+

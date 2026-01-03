@@ -136,7 +136,7 @@ public class RoleManagementService : BaseService
 
             var permission = new Permission
             {
-                Id = Guid.NewGuid(),
+                Id = Guid.CreateVersion7(),
                 Name = request.PermissionName,
                 RoleId = role.Id,
                 CreatedAt = DateTime.UtcNow
@@ -256,7 +256,7 @@ public class RoleManagementService : BaseService
 
                     var permission = new Permission
                     {
-                        Id = Guid.NewGuid(),
+                        Id = Guid.CreateVersion7(),
                         Name = permissionName.Trim(),
                         RoleId = role.Id,
                         CreatedAt = DateTime.UtcNow

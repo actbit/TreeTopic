@@ -1,24 +1,32 @@
 using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Http;
+using MaskedUUID.AspNetCore.Types;
 
 namespace TreeTopic.Dtos;
 
 public class MessageDto : BaseDto
 {
-    public Guid TopicId { get; set; }
-    public Guid ApplicationUserId { get; set; }
+    public MaskedGuid TopicId { get; set; }
+
+    public MaskedGuid ApplicationUserId { get; set; }
+
     public string? UserName { get; set; }
+
     public string Header { get; set; } = string.Empty;
+
     public string Body { get; set; } = string.Empty;
-    public Guid? ReplyId { get; set; }
+
+    public MaskedGuid? ReplyId { get; set; }
+
     public List<MessageDto>? Replies { get; set; }
+
     public List<FileDto>? Files { get; set; }
 }
 
 public class CreateMessageRequest : BaseCreateRequest
 {
     [Required]
-    public Guid TopicId { get; set; }
+    public MaskedGuid TopicId { get; set; }
 
     [Required]
     [StringLength(500)]
@@ -27,7 +35,7 @@ public class CreateMessageRequest : BaseCreateRequest
     [Required]
     public string Body { get; set; } = string.Empty;
 
-    public Guid? ReplyId { get; set; }
+    public MaskedGuid? ReplyId { get; set; }
 
     // ファイルアップロード用
     public List<IFormFile>? Files { get; set; }

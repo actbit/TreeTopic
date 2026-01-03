@@ -17,14 +17,14 @@ namespace TreeTopic.Migrations.TenantCatalog
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "9.0.10")
+                .HasAnnotation("ProductVersion", "9.0.11")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
-            modelBuilder.Entity("TreeTopic.Models.ApplicationTenantInfo", b =>
+            modelBuilder.Entity("TreeTopic.Models.ApplicationTenantDetail", b =>
                 {
-                    b.Property<string>("Id")
+                    b.Property<string>("TenantId")
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
 
@@ -36,24 +36,6 @@ namespace TreeTopic.Migrations.TenantCatalog
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)");
 
-                    b.Property<string>("Identifier")
-                        .IsRequired()
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(512)
-                        .HasColumnType("character varying(512)");
-
-                    b.Property<string>("OpenIdConnecClientId")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
-
-                    b.Property<string>("OpenIdConnecClientSecret")
-                        .HasMaxLength(1000)
-                        .HasColumnType("character varying(1000)");
-
                     b.Property<string>("OpenIdConnectAuthority")
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
@@ -61,6 +43,14 @@ namespace TreeTopic.Migrations.TenantCatalog
                     b.Property<string>("OpenIdConnectAuthorizationEndpoint")
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
+
+                    b.Property<string>("OpenIdConnectClientId")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("OpenIdConnectClientSecret")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
 
                     b.Property<string>("OpenIdConnectEndSessionEndpoint")
                         .HasMaxLength(500)
@@ -91,6 +81,27 @@ namespace TreeTopic.Migrations.TenantCatalog
 
                     b.Property<decimal>("TenantObfuscationKeyK1")
                         .HasColumnType("numeric(20,0)");
+
+                    b.HasKey("TenantId");
+
+                    b.ToTable("TenantDetails");
+                });
+
+            modelBuilder.Entity("TreeTopic.Models.ApplicationTenantInfo", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("Identifier")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
 
                     b.HasKey("Id");
 
@@ -137,6 +148,17 @@ namespace TreeTopic.Migrations.TenantCatalog
                     b.ToTable("SetupTokens");
                 });
 
+            modelBuilder.Entity("TreeTopic.Models.ApplicationTenantDetail", b =>
+                {
+                    b.HasOne("TreeTopic.Models.ApplicationTenantInfo", "Tenant")
+                        .WithOne("Detail")
+                        .HasForeignKey("TreeTopic.Models.ApplicationTenantDetail", "TenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Tenant");
+                });
+
             modelBuilder.Entity("TreeTopic.Models.SetupToken", b =>
                 {
                     b.HasOne("TreeTopic.Models.ApplicationTenantInfo", null)
@@ -154,6 +176,8 @@ namespace TreeTopic.Migrations.TenantCatalog
 
             modelBuilder.Entity("TreeTopic.Models.ApplicationTenantInfo", b =>
                 {
+                    b.Navigation("Detail");
+
                     b.Navigation("SetupTokens");
                 });
 #pragma warning restore 612, 618

@@ -17,21 +17,7 @@ namespace TreeTopic.Migrations.TenantCatalog
                 {
                     Id = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false),
                     Identifier = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: false),
-                    Name = table.Column<string>(type: "character varying(512)", maxLength: 512, nullable: false),
-                    DbProvider = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: true),
-                    TenantEncryptionKey = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: true),
-                    ConnectionString = table.Column<string>(type: "character varying(5000)", maxLength: 5000, nullable: true),
-                    OpenIdConnectMetadataAddress = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
-                    OpenIdConnectAuthority = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
-                    OpenIdConnectAuthorizationEndpoint = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
-                    OpenIdConnectTokenEndpoint = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
-                    OpenIdConnectJwksUri = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
-                    OpenIdConnectEndSessionEndpoint = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
-                    OpenIdConnecClientId = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
-                    OpenIdConnecClientSecret = table.Column<string>(type: "character varying(1000)", maxLength: 1000, nullable: true),
-                    RoleClaimName = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
-                    TenantObfuscationKeyK0 = table.Column<decimal>(type: "numeric(20,0)", nullable: false),
-                    TenantObfuscationKeyK1 = table.Column<decimal>(type: "numeric(20,0)", nullable: false)
+                    Name = table.Column<string>(type: "character varying(512)", maxLength: 512, nullable: false)
                 },
                 constraints: table =>
                 {
@@ -59,6 +45,37 @@ namespace TreeTopic.Migrations.TenantCatalog
                         principalColumn: "Id");
                     table.ForeignKey(
                         name: "FK_SetupTokens_Tenants_TenantId",
+                        column: x => x.TenantId,
+                        principalTable: "Tenants",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "TenantDetails",
+                columns: table => new
+                {
+                    TenantId = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false),
+                    DbProvider = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: true),
+                    TenantEncryptionKey = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: true),
+                    ConnectionString = table.Column<string>(type: "character varying(5000)", maxLength: 5000, nullable: true),
+                    OpenIdConnectMetadataAddress = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
+                    OpenIdConnectAuthority = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
+                    OpenIdConnectAuthorizationEndpoint = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
+                    OpenIdConnectTokenEndpoint = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
+                    OpenIdConnectJwksUri = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
+                    OpenIdConnectEndSessionEndpoint = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
+                    OpenIdConnecClientId = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
+                    OpenIdConnecClientSecret = table.Column<string>(type: "character varying(1000)", maxLength: 1000, nullable: true),
+                    RoleClaimName = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
+                    TenantObfuscationKeyK0 = table.Column<decimal>(type: "numeric(20,0)", nullable: false),
+                    TenantObfuscationKeyK1 = table.Column<decimal>(type: "numeric(20,0)", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_TenantDetails", x => x.TenantId);
+                    table.ForeignKey(
+                        name: "FK_TenantDetails_Tenants_TenantId",
                         column: x => x.TenantId,
                         principalTable: "Tenants",
                         principalColumn: "Id",
@@ -93,6 +110,9 @@ namespace TreeTopic.Migrations.TenantCatalog
         {
             migrationBuilder.DropTable(
                 name: "SetupTokens");
+
+            migrationBuilder.DropTable(
+                name: "TenantDetails");
 
             migrationBuilder.DropTable(
                 name: "Tenants");

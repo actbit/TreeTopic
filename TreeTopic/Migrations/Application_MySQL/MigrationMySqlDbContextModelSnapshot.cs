@@ -17,7 +17,7 @@ namespace TreeTopic.Migrations.Application_MySQL
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "9.0.10")
+                .HasAnnotation("ProductVersion", "9.0.11")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -353,6 +353,44 @@ namespace TreeTopic.Migrations.Application_MySQL
                     b.HasIndex("TopicId");
 
                     b.ToTable("BrainIdeas");
+                });
+
+            modelBuilder.Entity("TreeTopic.Models.BrainIdeaVote", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("BINARY(16)");
+
+                    b.Property<Guid?>("ApplicationUserId")
+                        .HasColumnType("BINARY(16)");
+
+                    b.Property<Guid>("BrainIdeaId")
+                        .HasColumnType("BINARY(16)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("TenantId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Value")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("VoteType")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ApplicationUserId");
+
+                    b.HasIndex("BrainIdeaId");
+
+                    b.ToTable("BrainIdeaVotes");
                 });
 
             modelBuilder.Entity("TreeTopic.Models.File", b =>
@@ -705,6 +743,24 @@ namespace TreeTopic.Migrations.Application_MySQL
                     b.Navigation("Topic");
                 });
 
+            modelBuilder.Entity("TreeTopic.Models.BrainIdeaVote", b =>
+                {
+                    b.HasOne("TreeTopic.Models.ApplicationUser", "ApplicationUser")
+                        .WithMany("BrainIdeaVotes")
+                        .HasForeignKey("ApplicationUserId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("TreeTopic.Models.BrainIdea", "BrainIdea")
+                        .WithMany("Votes")
+                        .HasForeignKey("BrainIdeaId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ApplicationUser");
+
+                    b.Navigation("BrainIdea");
+                });
+
             modelBuilder.Entity("TreeTopic.Models.File", b =>
                 {
                     b.HasOne("TreeTopic.Models.Message", "Message")
@@ -826,6 +882,8 @@ namespace TreeTopic.Migrations.Application_MySQL
 
             modelBuilder.Entity("TreeTopic.Models.ApplicationUser", b =>
                 {
+                    b.Navigation("BrainIdeaVotes");
+
                     b.Navigation("BrainIdeas");
 
                     b.Navigation("Messages");
@@ -838,6 +896,11 @@ namespace TreeTopic.Migrations.Application_MySQL
             modelBuilder.Entity("TreeTopic.Models.BrainBoard", b =>
                 {
                     b.Navigation("BrainIdeas");
+                });
+
+            modelBuilder.Entity("TreeTopic.Models.BrainIdea", b =>
+                {
+                    b.Navigation("Votes");
                 });
 
             modelBuilder.Entity("TreeTopic.Models.File", b =>

@@ -133,6 +133,36 @@ public class EncryptionService
     }
 
     /// <summary>
+    /// Decrypts encryptedData using a tenant key that is itself encrypted with the master key.
+    /// </summary>
+    public string DecryptWithTenantKey(string encryptedTenantKey, string encryptedData)
+    {
+        if (string.IsNullOrEmpty(encryptedTenantKey))
+            throw new ArgumentException("Encrypted tenant key cannot be null or empty", nameof(encryptedTenantKey));
+
+        if (string.IsNullOrEmpty(encryptedData))
+            throw new ArgumentException("Encrypted data cannot be null or empty", nameof(encryptedData));
+
+        var decryptedTenantKey = Decrypt(encryptedTenantKey);
+        return DecryptWithPlainTenantKey(decryptedTenantKey, encryptedData);
+    }
+
+    /// <summary>
+    /// Decrypts encryptedData using a tenant key that is already decrypted (base64-encoded 32-byte key).
+    /// </summary>
+    public string DecryptWithPlainTenantKey(string tenantKeyString, string encryptedData)
+    {
+        if (string.IsNullOrEmpty(tenantKeyString))
+            throw new ArgumentException("Tenant key cannot be null or empty", nameof(tenantKeyString));
+
+        if (string.IsNullOrEmpty(encryptedData))
+            throw new ArgumentException("Encrypted data cannot be null or empty", nameof(encryptedData));
+
+        var tenantEncryption = new EncryptionService(tenantKeyString, _logger);
+        return tenantEncryption.Decrypt(encryptedData);
+    }
+
+    /// <summary>
     /// Decrypts ciphertext encrypted with Encrypt method
     /// Expected format: base64-encoded "nonce:ciphertext:tag"
     /// </summary>

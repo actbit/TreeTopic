@@ -1,0 +1,4 @@
+[submodule "submodules/MaskedUUID"]
+	path = submodules/MaskedUUID
+	url = https://github.com/actbit/MaskedUUID.git
+	branch = master
