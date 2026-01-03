@@ -75,9 +75,9 @@ namespace TreeTopic
                     .HasMaxLength(500);
                 b.Property(d => d.OpenIdConnectEndSessionEndpoint)
                     .HasMaxLength(500);
-                b.Property(d => d.OpenIdConnecClientId)
+                b.Property(d => d.OpenIdConnectClientId)
                     .HasMaxLength(500);
-                b.Property(d => d.OpenIdConnecClientSecret)
+                b.Property(d => d.OpenIdConnectClientSecret)
                     .HasMaxLength(1000);
 
                 b.Property(d => d.RoleClaimName)

@@ -62,6 +62,7 @@ let apiClientConfig: ApiClientConfig = {
 function buildHeaders(customHeaders?: Record<string, string>): Record<string, string> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
+    Accept: 'application/json',
     ...customHeaders,
   };
 
@@ -94,11 +95,26 @@ async function handleResponse<T>(response: Response): Promise<T> {
       auth.clear();
       // Redirect to login page for current tenant
       const tenant = apiClientConfig.tenant || '';
-      if (tenant) {
-        goto(`/${tenant}/auth/login`);
-      } else {
-        // If no tenant in context, redirect to home
-        goto('/');
+      let path = '';
+      if (response.url) {
+        try {
+          path = new URL(response.url).pathname;
+        } catch {
+          path = response.url;
+        }
+      }
+      const isAuthStatusCheck = path.endsWith('/auth/me') || path.endsWith('/auth/check');
+      const currentPath = typeof window !== 'undefined' ? window.location.pathname : '';
+      const isOnLoginPage = tenant &&
+        (currentPath === `/${tenant}/login` || currentPath === `/${tenant}/auth/login`);
+
+      if (!isAuthStatusCheck && !isOnLoginPage) {
+        if (tenant) {
+          goto(`/${tenant}/login`);
+        } else {
+          // If no tenant in context, redirect to home
+          goto('/');
+        }
       }
     }
 
@@ -401,6 +417,7 @@ export const api = {
   patch,
   delete: del,
   configureApiClient,
+  getCurrentTenant,
   setApiBaseUrl,
   getApiBaseUrl,
   checkApiHealth,

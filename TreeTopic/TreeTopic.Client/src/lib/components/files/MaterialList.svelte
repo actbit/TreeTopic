@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { files } from '$lib/stores/files';
+  import { fileList } from '$lib/stores/files';
   import { currentRoom } from '$lib/stores/rooms';
   import { formatFileSize } from '$lib/utils/validation';
   import { formatDate } from '$lib/utils/date';
@@ -13,11 +13,11 @@
 
   let filteredFiles = $derived.by(() => {
     if (!$currentRoom) return [];
-    return $files.filter((f) => f.roomId === $currentRoom?.id);
+    return $fileList.filter((f) => f.roomId === $currentRoom?.id);
   });
 
   let groupedByType = $derived.by(() => {
-    const groups: Record<string, typeof $files> = {
+    const groups: Record<string, typeof $fileList> = {
       documents: [],
       images: [],
       other: [],
@@ -53,21 +53,6 @@
     });
   }
 
-  function getFileIcon(fileType: string): string {
-    switch (fileType) {
-      case 'pdf':
-        return '📄';
-      case 'document':
-        return '📋';
-      case 'image':
-        return '🖼️';
-      case 'brainstorm':
-        return '💡';
-      default:
-        return '📎';
-    }
-  }
-
   function getTypeLabel(fileType: string): string {
     switch (fileType) {
       case 'pdf':
@@ -77,7 +62,7 @@
       case 'image':
         return 'Image';
       case 'brainstorm':
-        return 'Brainstorm Board';
+        return 'Brainstorm';
       default:
         return 'File';
     }
@@ -107,18 +92,17 @@
     </div>
 
     {#if groupedByType.documents.length > 0}
-      <div class="space-y-2">
+      <div class="space-y-3">
         <h4 class="text-sm font-semibold text-text-light uppercase tracking-wide">Documents</h4>
-        <div class="space-y-1">
+        <div class="space-y-2">
           {#each groupedByType.documents as file (file.id)}
             <div
-              class="flex items-center gap-3 p-3 bg-surface rounded hover:bg-white border border-border transition-colors group"
+              class="flex items-center gap-4 p-4 bg-surface rounded hover:bg-white border border-border transition-colors group"
             >
-              <span class="text-lg">{getFileIcon(file.fileType)}</span>
               <div class="flex-1 min-w-0">
                 <p class="text-sm font-medium text-text truncate">{file.fileName}</p>
-                <p class="text-xs text-text-light">
-                  {formatFileSize(file.size)} • {formatDate(file.uploadedAt)}
+                <p class="text-xs text-text-light mt-1">
+                  {getTypeLabel(file.fileType)} • {formatFileSize(file.size)} • {formatDate(file.uploadedAt)}
                 </p>
               </div>
               <div class="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -126,18 +110,18 @@
                   href={file.url}
                   target="_blank"
                   rel="noreferrer"
-                  class="p-1 text-text-light hover:text-primary rounded hover:bg-white transition-colors"
+                  class="px-3 py-2 text-sm text-text-light hover:text-primary rounded hover:bg-white transition-colors font-medium"
                   title="View"
                 >
-                  👁️
+                  View
                 </a>
                 <button
                   type="button"
                   on:click={() => handleDownload(file.url, file.fileName)}
-                  class="p-1 text-text-light hover:text-primary rounded hover:bg-white transition-colors"
+                  class="px-3 py-2 text-sm text-text-light hover:text-primary rounded hover:bg-white transition-colors font-medium"
                   title="Download"
                 >
-                  ⬇️
+                  Download
                 </button>
               </div>
             </div>
@@ -147,10 +131,10 @@
     {/if}
 
     {#if groupedByType.images.length > 0}
-      <div class="space-y-2">
+      <div class="space-y-3">
         <h4 class="text-sm font-semibold text-text-light uppercase tracking-wide">Images</h4>
         {#if !compact}
-          <div class="grid grid-cols-3 gap-2">
+          <div class="grid grid-cols-3 gap-3">
             {#each groupedByType.images as file (file.id)}
               <div
                 class="aspect-square bg-surface rounded border border-border overflow-hidden hover:shadow-md transition-shadow group cursor-pointer"
@@ -162,16 +146,16 @@
                   loading="lazy"
                 />
                 <div
-                  class="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-50 transition-all flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100"
+                  class="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-50 transition-all flex items-center justify-center gap-3 opacity-0 group-hover:opacity-100"
                 >
                   <a
                     href={file.url}
                     target="_blank"
                     rel="noreferrer"
-                    class="p-2 bg-white rounded hover:bg-primary transition-colors"
+                    class="px-4 py-2 bg-white rounded hover:bg-primary transition-colors text-sm font-medium"
                     title="View"
                   >
-                    👁️
+                    View
                   </a>
                   <button
                     type="button"
@@ -179,26 +163,25 @@
                       e.preventDefault();
                       handleDownload(file.url, file.fileName);
                     }}
-                    class="p-2 bg-white rounded hover:bg-primary transition-colors"
+                    class="px-4 py-2 bg-white rounded hover:bg-primary transition-colors text-sm font-medium"
                     title="Download"
                   >
-                    ⬇️
+                    Download
                   </button>
                 </div>
               </div>
             {/each}
           </div>
         {:else}
-          <div class="space-y-1">
+          <div class="space-y-2">
             {#each groupedByType.images as file (file.id)}
               <div
-                class="flex items-center gap-3 p-3 bg-surface rounded hover:bg-white border border-border transition-colors group"
+                class="flex items-center gap-4 p-4 bg-surface rounded hover:bg-white border border-border transition-colors group"
               >
-                <span class="text-lg">{getFileIcon(file.fileType)}</span>
                 <div class="flex-1 min-w-0">
                   <p class="text-sm font-medium text-text truncate">{file.fileName}</p>
-                  <p class="text-xs text-text-light">
-                    {formatFileSize(file.size)} • {formatDate(file.uploadedAt)}
+                  <p class="text-xs text-text-light mt-1">
+                    {getTypeLabel(file.fileType)} • {formatFileSize(file.size)} • {formatDate(file.uploadedAt)}
                   </p>
                 </div>
                 <div class="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -206,18 +189,18 @@
                     href={file.url}
                     target="_blank"
                     rel="noreferrer"
-                    class="p-1 text-text-light hover:text-primary rounded hover:bg-white transition-colors"
+                    class="px-3 py-2 text-sm text-text-light hover:text-primary rounded hover:bg-white transition-colors font-medium"
                     title="View"
                   >
-                    👁️
+                    View
                   </a>
                   <button
                     type="button"
                     on:click={() => handleDownload(file.url, file.fileName)}
-                    class="p-1 text-text-light hover:text-primary rounded hover:bg-white transition-colors"
+                    class="px-3 py-2 text-sm text-text-light hover:text-primary rounded hover:bg-white transition-colors font-medium"
                     title="Download"
                   >
-                    ⬇️
+                    Download
                   </button>
                 </div>
               </div>
@@ -228,18 +211,17 @@
     {/if}
 
     {#if groupedByType.other.length > 0}
-      <div class="space-y-2">
+      <div class="space-y-3">
         <h4 class="text-sm font-semibold text-text-light uppercase tracking-wide">Other Files</h4>
-        <div class="space-y-1">
+        <div class="space-y-2">
           {#each groupedByType.other as file (file.id)}
             <div
-              class="flex items-center gap-3 p-3 bg-surface rounded hover:bg-white border border-border transition-colors group"
+              class="flex items-center gap-4 p-4 bg-surface rounded hover:bg-white border border-border transition-colors group"
             >
-              <span class="text-lg">{getFileIcon(file.fileType)}</span>
               <div class="flex-1 min-w-0">
                 <p class="text-sm font-medium text-text truncate">{file.fileName}</p>
-                <p class="text-xs text-text-light">
-                  {formatFileSize(file.size)} • {formatDate(file.uploadedAt)}
+                <p class="text-xs text-text-light mt-1">
+                  {getTypeLabel(file.fileType)} • {formatFileSize(file.size)} • {formatDate(file.uploadedAt)}
                 </p>
               </div>
               <div class="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -247,18 +229,18 @@
                   href={file.url}
                   target="_blank"
                   rel="noreferrer"
-                  class="p-1 text-text-light hover:text-primary rounded hover:bg-white transition-colors"
+                  class="px-3 py-2 text-sm text-text-light hover:text-primary rounded hover:bg-white transition-colors font-medium"
                   title="View"
                 >
-                  👁️
+                  View
                 </a>
                 <button
                   type="button"
                   on:click={() => handleDownload(file.url, file.fileName)}
-                  class="p-1 text-text-light hover:text-primary rounded hover:bg-white transition-colors"
+                  class="px-3 py-2 text-sm text-text-light hover:text-primary rounded hover:bg-white transition-colors font-medium"
                   title="Download"
                 >
-                  ⬇️
+                  Download
                 </button>
               </div>
             </div>

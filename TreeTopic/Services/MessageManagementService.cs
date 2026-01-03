@@ -196,7 +196,7 @@ public class MessageManagementService : BaseService, IMessageManagementService
                 if (file.Length > 0)
                 {
                     var fileExtension = Path.GetExtension(file.FileName);
-                    var savedFileName = $"{Guid.NewGuid()}_{DateTime.UtcNow.Ticks}{fileExtension}";
+                    var savedFileName = $"{Guid.CreateVersion7()}_{DateTime.UtcNow.Ticks}{fileExtension}";
                     var filePath = Path.Combine(uploadPath, savedFileName);
 
                     using (var stream = new FileStream(filePath, FileMode.Create))

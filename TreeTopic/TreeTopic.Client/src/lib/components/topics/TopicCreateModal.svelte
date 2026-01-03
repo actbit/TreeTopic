@@ -4,7 +4,7 @@
   import Input from '../common/Input.svelte';
   import ErrorMessage from '../common/ErrorMessage.svelte';
   import { ui, activeModals } from '$lib/stores/ui';
-  import { topics, addTopic, selectedTopic } from '$lib/stores/topics';
+  import { topicList, addTopic, selectedTopic } from '$lib/stores/topics';
   import { currentRoom } from '$lib/stores/rooms';
   import { isRequired, minLength } from '$lib/utils/validation';
   import { api } from '$lib/api/client';
@@ -54,8 +54,8 @@
       addTopic(response);
       resetForm();
       ui.closeModal(modalId);
-    } catch (err: any) {
-      error = err.message || 'Failed to create topic';
+    } catch (err: unknown) {
+      error = err instanceof Error ? err.message : 'Failed to create topic';
     } finally {
       isLoading = false;
     }
@@ -74,7 +74,7 @@
 </script>
 
 <Modal {isOpen} title="Create Topic" onClose={handleClose} size="medium">
-  <form on:submit={handleCreate} class="space-y-4">
+  <form on:submit={handleCreate} class="spacing-md">
     {#if error}
       <ErrorMessage message={error} onDismiss={() => (error = null)} />
     {/if}
@@ -89,31 +89,27 @@
       required
     />
 
-    <div class="flex flex-col gap-1">
-      <label class="text-sm font-semibold text-text">Description</label>
+    <div class="form-group">
+      <label class="form-label">Description</label>
       <textarea
         bind:value={description}
         placeholder="Enter topic description (optional)"
         disabled={isLoading}
-        class="px-4 py-2 border border-border rounded-sm text-base bg-white transition-all
-          placeholder:text-text-light
-          focus:outline-none focus:border-primary
-          disabled:bg-surface disabled:cursor-not-allowed disabled:opacity-60"
+        class="form-input"
+        style="resize: vertical; min-height: 80px;"
       />
     </div>
 
-    <div class="flex flex-col gap-1">
-      <label for="parentId" class="text-sm font-semibold text-text">Parent Topic (Optional)</label>
+    <div class="form-group">
+      <label for="parentId" class="form-label">Parent Topic (Optional)</label>
       <select
         id="parentId"
         bind:value={parentId}
         disabled={isLoading}
-        class="px-4 py-2 border border-border rounded-sm text-base bg-white transition-all
-          focus:outline-none focus:border-primary
-          disabled:bg-surface disabled:cursor-not-allowed disabled:opacity-60"
+        class="form-input"
       >
         <option value={null}>None (Root level)</option>
-        {#each $topics as topic (topic.id)}
+        {#each $topicList as topic (topic.id)}
           {#if !topic.parentId}
             <option value={topic.id}>{topic.title}</option>
           {/if}
@@ -121,7 +117,7 @@
       </select>
     </div>
 
-    <div class="flex gap-3 pt-4">
+    <div class="flex spacing-md padding-top-md">
       <Button
         type="submit"
         variant="primary"
@@ -146,14 +142,3 @@
   </form>
 </Modal>
 
-<style>
-  textarea {
-    font-family: var(--font-family-base);
-    resize: vertical;
-    min-height: 80px;
-  }
-
-  select {
-    font-family: var(--font-family-base);
-  }
-</style>

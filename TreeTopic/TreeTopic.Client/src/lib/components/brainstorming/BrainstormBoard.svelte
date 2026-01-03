@@ -2,6 +2,7 @@
   import IdeaCard from './IdeaCard.svelte';
   import { brainstormBoard, ideas, addIdea, deleteIdea, updateIdeaPosition } from '$lib/stores/brainstorm';
   import { api } from '$lib/api/client';
+  import type { IdeaCardView } from '$lib/types/ui';
 
   interface Props {
     boardId: string;
@@ -23,22 +24,25 @@
   function handleAddIdea() {
     if (!newIdeaText.trim()) return;
 
-    const newIdea: any = {
+    const newIdea: Omit<IdeaCardView, 'canEdit' | 'canDelete'> = {
       id: `idea_${Date.now()}`,
       boardId,
       text: newIdeaText.trim(),
       x: Math.random() * 300 + 100,
       y: Math.random() * 200 + 100,
       isAnonymous,
-      marks: [],
+      votes: { circle: 0, square: 0, triangle: 0, cross: 0 },
+      userVotes: { circle: false, square: false, triangle: false, cross: false },
       userName: isAnonymous ? undefined : 'Current User',
-      userDisplayName: isAnonymous ? 'Anonymous' : 'Current User',
+      isEditing: false,
+      createdAt: new Date(),
     };
 
     addIdea(newIdea);
 
     // Save to server
-    api.post(`/api/brainstorm/${boardId}/ideas`, {
+    const tenant = api.getCurrentTenant();
+    api.post(`/${tenant}/api/brainstorm/${boardId}/ideas`, {
       text: newIdea.text,
       x: newIdea.x,
       y: newIdea.y,
@@ -77,14 +81,13 @@
     const x = (e.clientX || 0) - rect.left - offsetX;
     const y = (e.clientY || 0) - rect.top - offsetY;
 
-    // Constrain to board
     const constrainedX = Math.max(0, Math.min(x, rect.width - 200));
     const constrainedY = Math.max(0, Math.min(y, rect.height - 100));
 
     updateIdeaPosition(draggedIdea, constrainedX, constrainedY);
 
-    // Save to server
-    api.patch(`/api/brainstorm/${boardId}/ideas/${draggedIdea}`, {
+    const tenant = api.getCurrentTenant();
+    api.patch(`/${tenant}/api/brainstorm/${boardId}/ideas/${draggedIdea}`, {
       x: constrainedX,
       y: constrainedY,
     });
@@ -95,32 +98,31 @@
   function handleDeleteIdea(ideaId: string) {
     deleteIdea(ideaId);
 
-    // Delete from server
-    api.delete(`/api/brainstorm/${boardId}/ideas/${ideaId}`);
+    const tenant = api.getCurrentTenant();
+    api.delete(`/${tenant}/api/brainstorm/${boardId}/ideas/${ideaId}`);
   }
 </script>
 
-<div class="flex h-full bg-white gap-4 p-4">
-  <!-- Input panel -->
-  <div class="w-64 border-r border-border pr-4 overflow-y-auto">
-    <div class="space-y-4">
-      <h2 class="font-bold text-lg text-text">Add Ideas</h2>
+<div class="flex h-full bg-white gap-6 p-6">
+  <aside class="w-72 border-r border-border pr-6 overflow-y-auto" aria-label="Ideas panel">
+    <div class="space-y-6">
+      <h2 class="font-bold text-xl text-text">Add Ideas</h2>
 
-      <div class="space-y-2">
+      <div class="space-y-3">
         <label class="block text-sm font-semibold text-text">Your Idea</label>
         <textarea
           bind:value={newIdeaText}
           placeholder="Type your idea here..."
-          class="w-full p-3 border border-border rounded-lg text-sm bg-white focus:outline-none focus:border-primary resize-none"
-          rows="4"
+          class="w-full p-4 border border-border rounded-lg text-sm bg-white focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary focus:ring-opacity-10 resize-none transition-all hover:border-border-hover"
+          rows="5"
         />
       </div>
 
-      <label class="flex items-center gap-3 cursor-pointer">
+      <label class="flex items-center gap-3 cursor-pointer py-2">
         <input
           type="checkbox"
           bind:checked={isAnonymous}
-          class="w-4 h-4 accent-primary"
+          class="w-5 h-5 accent-primary"
         />
         <span class="text-sm text-text">Post anonymously</span>
       </label>
@@ -128,43 +130,50 @@
       <button
         on:click={handleAddIdea}
         disabled={!newIdeaText.trim()}
-        class="w-full px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-hover transition-colors disabled:opacity-60 disabled:cursor-not-allowed font-semibold"
+        class="w-full px-5 py-4 bg-primary text-white rounded-lg hover:bg-primary-hover transition-all hover:shadow-md disabled:opacity-60 disabled:cursor-not-allowed font-semibold transform hover:scale-105 active:scale-95"
       >
         Add Idea
       </button>
 
-      <div class="pt-4 border-t border-border">
-        <p class="text-xs text-text-light mb-3">Voting Marks:</p>
-        <div class="space-y-1 text-xs text-text-light">
-          <p>● Circle - Agree</p>
-          <p>■ Square - Consider</p>
-          <p>▲ Triangle - Priority</p>
-          <p>× Cross - Disagree</p>
+      <div class="pt-6 border-t border-border">
+        <p class="text-sm text-text-light mb-4 font-semibold">Voting Marks:</p>
+        <div class="space-y-2 text-sm text-text-light">
+          <p>Circle - Agree</p>
+          <p>Square - Consider</p>
+          <p>Triangle - Priority</p>
+          <p>Cross - Disagree</p>
         </div>
       </div>
 
-      <div class="pt-4 border-t border-border">
-        <p class="text-sm font-semibold text-text mb-2">Stats</p>
-        <div class="text-xs text-text-light space-y-1">
-          <p>Total Ideas: {boardIdeas.length}</p>
-          <p>Your Ideas: {boardIdeas.filter((i) => !i.isAnonymous).length}</p>
+      <div class="pt-6 border-t border-border">
+        <p class="text-sm font-semibold text-text mb-4">Stats</p>
+        <div class="space-y-3">
+          <div class="flex items-center justify-between bg-surface rounded-lg p-3">
+            <span class="text-sm text-text-light">Total Ideas:</span>
+            <span class="text-base font-bold text-primary">{boardIdeas.length}</span>
+          </div>
+          <div class="flex items-center justify-between bg-surface rounded-lg p-3">
+            <span class="text-sm text-text-light">Your Ideas:</span>
+            <span class="text-base font-bold text-primary">{boardIdeas.filter((i) => !i.isAnonymous).length}</span>
+          </div>
         </div>
       </div>
     </div>
-  </div>
+  </aside>
 
-  <!-- Canvas -->
-  <div
+  <main
     bind:this={boardContainer}
     on:dragover={handleDragOver}
     on:drop={handleDrop}
-    class="flex-1 border-2 border-dashed border-border rounded-lg bg-surface overflow-hidden relative"
+    class="flex-1 border-2 border-dashed border-border rounded-lg bg-surface overflow-hidden relative transition-colors {draggedIdea ? 'bg-opacity-50 border-primary' : ''}"
+    role="region"
+    aria-label="Brainstorm board"
   >
     {#if boardIdeas.length === 0}
       <div class="absolute inset-0 flex items-center justify-center text-text-light">
         <div class="text-center">
-          <p class="text-lg font-semibold mb-2">💡 Brainstorm Board</p>
-          <p class="text-sm">Drag ideas around the board</p>
+          <p class="text-lg font-semibold mb-2">Brainstorm Board</p>
+          <p class="text-sm">Drag ideas around to organize them</p>
         </div>
       </div>
     {:else}
@@ -186,7 +195,7 @@
         {/each}
       </div>
     {/if}
-  </div>
+  </main>
 </div>
 
 <style>

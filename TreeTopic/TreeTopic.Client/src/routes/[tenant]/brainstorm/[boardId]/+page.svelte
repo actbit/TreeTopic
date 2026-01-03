@@ -25,8 +25,9 @@
 
       const boardData = await api.get(`/api/brainstorm/${data.boardId}`);
       brainstorm.setCurrentBoard(boardData);
-    } catch (err: any) {
-      error = err.message || 'Failed to load brainstorm board';
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to load brainstorm board';
+      error = errorMessage;
     } finally {
       isLoading = false;
     }
@@ -43,27 +44,27 @@
 
 <div class="flex flex-col h-screen bg-white">
   <!-- Header -->
-  <div class="border-b border-border p-4 flex items-center justify-between bg-white shadow-sm">
-    <div class="flex items-center gap-4">
+  <div class="border-b border-border p-6 flex items-center justify-between bg-white shadow-sm">
+    <div class="flex items-center gap-5">
       <button
         on:click={goBack}
-        class="p-2 text-text-light hover:text-primary rounded hover:bg-surface transition-colors"
+        class="px-4 py-2 text-text-light hover:text-primary rounded hover:bg-surface transition-colors font-medium"
         title="Go back"
       >
-        ← Back
+        Back
       </button>
       <div>
-        <h1 class="text-2xl font-bold text-text">💡 Brainstorm Board</h1>
-        <p class="text-sm text-text-light">Collaborative idea development</p>
+        <h1 class="text-2xl font-bold text-text">Brainstorm Board</h1>
+        <p class="text-sm text-text-light mt-1">Collaborative idea development</p>
       </div>
     </div>
 
-    <div class="flex items-center gap-2">
+    <div class="flex items-center gap-3">
       <Button variant="secondary" size="small" on:click={loadBoard}>
-        🔄 Refresh
+        Refresh
       </Button>
       <Button variant="secondary" size="small" on:click={goBack}>
-        ✕ Close
+        Close
       </Button>
     </div>
   </div>
@@ -75,10 +76,10 @@
         <LoadingSpinner message="Loading brainstorm board..." />
       </div>
     {:else if error}
-      <div class="flex flex-col items-center justify-center h-full gap-4">
+      <div class="flex flex-col items-center justify-center h-full gap-6">
         <div class="text-center">
-          <p class="text-xl font-semibold text-text mb-2">⚠️ Error</p>
-          <p class="text-text-light mb-4">{error}</p>
+          <p class="text-xl font-semibold text-text mb-3">Error</p>
+          <p class="text-text-light mb-5">{error}</p>
         </div>
         <div class="flex gap-3">
           <Button variant="primary" on:click={loadBoard}>Retry</Button>

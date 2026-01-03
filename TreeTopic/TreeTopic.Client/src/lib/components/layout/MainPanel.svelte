@@ -6,16 +6,14 @@
   let { children }: Props = $props();
 </script>
 
-<main class="app-main flex-1 bg-white overflow-hidden flex flex-col">
+<main class="app-main flex overflow-hidden flex-col bg-surface">
   {#if children}
     {@render children()}
   {/if}
 </main>
 
 <style>
-  :global(.app-main) {
-    display: flex;
-    flex-direction: column;
-    background-color: var(--color-background);
+  .app-main {
+    flex: 1;
   }
 </style>

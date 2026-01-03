@@ -3,6 +3,7 @@
 @import './colors.css';
 @import './layout.css';
 @import './animations.css';
+@import './components.css';
 
 /* Base styles */
 *,
@@ -23,6 +24,7 @@ body {
   font-family: var(--font-family-base);
   font-size: var(--font-size-base);
   line-height: var(--line-height-normal);
+  letter-spacing: var(--letter-spacing-normal);
   color: var(--color-text);
   background-color: var(--color-background);
   margin: 0;
@@ -33,6 +35,7 @@ body {
 h1, h2, h3, h4, h5, h6 {
   font-weight: 700;
   line-height: var(--line-height-tight);
+  letter-spacing: var(--letter-spacing-wide);
   margin: 0;
 }
 

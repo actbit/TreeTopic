@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Options;
 
 namespace TreeTopic.Authentication;
@@ -21,8 +22,21 @@ internal class CookieAuthenticationConfiguration : IPostConfigureOptions<CookieA
         if (name != CookieAuthenticationDefaults.AuthenticationScheme)
             return;
 
-        var httpContextAccessor = _serviceProvider.GetRequiredService<IHttpContextAccessor>();
-        var logger = _serviceProvider.GetRequiredService<ILogger<TenantAwareCookieManager>>();
-        options.CookieManager = new TenantAwareCookieManager(httpContextAccessor, logger);
+        var configuration = _serviceProvider.GetRequiredService<IConfiguration>();
+        var useTenantAwareCookies = configuration.GetValue<bool>("Authentication:UseTenantAwareCookies");
+
+        if (useTenantAwareCookies)
+        {
+            var httpContextAccessor = _serviceProvider.GetRequiredService<IHttpContextAccessor>();
+            var logger = _serviceProvider.GetRequiredService<ILogger<TenantAwareCookieManager>>();
+            options.CookieManager = new TenantAwareCookieManager(httpContextAccessor, logger);
+        }
+        else
+        {
+            // Use a single shared cookie name across tenants.
+            options.CookieManager = new ChunkingCookieManager();
+        }
+
+        // Use standard cookie auth without server-side ticket store.
     }
 }

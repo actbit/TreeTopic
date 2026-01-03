@@ -15,16 +15,16 @@
 </script>
 
 {#if fullScreen}
-  <div class="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
-    <div class="bg-white rounded-lg shadow-xl p-8 flex flex-col items-center gap-4">
+  <div class="spinner-fullscreen">
+    <div class="spinner-container">
       <div
-        class="animate-spin"
+        class="spinner"
         style="width: {sizeMap[size]}; height: {sizeMap[size]};"
       >
         <svg
           viewBox="0 0 50 50"
           xmlns="http://www.w3.org/2000/svg"
-          class="w-full h-full"
+          class="spinner-svg"
         >
           <circle
             cx="25"
@@ -39,20 +39,20 @@
       </div>
 
       {#if message}
-        <p class="text-text-secondary">{message}</p>
+        <p class="spinner-message">{message}</p>
       {/if}
     </div>
   </div>
 {:else}
-  <div class="flex flex-col items-center gap-3">
+  <div class="spinner-inline">
     <div
-      class="animate-spin"
+      class="spinner"
       style="width: {sizeMap[size]}; height: {sizeMap[size]};"
     >
       <svg
         viewBox="0 0 50 50"
         xmlns="http://www.w3.org/2000/svg"
-        class="w-full h-full"
+        class="spinner-svg"
       >
         <circle
           cx="25"
@@ -67,14 +67,57 @@
     </div>
 
     {#if message}
-      <p class="text-sm text-text-secondary">{message}</p>
+      <p class="spinner-message-inline">{message}</p>
     {/if}
   </div>
 {/if}
 
 <style>
-  :global(.animate-spin) {
+  .spinner-fullscreen {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: rgba(0, 0, 0, 0.5);
+    z-index: 50;
+  }
+
+  .spinner-container {
+    background-color: var(--color-background);
+    border-radius: var(--border-radius-lg);
+    box-shadow: var(--shadow-xl);
+    padding: 32px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .spinner-inline {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .spinner {
     animation: spin 1s linear infinite;
+  }
+
+  .spinner-svg {
+    width: 100%;
+    height: 100%;
+  }
+
+  .spinner-message {
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-base);
+  }
+
+  .spinner-message-inline {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-secondary);
   }
 
   @keyframes spin {

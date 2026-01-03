@@ -1,7 +1,7 @@
 <script lang="ts">
   import MessageItem from './MessageItem.svelte';
   import LoadingSpinner from '../common/LoadingSpinner.svelte';
-  import { getMessagesByTopic, messagesLoading, updateMessageOrder } from '$lib/stores/messages';
+  import { messageList, messagesLoading, updateMessageOrder } from '$lib/stores/messages';
   import { selectedTopic } from '$lib/stores/topics';
   import { onMount } from 'svelte';
   import { api } from '$lib/api/client';
@@ -11,7 +11,9 @@
   let dragOverMessageId: string | null = $state(null);
 
   let topicMessages = $derived.by(() => {
-    return $selectedTopic ? getMessagesByTopic($selectedTopic.id) : [];
+    return $selectedTopic
+      ? $messageList.filter((m) => m.topicId === $selectedTopic.id)
+      : [];
   });
 
   onMount(() => {
@@ -78,7 +80,9 @@
 
     // Send to API
     if ($selectedTopic) {
-      api.post(`/api/topic/${$selectedTopic.id}/reorder-messages`, {
+      const tenant = api.getCurrentTenant();
+      api.post(`/${tenant}/api/Message/reorder`, {
+        topicId: $selectedTopic.id,
         messageIds: newMessages.map((m) => m.id),
       });
     }
@@ -95,7 +99,7 @@
 
 <div
   bind:this={messagesContainer}
-  class="flex-1 overflow-y-auto p-4 space-y-3 bg-white"
+  class="flex-1 overflow-y-auto p-6 space-y-4 bg-white"
 >
   {#if $messagesLoading}
     <div class="flex items-center justify-center h-full">
@@ -111,10 +115,10 @@
   {:else}
     {#each topicMessages as message (message.id)}
       <div
-        class="transition-all {draggedMessageId === message.id
-          ? 'opacity-50'
+        class="transition-all duration-200 {draggedMessageId === message.id
+          ? 'opacity-50 scale-95'
           : ''} {dragOverMessageId === message.id
-          ? 'border-l-4 border-primary pl-3'
+          ? 'border-l-4 border-primary pl-3 bg-primary bg-opacity-5'
           : ''}"
         draggable={true}
         on:dragstart={(e) => handleDragStart(message.id, e)}
@@ -125,9 +129,9 @@
         role="button"
         tabindex="0"
       >
-        <div class="flex items-start gap-2">
-          <div class="pt-1 text-text-light text-xs cursor-move opacity-0 hover:opacity-100 transition-opacity">
-            ⋮⋮
+        <div class="flex items-start gap-2 group">
+          <div class="pt-1 text-text-light text-xs cursor-move opacity-0 group-hover:opacity-100 transition-opacity duration-200 select-none">
+            ⋮
           </div>
           <div class="flex-1">
             <MessageItem {message} />
@@ -137,10 +141,3 @@
     {/each}
   {/if}
 </div>
-
-<style>
-  div {
-    display: flex;
-    flex-direction: column;
-  }
-</style>

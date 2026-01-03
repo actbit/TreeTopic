@@ -27,14 +27,14 @@ public class TopicController : ControllerBase
     }
 
     [HttpGet("room/{roomId}")]
-    public async Task<IActionResult> GetByRoom(MaskedGuid roomId, CancellationToken cancellationToken)
+    public async Task<IActionResult> GetByRoom([FromRoute] MaskedGuid roomId, CancellationToken cancellationToken)
     {
         var result = await _topicManagementService.GetTopicsByRoomAsync((Guid)roomId, cancellationToken);
         return HandleResult(result);
     }
 
     [HttpGet("{topicId}")]
-    public async Task<IActionResult> GetById(MaskedGuid topicId, CancellationToken cancellationToken)
+    public async Task<IActionResult> GetById([FromRoute] MaskedGuid topicId, CancellationToken cancellationToken)
     {
         var result = await _topicManagementService.GetTopicByIdAsync((Guid)topicId, cancellationToken);
         return HandleResult(result);
@@ -61,7 +61,7 @@ public class TopicController : ControllerBase
     }
 
     [HttpDelete("{topicId}")]
-    public async Task<IActionResult> Delete(MaskedGuid topicId, CancellationToken cancellationToken)
+    public async Task<IActionResult> Delete([FromRoute] MaskedGuid topicId, CancellationToken cancellationToken)
     {
         var result = await _topicManagementService.DeleteTopicAsync((Guid)topicId, cancellationToken);
         return HandleResult(result);

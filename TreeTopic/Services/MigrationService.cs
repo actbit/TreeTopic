@@ -152,14 +152,9 @@ public class MigrationService
         if (string.IsNullOrEmpty(tenant.Detail.ConnectionString))
             throw new InvalidOperationException($"Tenant '{tenant.Identifier}' has no connection string.");
 
-        // 1. マスターキーでテナント用キーを復号化
-        var decryptedTenantKey = _encryptionService.Decrypt(tenant.Detail.TenantEncryptionKey);
-
-        // 2. テナント用キーで接続文字列を復号化
-        var loggerFactory = LoggerFactory.Create(builder => builder.AddConsole());
-        var logger = loggerFactory.CreateLogger<EncryptionService>();
-        var tenantEncryption = new EncryptionService(decryptedTenantKey, logger);
-        return tenantEncryption.Decrypt(tenant.Detail.ConnectionString);
+        return _encryptionService.DecryptWithTenantKey(
+            tenant.Detail.TenantEncryptionKey,
+            tenant.Detail.ConnectionString);
     }
 
     /// <summary>

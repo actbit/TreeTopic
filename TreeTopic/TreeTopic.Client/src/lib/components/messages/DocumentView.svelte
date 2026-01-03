@@ -1,7 +1,7 @@
 <script lang="ts">
   import MessageItem from './MessageItem.svelte';
   import LoadingSpinner from '../common/LoadingSpinner.svelte';
-  import { getMessagesByTopic, messagesLoading } from '$lib/stores/messages';
+  import { messageList, messagesLoading } from '$lib/stores/messages';
   import { selectedTopic } from '$lib/stores/topics';
   import { formatFileSize } from '$lib/utils/validation';
 
@@ -10,7 +10,7 @@
 
   let topicMessages = $derived.by(() => {
     if (!$selectedTopic) return [];
-    return getMessagesByTopic($selectedTopic.id);
+    return $messageList.filter((m) => m.topicId === $selectedTopic.id);
   });
 
   let messagesWithDocuments = $derived.by(() => {
@@ -75,8 +75,7 @@
               ? 'bg-primary bg-opacity-10 border-l-4 border-primary'
               : 'hover:bg-white'}"
           >
-            <div class="flex items-center gap-2 w-full min-w-0">
-              <span class="text-lg flex-shrink-0">📄</span>
+            <div class="flex items-center gap-3 w-full min-w-0">
               <p class="text-sm font-medium text-text truncate">{fileName}</p>
             </div>
             <p class="text-xs text-text-light pl-6">

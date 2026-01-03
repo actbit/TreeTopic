@@ -30,19 +30,19 @@
   }: Props = $props();
 </script>
 
-<div class="flex flex-col gap-1">
+<div class="input-group">
   {#if label}
-    <label class="text-sm font-semibold text-text">
+    <label class="input-label">
       {label}
       {#if required}
-        <span class="text-error">*</span>
+        <span class="input-required">*</span>
       {/if}
     </label>
   {/if}
 
-  <div class="relative flex items-center">
+  <div class="input-wrapper">
     {#if icon}
-      <span class="absolute left-3 text-text-light text-lg">{icon}</span>
+      <span class="input-icon">{icon}</span>
     {/if}
 
     <input
@@ -52,32 +52,91 @@
       {disabled}
       {onchange}
       {oninput}
-      class="w-full px-4 py-2 border border-border rounded-sm text-base transition-all duration-200
-        placeholder:text-text-light
-        focus:outline-none focus:border-primary focus:shadow-sm
-        disabled:bg-surface disabled:cursor-not-allowed disabled:opacity-60
-        {icon ? 'pl-10' : ''}
-        {error ? 'border-error' : ''}"
+      class="input-field {icon ? 'input-with-icon' : ''} {error ? 'input-error' : ''}"
     />
   </div>
 
   {#if error}
-    <p class="text-xs text-error">{error}</p>
+    <p class="input-message input-message-error">{error}</p>
   {:else if helperText}
-    <p class="text-xs text-text-light">{helperText}</p>
+    <p class="input-message input-message-helper">{helperText}</p>
   {/if}
 </div>
 
 <style>
-  div {
+  .input-group {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
     font-family: var(--font-family-base);
   }
 
-  input {
-    font-family: var(--font-family-base);
-  }
-
-  label {
+  .input-label {
+    font-size: var(--font-size-sm);
+    font-weight: 600;
     color: var(--color-text);
+  }
+
+  .input-required {
+    color: var(--color-error);
+  }
+
+  .input-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+  }
+
+  .input-icon {
+    position: absolute;
+    left: 12px;
+    color: var(--color-text-light);
+    font-size: var(--font-size-lg);
+  }
+
+  .input-field {
+    width: 100%;
+    padding: 8px 16px;
+    font-family: var(--font-family-base);
+    font-size: var(--font-size-base);
+    border: 1px solid var(--color-border);
+    border-radius: var(--border-radius-sm);
+    transition: all 0.2s ease;
+  }
+
+  .input-field::placeholder {
+    color: var(--color-text-light);
+  }
+
+  .input-field:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: var(--shadow-sm);
+  }
+
+  .input-field:disabled {
+    background-color: var(--color-surface);
+    cursor: not-allowed;
+    opacity: 0.6;
+  }
+
+  .input-with-icon {
+    padding-left: 40px;
+  }
+
+  .input-error {
+    border-color: var(--color-error);
+  }
+
+  .input-message {
+    font-size: var(--font-size-xs);
+  }
+
+  .input-message-error {
+    color: var(--color-error);
+  }
+
+  .input-message-helper {
+    color: var(--color-text-light);
   }
 </style>

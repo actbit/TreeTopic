@@ -50,8 +50,8 @@
       addRoom(response);
       resetForm();
       ui.closeModal(modalId);
-    } catch (err: any) {
-      error = err.message || 'Failed to create room';
+    } catch (err: unknown) {
+      error = err instanceof Error ? err.message : 'Failed to create room';
     } finally {
       isLoading = false;
     }
@@ -70,7 +70,7 @@
 </script>
 
 <Modal {isOpen} title="Create Room" onClose={handleClose} size="medium">
-  <form on:submit={handleCreate} class="space-y-4">
+  <form on:submit={handleCreate} class="spacing-md">
     {#if error}
       <ErrorMessage message={error} onDismiss={() => (error = null)} />
     {/if}
@@ -85,33 +85,31 @@
       required
     />
 
-    <div class="flex flex-col gap-1">
-      <label class="text-sm font-semibold text-text">Description</label>
+    <div class="form-group">
+      <label class="form-label">Description</label>
       <textarea
         bind:value={description}
         placeholder="Enter room description (optional)"
         disabled={isLoading}
-        class="px-4 py-2 border border-border rounded-sm text-base bg-white transition-all
-          placeholder:text-text-light
-          focus:outline-none focus:border-primary
-          disabled:bg-surface disabled:cursor-not-allowed disabled:opacity-60"
+        class="form-input"
+        style="resize: vertical; min-height: 80px;"
       />
     </div>
 
-    <div class="flex items-center gap-3">
+    <div class="flex items-center form-checkbox-group">
       <input
         type="checkbox"
         id="isPublic"
         bind:checked={isPublic}
         disabled={isLoading}
-        class="w-4 h-4 cursor-pointer"
+        class="form-checkbox cursor-pointer"
       />
-      <label for="isPublic" class="text-sm text-text cursor-pointer">
+      <label for="isPublic" class="form-label cursor-pointer">
         Make this room public
       </label>
     </div>
 
-    <div class="flex gap-3 pt-4">
+    <div class="flex form-actions">
       <Button
         type="submit"
         variant="primary"
@@ -137,9 +135,17 @@
 </Modal>
 
 <style>
-  textarea {
-    font-family: var(--font-family-base);
-    resize: vertical;
-    min-height: 80px;
+  .form-checkbox-group {
+    gap: var(--spacing-sm);
+  }
+
+  .form-checkbox {
+    width: 16px;
+    height: 16px;
+  }
+
+  .form-actions {
+    gap: var(--spacing-sm);
+    padding-top: var(--spacing-md);
   }
 </style>

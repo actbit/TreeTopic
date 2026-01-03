@@ -44,10 +44,11 @@
     error = null;
 
     try {
+      const tenant = api.getCurrentTenant();
       for (const file of selectedFiles) {
         try {
           const response = await api.uploadFile(
-            `/api/file/room/${$currentRoom.id}`,
+            `/${tenant}/api/File/room/${$currentRoom.id}`,
             file,
             (progress) => {
               uploadProgress[file.name] = progress;
@@ -80,13 +81,13 @@
 </script>
 
 <Modal {isOpen} title="Upload Files" onClose={handleClose} size="medium">
-  <form on:submit|preventDefault={handleUpload} class="space-y-4">
+  <form on:submit|preventDefault={handleUpload} class="space-y-6">
     {#if error}
       <ErrorMessage message={error} onDismiss={() => (error = null)} />
     {/if}
 
     <div
-      class="border-2 border-dashed border-border rounded-lg p-6 text-center bg-surface hover:border-primary transition-colors cursor-pointer"
+      class="border-2 border-dashed border-border rounded-lg p-10 text-center bg-surface hover:border-primary hover:bg-opacity-50 transition-all cursor-pointer"
       on:click={() => fileInput?.click()}
       on:keydown={(e) => e.key === 'Enter' && fileInput?.click()}
       role="button"
@@ -102,17 +103,17 @@
       />
 
       <div class="text-text-light">
-        <p class="text-lg font-semibold mb-2">📁 Drop files here or click to browse</p>
+        <p class="text-lg font-semibold mb-2">Drop files here or click to browse</p>
         <p class="text-sm">Supported: PDF, Images, Documents (Max 10MB per file)</p>
       </div>
     </div>
 
     {#if selectedFiles.length > 0}
-      <div class="space-y-2">
-        <h3 class="font-semibold text-text">Selected Files ({selectedFiles.length})</h3>
-        <div class="max-h-48 overflow-y-auto space-y-2">
+      <div class="space-y-4">
+        <h3 class="font-semibold text-text text-base">Selected Files ({selectedFiles.length})</h3>
+        <div class="max-h-56 overflow-y-auto space-y-3">
           {#each selectedFiles as file, index (file.name)}
-            <div class="flex items-center gap-3 p-3 bg-surface rounded border border-border">
+            <div class="flex items-center gap-4 p-4 bg-surface rounded-lg border border-border hover:border-primary transition-colors">
               <div class="flex-1 min-w-0">
                 <p class="text-sm font-medium text-text truncate">{file.name}</p>
                 <p class="text-xs text-text-light">
@@ -121,10 +122,10 @@
               </div>
 
               {#if uploadProgress[file.name] !== undefined && uploadProgress[file.name] < 100}
-                <div class="flex-shrink-0 w-16">
-                  <div class="w-full h-2 bg-surface rounded-full overflow-hidden">
+                <div class="flex-shrink-0 w-20">
+                  <div class="w-full h-2 bg-border rounded-full overflow-hidden">
                     <div
-                      class="h-full bg-primary transition-all"
+                      class="h-full bg-primary transition-all duration-300"
                       style="width: {uploadProgress[file.name]}%"
                     ></div>
                   </div>
@@ -132,16 +133,18 @@
                     {Math.round(uploadProgress[file.name])}%
                   </p>
                 </div>
+              {:else if uploadProgress[file.name] === 100}
+                <div class="text-xs text-primary font-semibold">Complete</div>
               {/if}
 
               {#if !isLoading}
                 <button
                   type="button"
                   on:click={() => removeFile(index)}
-                  class="flex-shrink-0 p-1 text-text-light hover:text-danger rounded hover:bg-white transition-colors"
+                  class="flex-shrink-0 p-1 text-text-light hover:text-danger rounded transition-colors"
                   title="Remove file"
                 >
-                  ✕
+                  [x]
                 </button>
               {/if}
             </div>
@@ -150,7 +153,7 @@
       </div>
     {/if}
 
-    <div class="flex gap-3 pt-4">
+    <div class="flex gap-4 pt-8">
       <Button
         type="submit"
         variant="primary"
@@ -159,7 +162,11 @@
         loading={isLoading}
         disabled={isLoading || selectedFiles.length === 0}
       >
-        Upload Files
+        {#if isLoading}
+          Uploading...
+        {:else}
+          Upload Files
+        {/if}
       </Button>
       <Button
         type="button"

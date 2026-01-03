@@ -1,83 +1,162 @@
 <script lang="ts">
-  import { isAuthenticated } from '$lib/stores/auth';
-  import { currentRoom, roomList } from '$lib/stores/rooms';
-  import { selectedTopic } from '$lib/stores/topics';
-  import AppLayout from '$lib/components/layout/AppLayout.svelte';
-  import RoomSelector from '$lib/components/rooms/RoomSelector.svelte';
-  import RoomCreateModal from '$lib/components/rooms/RoomCreateModal.svelte';
-  import RoomSettingsModal from '$lib/components/rooms/RoomSettingsModal.svelte';
-  import TopicTree from '$lib/components/topics/TopicTree.svelte';
-  import TopicCreateModal from '$lib/components/topics/TopicCreateModal.svelte';
-  import MessageList from '$lib/components/messages/MessageList.svelte';
-  import MessageInput from '$lib/components/messages/MessageInput.svelte';
-  import MessagesView from '$lib/components/messages/MessagesView.svelte';
-  import ViewModeSelector from '$lib/components/messages/ViewModeSelector.svelte';
-  import MaterialList from '$lib/components/files/MaterialList.svelte';
-  import FileUploadModal from '$lib/components/files/FileUploadModal.svelte';
+  import { onMount } from 'svelte';
+  import { page } from '$app/stores';
+  import { goto } from '$app/navigation';
+  import { auth, isAuthenticated } from '$lib/stores/auth';
+  import { roomList, setRooms, setCurrentRoom } from '$lib/stores/rooms';
   import { ui } from '$lib/stores/ui';
+  import RoomCreateModal from '$lib/components/rooms/RoomCreateModal.svelte';
+  import { api, getCurrentTenant } from '$lib/api/client';
+
+  let isLoading = $state(true);
+  let loadError = $state<string | null>(null);
+
+  function normalizeRoom(raw: any) {
+    const id = raw?.id ?? raw?.Id ?? '';
+    const name = raw?.name ?? raw?.Name ?? '';
+    const createdAt = raw?.createdAt ?? raw?.CreatedAt ?? null;
+    const updatedAt = raw?.updatedAt ?? raw?.UpdatedAt ?? null;
+
+    return {
+      id,
+      name,
+      description: raw?.description ?? raw?.Description,
+      avatar: raw?.avatar ?? raw?.Avatar,
+      createdAt: createdAt ? new Date(createdAt) : new Date(),
+      updatedAt: updatedAt ? new Date(updatedAt) : new Date(),
+      ownerId: raw?.ownerId ?? raw?.OwnerId ?? raw?.createdUserId ?? raw?.CreatedUserId ?? '',
+      memberCount: raw?.memberCount ?? raw?.MemberCount ?? 0,
+      unreadCount: raw?.unreadCount ?? raw?.UnreadCount ?? 0,
+      isArchived: raw?.isArchived ?? raw?.IsArchived ?? false,
+      settings: raw?.settings ?? raw?.Settings,
+    };
+  }
+
+  async function loadTenantData() {
+    isLoading = true;
+    loadError = null;
+
+    try {
+      const tenant = $page.params.tenant ?? getCurrentTenant();
+      if (!tenant) {
+        throw new Error('Tenant is missing');
+      }
+      await auth.fetchCurrentUser(tenant);
+
+      const response = await api.get<any[]>(`/${tenant}/api/Room`);
+      const rooms = Array.isArray(response) ? response.map(normalizeRoom) : [];
+      setRooms(rooms);
+    } catch (error) {
+      loadError = error instanceof Error ? error.message : 'Failed to load rooms';
+    } finally {
+      isLoading = false;
+    }
+  }
+
+  function openCreateModal() {
+    ui.openModal({ id: 'room-create', title: 'Create Room', type: 'custom' });
+  }
+
+  function enterRoom(roomId: string) {
+    const tenant = $page.params.tenant ?? getCurrentTenant();
+    if (!tenant) return;
+    const room = $roomList.find((r) => r.id === roomId);
+    if (room) {
+      setCurrentRoom(room);
+    }
+    goto(`/${tenant}/room/${roomId}`);
+  }
+
+  onMount(() => {
+    loadTenantData();
+  });
 </script>
 
 <svelte:head>
-  <title>TreeTopic - Collaborative Discussion</title>
+  <title>TreeTopic - Select Room</title>
 </svelte:head>
 
-{#if $isAuthenticated}
-  <AppLayout subPanelTitle="Materials">
-    <svelte:fragment slot="headerContent">
-      <RoomSelector />
-    </svelte:fragment>
+{#if isLoading}
+  <div class="flex items-center justify-center h-screen bg-gradient-to-br from-primary to-secondary">
+    <div class="text-center text-white">
+      <h1 class="text-4xl font-bold mb-4">TreeTopic</h1>
+      <p>Loading rooms...</p>
+    </div>
+  </div>
+{:else if $isAuthenticated}
+  <div class="min-h-screen flex items-center justify-center bg-background p-8">
+    <div class="panel w-full max-w-lg room-select-panel">
+      <div class="panel-header">
+        <h1 class="panel-title">Select a room</h1>
+        <button class="button button-secondary button-small" on:click={openCreateModal}>
+          New Room
+        </button>
+      </div>
 
-    <svelte:fragment slot="sidebarContent">
-      {#if $currentRoom}
-        <TopicTree />
-      {:else}
-        <div class="p-4 text-center text-text-light">
-          <p class="text-sm">Select a room to view topics</p>
-        </div>
-      {/if}
-    </svelte:fragment>
+      <div class="panel-body">
+        {#if loadError}
+          <div class="message message-error">{loadError}</div>
+        {/if}
 
-    <svelte:fragment slot="mainContent">
-      {#if $currentRoom && $selectedTopic}
-        <div class="flex flex-col h-full">
-          <div class="border-b border-border p-4 space-y-3">
-            <div>
-              <h2 class="text-lg font-semibold text-text">{$selectedTopic.title}</h2>
-              {#if $selectedTopic.description}
-                <p class="text-sm text-text-light mt-1">{$selectedTopic.description}</p>
-              {/if}
-            </div>
-            <div class="pt-2 border-t border-border">
-              <ViewModeSelector />
-            </div>
+        {#if $roomList.length === 0}
+          <div class="text-center text-light">
+            <p class="text-large text-bold margin-bottom-sm">No rooms yet</p>
+            <p class="text-small margin-bottom-md">Create your first room to get started</p>
+            <button class="button button-primary" on:click={openCreateModal}>
+              Create Room
+            </button>
           </div>
-          <MessagesView />
-          <MessageInput />
-        </div>
-      {:else if $currentRoom}
-        <div class="flex items-center justify-center h-full text-center">
-          <div>
-            <h2 class="text-2xl font-bold text-text mb-2">{$currentRoom.name}</h2>
-            <p class="text-text-secondary">Select a topic to view messages</p>
+        {:else}
+          <div class="list">
+            {#each $roomList as room (room.id)}
+              <button
+                class="list-item clickable hoverable w-full text-left"
+                on:click={() => enterRoom(room.id)}
+              >
+                <div class="flex items-center justify-between">
+                  <div class="min-w-0">
+                    <div class="text-bold text-base">{room.name}</div>
+                    {#if room.description}
+                      <div class="text-small text-light truncate">{room.description}</div>
+                    {/if}
+                  </div>
+                  {#if room.unreadCount > 0}
+                    <span class="badge badge-error">{room.unreadCount}</span>
+                  {/if}
+                </div>
+              </button>
+            {/each}
           </div>
-        </div>
-      {:else}
-        <div class="flex items-center justify-center h-full text-center">
-          <div>
-            <h2 class="text-2xl font-bold text-text mb-2">Welcome to TreeTopic</h2>
-            <p class="text-text-secondary">Select a room to get started</p>
-          </div>
-        </div>
-      {/if}
-    </svelte:fragment>
-
-    <svelte:fragment slot="subPanelContent">
-      <MaterialList />
-    </svelte:fragment>
-  </AppLayout>
+        {/if}
+      </div>
+    </div>
+  </div>
 
   <RoomCreateModal />
-  <RoomSettingsModal />
-  <TopicCreateModal />
-  <FileUploadModal />
+{:else}
+  <div class="flex items-center justify-center h-screen bg-gradient-to-br from-primary to-secondary">
+    <div class="text-center text-white">
+      <h1 class="text-4xl font-bold mb-4">TreeTopic</h1>
+      {#if loadError}
+        <p class="mb-4">{loadError}</p>
+      {:else}
+        <p class="mb-4">Not authenticated</p>
+      {/if}
+      <button
+        class="button button-secondary"
+        on:click={() => {
+          const tenant = $page.params.tenant ?? getCurrentTenant();
+          window.location.href = `/${tenant}/login`;
+        }}
+      >
+        Go to login
+      </button>
+    </div>
+  </div>
 {/if}
+
+<style>
+  .room-select-panel {
+    max-width: 512px;
+  }
+</style>

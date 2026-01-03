@@ -2,6 +2,7 @@
 using Finbuckle.MultiTenant.Abstractions;
 using Finbuckle.MultiTenant.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 using TreeTopic.Extensions;
 using TreeTopic.Models;
 using File = TreeTopic.Models.File;
@@ -10,8 +11,11 @@ namespace TreeTopic
 {
     public class ApplicationDbContext : MultiTenantIdentityDbContext<ApplicationUser, ApplicationRole, Guid>
     {
+        private readonly IMultiTenantContextAccessor _multiTenantContextAccessor;
+
         public ApplicationDbContext(IMultiTenantContextAccessor multiTenantContextAccessor, DbContextOptions options) : base(multiTenantContextAccessor, options)
         {
+            _multiTenantContextAccessor = multiTenantContextAccessor;
         }
         public DbSet<ApplicationUser> Users => Set<ApplicationUser>();
         public DbSet<ApplicationRole> Roles => Set<ApplicationRole>();
@@ -24,6 +28,7 @@ namespace TreeTopic
         public DbSet<RoomPermission> RoomPermissions => Set<RoomPermission>();
         public DbSet<BrainBoard> BrainBoards => Set<BrainBoard>();
         public DbSet<BrainIdea> BrainIdeas => Set<BrainIdea>();
+        public DbSet<BrainIdeaVote> BrainIdeaVotes => Set<BrainIdeaVote>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -86,6 +91,19 @@ namespace TreeTopic
                 .HasForeignKey(bi => bi.ApplicationUserId)
                 .OnDelete(DeleteBehavior.SetNull);
 
+            modelBuilder.Entity<BrainIdea>()
+                .HasMany(bi => bi.Votes)
+                .WithOne(v => v.BrainIdea)
+                .HasForeignKey(v => v.BrainIdeaId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // BrainIdeaVote リレーション
+            modelBuilder.Entity<BrainIdeaVote>()
+                .HasOne(v => v.ApplicationUser)
+                .WithMany(u => u.BrainIdeaVotes)
+                .HasForeignKey(v => v.ApplicationUserId)
+                .OnDelete(DeleteBehavior.SetNull);
+
             // Message リレーション
             modelBuilder.Entity<Message>()
                 .HasOne(m => m.ApplicationUser)
@@ -136,6 +154,46 @@ namespace TreeTopic
             var provider = Database.ProviderName ?? "postgresql";
             if (provider.Contains("mysql", StringComparison.OrdinalIgnoreCase))
                 modelBuilder.ConfigureMySqlGuidColumns();
+        }
+
+        public override int SaveChanges(bool acceptAllChangesOnSuccess)
+        {
+            ApplyTenantId();
+            return base.SaveChanges(acceptAllChangesOnSuccess);
+        }
+
+        public override Task<int> SaveChangesAsync(
+            bool acceptAllChangesOnSuccess,
+            CancellationToken cancellationToken = default)
+        {
+            ApplyTenantId();
+            return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+        }
+
+        private void ApplyTenantId()
+        {
+            var tenantInfo = _multiTenantContextAccessor.MultiTenantContext?.TenantInfo as ApplicationTenantInfo;
+            var tenantId = tenantInfo?.Id;
+            if (string.IsNullOrWhiteSpace(tenantId))
+            {
+                return;
+            }
+
+            foreach (var entry in ChangeTracker.Entries())
+            {
+                if (entry.State != EntityState.Added)
+                {
+                    continue;
+                }
+
+                var tenantProperty = entry.Properties.FirstOrDefault(p =>
+                    p.Metadata.Name == "TenantId" && p.Metadata.ClrType == typeof(string));
+
+                if (tenantProperty != null && tenantProperty.CurrentValue == null)
+                {
+                    tenantProperty.CurrentValue = tenantId;
+                }
+            }
         }
     }
 }

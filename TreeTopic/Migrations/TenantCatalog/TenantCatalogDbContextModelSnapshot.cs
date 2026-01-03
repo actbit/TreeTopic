@@ -36,14 +36,6 @@ namespace TreeTopic.Migrations.TenantCatalog
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)");
 
-                    b.Property<string>("OpenIdConnecClientId")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
-
-                    b.Property<string>("OpenIdConnecClientSecret")
-                        .HasMaxLength(1000)
-                        .HasColumnType("character varying(1000)");
-
                     b.Property<string>("OpenIdConnectAuthority")
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
@@ -51,6 +43,14 @@ namespace TreeTopic.Migrations.TenantCatalog
                     b.Property<string>("OpenIdConnectAuthorizationEndpoint")
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
+
+                    b.Property<string>("OpenIdConnectClientId")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("OpenIdConnectClientSecret")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
 
                     b.Property<string>("OpenIdConnectEndSessionEndpoint")
                         .HasMaxLength(500)

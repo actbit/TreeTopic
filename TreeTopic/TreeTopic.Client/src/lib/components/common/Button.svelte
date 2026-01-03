@@ -12,6 +12,7 @@
     type?: 'button' | 'submit' | 'reset';
     onclick?: (e: MouseEvent) => void;
     children?: any;
+    ariaLabel?: string;
   }
 
   let {
@@ -24,36 +25,23 @@
     type = 'button',
     onclick,
     children,
+    ariaLabel,
   }: Props = $props();
-
-  const variantClass = {
-    primary: 'bg-primary text-white hover:bg-primary-hover active:bg-primary-active',
-    secondary:
-      'bg-surface text-text border border-border hover:bg-surface-hover active:bg-surface',
-    ghost: 'text-primary hover:bg-surface active:bg-surface-hover',
-    success: 'bg-success text-white hover:opacity-90 active:opacity-80',
-    danger: 'bg-error text-white hover:opacity-90 active:opacity-80',
-  };
-
-  const sizeClass = {
-    small: 'px-3 py-1 text-xs rounded',
-    base: 'px-4 py-2 text-base rounded-sm',
-    large: 'px-6 py-3 text-lg rounded-md',
-  };
 </script>
 
 <button
   {type}
   {disabled}
   {onclick}
-  class="inline-flex items-center justify-center gap-2 font-semibold transition-all duration-200 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed {variantClass[
-    variant
-  ]} {sizeClass[size]} {fullWidth ? 'w-full' : ''}"
+  class="btn btn-{variant} btn-{size} {fullWidth ? 'btn-full-width' : ''}"
+  aria-label={ariaLabel}
+  aria-busy={loading}
+  aria-disabled={disabled}
 >
   {#if loading}
-    <span class="animate-spin">⏳</span>
+    <span class="btn-spinner">⏳</span>
   {:else if icon}
-    <span>{icon}</span>
+    <span class="btn-icon">{icon}</span>
   {/if}
   {#if children}
     {@render children()}
@@ -61,14 +49,128 @@
 </button>
 
 <style>
-  button {
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
     font-family: var(--font-family-base);
     font-weight: 600;
     border: none;
+    cursor: pointer;
     transition: all 0.2s ease;
+    outline-offset: 2px;
   }
 
-  button:active:not(:disabled) {
+  .btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  .btn:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+  }
+
+  .btn:active:not(:disabled) {
     transform: scale(0.98);
+  }
+
+  .btn-primary {
+    background-color: var(--color-primary);
+    color: var(--color-text-inverse);
+  }
+
+  .btn-primary:hover:not(:disabled) {
+    background-color: var(--color-primary-hover);
+  }
+
+  .btn-primary:active:not(:disabled) {
+    background-color: var(--color-primary-active);
+  }
+
+  .btn-secondary {
+    background-color: var(--color-surface);
+    color: var(--color-text);
+    border: 1px solid var(--color-border);
+  }
+
+  .btn-secondary:hover:not(:disabled) {
+    background-color: var(--color-surface-hover);
+  }
+
+  .btn-ghost {
+    background-color: transparent;
+    color: var(--color-primary);
+  }
+
+  .btn-ghost:hover:not(:disabled) {
+    background-color: var(--color-surface);
+  }
+
+  .btn-ghost:active:not(:disabled) {
+    background-color: var(--color-surface-hover);
+  }
+
+  .btn-success {
+    background-color: var(--color-success);
+    color: var(--color-text-inverse);
+  }
+
+  .btn-success:hover:not(:disabled) {
+    opacity: 0.9;
+  }
+
+  .btn-success:active:not(:disabled) {
+    opacity: 0.8;
+  }
+
+  .btn-danger {
+    background-color: var(--color-error);
+    color: var(--color-text-inverse);
+  }
+
+  .btn-danger:hover:not(:disabled) {
+    opacity: 0.9;
+  }
+
+  .btn-danger:active:not(:disabled) {
+    opacity: 0.8;
+  }
+
+  .btn-small {
+    padding: 4px 12px;
+    font-size: var(--font-size-xs);
+    border-radius: var(--border-radius-sm);
+  }
+
+  .btn-base {
+    padding: 8px 16px;
+    font-size: var(--font-size-base);
+    border-radius: var(--border-radius-sm);
+  }
+
+  .btn-large {
+    padding: 12px 24px;
+    font-size: var(--font-size-lg);
+    border-radius: var(--border-radius-md);
+  }
+
+  .btn-full-width {
+    width: 100%;
+  }
+
+  .btn-spinner {
+    display: inline-block;
+    animation: spin 1s linear infinite;
+  }
+
+  @keyframes spin {
+    from {
+      transform: rotate(0deg);
+    }
+    to {
+      transform: rotate(360deg);
+    }
   }
 </style>

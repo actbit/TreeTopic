@@ -18,5 +18,6 @@ namespace TreeTopic.Models
         public double PositionTop { get; set; }
         public double PositionLeft { get; set; }
 
+        public List<BrainIdeaVote> Votes { get; set; } = new List<BrainIdeaVote>();
     }
 }

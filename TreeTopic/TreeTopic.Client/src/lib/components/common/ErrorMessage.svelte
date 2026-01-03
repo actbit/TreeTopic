@@ -10,12 +10,6 @@
   let { message, onDismiss, dismissable = true, type = 'error', fullWidth = false }: Props =
     $props();
 
-  const typeStyles = {
-    error: 'bg-red-50 border-error text-error',
-    warning: 'bg-yellow-50 border-warning text-warning',
-    info: 'bg-blue-50 border-info text-info',
-  };
-
   const icons = {
     error: '⚠',
     warning: '⚡',
@@ -24,22 +18,20 @@
 </script>
 
 <div
-  class="flex items-start gap-3 p-4 border-l-4 rounded {typeStyles[type]} {fullWidth
-    ? 'w-full'
-    : ''} animate-slideInDown"
+  class="error-message error-message-{type} {fullWidth ? 'error-message-full-width' : ''}"
   role="alert"
 >
-  <span class="text-xl flex-shrink-0">{icons[type]}</span>
+  <span class="error-message-icon">{icons[type]}</span>
 
-  <div class="flex-1">
-    <p class="text-sm font-medium">{message}</p>
+  <div class="error-message-content">
+    <p>{message}</p>
   </div>
 
   {#if dismissable && onDismiss}
     <button
       type="button"
       on:click={onDismiss}
-      class="flex-shrink-0 p-1 hover:opacity-70 transition-opacity"
+      class="error-message-dismiss"
       aria-label="Dismiss message"
     >
       ✕
@@ -48,8 +40,63 @@
 </div>
 
 <style>
-  :global(.animate-slideInDown) {
+  .error-message {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 16px;
+    border-left: 4px solid;
+    border-radius: var(--border-radius-sm);
     animation: slideInDown 0.3s ease-out;
+  }
+
+  .error-message-error {
+    background-color: #fef2f2;
+    border-color: var(--color-error);
+    color: var(--color-error);
+  }
+
+  .error-message-warning {
+    background-color: #fefce8;
+    border-color: var(--color-warning);
+    color: var(--color-warning);
+  }
+
+  .error-message-info {
+    background-color: #eff6ff;
+    border-color: var(--color-info);
+    color: var(--color-info);
+  }
+
+  .error-message-full-width {
+    width: 100%;
+  }
+
+  .error-message-icon {
+    font-size: var(--font-size-xl);
+    flex-shrink: 0;
+  }
+
+  .error-message-content {
+    flex: 1;
+  }
+
+  .error-message-content p {
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+  }
+
+  .error-message-dismiss {
+    flex-shrink: 0;
+    padding: 4px;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    transition: opacity 0.2s ease;
+  }
+
+  .error-message-dismiss:hover {
+    opacity: 0.7;
   }
 
   @keyframes slideInDown {

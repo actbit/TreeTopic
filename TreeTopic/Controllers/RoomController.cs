@@ -30,7 +30,7 @@ public class RoomController : ControllerBase
     }
 
     [HttpGet("{roomId}")]
-    public async Task<IActionResult> GetById(MaskedGuid roomId, CancellationToken cancellationToken)
+    public async Task<IActionResult> GetById([FromRoute] MaskedGuid roomId, CancellationToken cancellationToken)
     {
         var result = await _roomManagementService.GetRoomByIdAsync((Guid)roomId, cancellationToken);
         return HandleResult(result);
@@ -57,7 +57,7 @@ public class RoomController : ControllerBase
     }
 
     [HttpDelete("{roomId}")]
-    public async Task<IActionResult> Delete(MaskedGuid roomId, CancellationToken cancellationToken)
+    public async Task<IActionResult> Delete([FromRoute] MaskedGuid roomId, CancellationToken cancellationToken)
     {
         var result = await _roomManagementService.DeleteRoomAsync((Guid)roomId, cancellationToken);
         return HandleResult(result);

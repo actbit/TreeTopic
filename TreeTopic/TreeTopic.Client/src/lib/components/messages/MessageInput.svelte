@@ -41,8 +41,8 @@
       addMessage(response);
       subject = '';
       content = '';
-    } catch (err: any) {
-      error = err.message || 'Failed to send message';
+    } catch (err: unknown) {
+      error = err instanceof Error ? err.message : 'Failed to send message';
     } finally {
       isLoading = false;
     }
@@ -60,8 +60,8 @@
   }
 </script>
 
-<div class="border-t border-border bg-white p-4">
-  <form on:submit={handleSubmit} class="space-y-3">
+<div class="panel-footer">
+  <form on:submit={handleSubmit} class="spacing-sm">
     {#if error}
       <ErrorMessage message={error} onDismiss={() => (error = null)} />
     {/if}
@@ -71,22 +71,16 @@
       bind:value={subject}
       placeholder="Message subject (optional)"
       disabled={isLoading}
-      class="w-full px-3 py-2 border border-border rounded-sm text-sm bg-white transition-all
-        placeholder:text-text-light
-        focus:outline-none focus:border-primary
-        disabled:bg-surface disabled:cursor-not-allowed disabled:opacity-60"
+      class="form-input w-full text-small"
     />
 
     <textarea
       bind:value={content}
       placeholder="Type your message here..."
       disabled={isLoading}
-      class="w-full px-3 py-2 border border-border rounded-sm text-sm bg-white transition-all
-        placeholder:text-text-light
-        focus:outline-none focus:border-primary
-        disabled:bg-surface disabled:cursor-not-allowed disabled:opacity-60
-        resize-none"
+      class="form-input w-full text-small"
       rows="3"
+      style="resize: none;"
     />
 
     <div class="flex items-center gap-2">
@@ -103,10 +97,10 @@
         type="button"
         on:click={() => fileInput?.click()}
         disabled={isLoading}
-        class="p-2 text-text-light hover:text-primary hover:bg-surface rounded transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+        class="button button-secondary button-small"
         title="Attach file"
       >
-        📎
+        Attach
       </button>
 
       <div class="flex-1"></div>
@@ -123,7 +117,7 @@
     </div>
 
     {#if !$selectedTopic}
-      <p class="text-xs text-text-light text-center">
+      <p class="text-small text-light text-center">
         Select a topic to send messages
       </p>
     {/if}

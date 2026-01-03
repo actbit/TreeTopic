@@ -4,8 +4,11 @@
   import { ui } from '$lib/stores/ui';
   import type { ModalConfig } from '$lib/types/ui';
   import { get } from 'svelte/store';
+  import { page } from '$app/stores';
+  import { goto } from '$app/navigation';
 
   let isOpen = $state(false);
+  let { navigateOnSelect = true }: { navigateOnSelect?: boolean } = $props();
 
   function openCreateModal() {
     const modal: ModalConfig = {
@@ -21,8 +24,20 @@
     const room = get(roomList).find((r) => r.id === roomId);
     if (room) {
       setCurrentRoom(room);
+      if (navigateOnSelect) {
+        syncRoomToUrl(room.id);
+      }
     }
     isOpen = false;
+  }
+
+  function syncRoomToUrl(roomId: string | null) {
+    const tenant = $page.params.tenant;
+    if (!tenant || !roomId) return;
+    const target = `/${tenant}/room/${roomId}`;
+    if ($page.url.pathname !== target) {
+      goto(target, { replaceState: false, keepFocus: true, noScroll: true });
+    }
   }
 
   function openRoomSettings(roomId: string, e: Event) {
@@ -36,23 +51,21 @@
   }
 </script>
 
-<div class="flex items-center justify-between">
-  <div class="relative flex-1">
+<div class="flex items-center justify-between room-selector-container">
+  <div class="relative w-full">
     <button
       on:click={() => (isOpen = !isOpen)}
-      class="w-full px-4 py-2 bg-primary text-white rounded-sm font-semibold flex items-center justify-between hover:bg-primary-hover transition-colors"
+      class="button button-primary w-full room-selector-button"
     >
       <span>{$currentRoom?.name ?? 'Select Room'}</span>
-      <span class="transition-transform {isOpen ? 'rotate-180' : ''}"
+      <span class="dropdown-arrow {isOpen ? 'dropdown-arrow-open' : ''}"
         >▼</span
       >
     </button>
 
     {#if isOpen}
-      <div
-        class="absolute top-full left-0 right-0 mt-2 bg-white border border-border rounded-sm shadow-lg z-50 max-h-96 overflow-y-auto"
-      >
-        <div class="p-2 border-b border-border sticky top-0 bg-white">
+      <div class="card room-dropdown">
+        <div class="panel-header sticky top-0">
           <Button
             on:click={openCreateModal}
             variant="secondary"
@@ -63,21 +76,21 @@
           </Button>
         </div>
 
-        <div class="py-1">
+        <div class="list">
           {#each $roomList as room (room.id)}
             <div
-              class="flex items-center gap-2 px-4 py-2 hover:bg-surface transition-colors cursor-pointer"
+              class="list-item clickable hoverable"
               on:click={() => selectRoom(room.id)}
             >
-              <div class="flex-1">
-                <div class="font-semibold text-text">{room.name}</div>
+              <div class="room-item-content">
+                <div class="text-bold">{room.name}</div>
                 {#if room.description}
-                  <div class="text-xs text-text-light">{room.description}</div>
+                  <div class="text-small text-light">{room.description}</div>
                 {/if}
-                <div class="text-xs text-text-light mt-1">
+                <div class="text-small text-light margin-top-xs">
                   {room.memberCount} member{room.memberCount !== 1 ? 's' : ''}
                   {#if room.unreadCount > 0}
-                    · <span class="text-error font-semibold">{room.unreadCount} unread</span>
+                    · <span class="badge badge-error">{room.unreadCount} unread</span>
                   {/if}
                 </div>
               </div>
@@ -85,7 +98,7 @@
               {#if room.canEdit}
                 <button
                   on:click={(e) => openRoomSettings(room.id, e)}
-                  class="p-1 hover:bg-error-light rounded transition-colors text-text-light hover:text-error"
+                  class="button clickable room-settings-button"
                   title="Room settings"
                 >
                   ⚙
@@ -100,7 +113,49 @@
 </div>
 
 <style>
-  :global(.text-error-light) {
-    color: rgba(231, 76, 60, 0.1);
+  .room-selector-container {
+    width: 100%;
+  }
+
+  .room-selector-button {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .dropdown-arrow {
+    transition: transform var(--transition-fast);
+  }
+
+  .dropdown-arrow-open {
+    transform: rotate(180deg);
+  }
+
+  .room-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    margin-top: var(--spacing-sm);
+    z-index: 50;
+    max-height: 384px;
+    overflow-y: auto;
+  }
+
+  .room-item-content {
+    flex: 1;
+  }
+
+  .room-settings-button {
+    padding: var(--spacing-xs);
+    background-color: transparent;
+    border: none;
+    color: var(--color-text-light);
+  }
+
+  .room-settings-button:hover {
+    background-color: var(--color-error);
+    background-color: color-mix(in srgb, var(--color-error) 10%, transparent);
+    color: var(--color-error);
   }
 </style>
