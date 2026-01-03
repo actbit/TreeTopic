@@ -190,7 +190,7 @@ public class TenantManagementService
             var setupToken = SetupToken.GenerateToken();
             var setupTokenRecord = new SetupToken
             {
-                Id = Guid.NewGuid(),
+                Id = Guid.CreateVersion7(),
                 TenantId = tenant.Id,
                 TokenHash = SetupToken.HashToken(setupToken),
                 CreatedAt = DateTime.UtcNow,

@@ -8,7 +8,7 @@ namespace TreeTopic.Models
     {
         public ApplicationTenantInfo():base()
         {
-            this.Id = Guid.NewGuid().ToString();
+            this.Id = Guid.CreateVersion7().ToString();
         }
         public ApplicationTenantInfo(string Id, string Identifier, string? Name = null) 
         {
@@ -18,7 +18,7 @@ namespace TreeTopic.Models
         }
 
         public ApplicationTenantInfo(string Identifier, string? Name = null)
-            : this(Guid.NewGuid().ToString(), Identifier, Name ?? Identifier)
+            : this(Guid.CreateVersion7().ToString(), Identifier, Name ?? Identifier)
         {
         }
 

@@ -9,7 +9,7 @@ namespace TreeTopic.Models
     {
         public ApplicationRole() : base()
         {
-            Id = Guid.NewGuid();
+            Id = Guid.CreateVersion7();
         }
         public ApplicationRole(string roleName) : this()
         {

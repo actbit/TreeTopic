@@ -21,7 +21,7 @@ public class TestController : ControllerBase
     }
 
     [HttpGet("maskeduuid/{id}")]
-    public IActionResult TestMaskedUUID(MaskedGuid id)
+    public IActionResult TestMaskedUUID([FromRoute] MaskedGuid id)
     {
         _logger.LogInformation("Received masked UUID, decoded to GUID: {Id}", id);
         return Ok(new
@@ -47,7 +47,8 @@ public class TestController : ControllerBase
     [HttpPost("maskeduuid/encode")]
     public IActionResult EncodeMaskedUUID([FromBody] EncodeRequest request)
     {
-        _logger.LogInformation("Received raw GUID: {Id}", request.RawGuid);
+        var decodedGuid = (Guid)request.RawGuid;
+        _logger.LogInformation("Received raw GUID: {Id}", decodedGuid);
         return Ok(new EncodeResponse
         {
             RawGuid = request.RawGuid,
@@ -63,12 +64,12 @@ public class TestController : ControllerBase
 
     public class EncodeRequest
     {
-        public Guid RawGuid { get; set; }
+        public MaskedGuid RawGuid { get; set; }
     }
 
     public class EncodeResponse
     {
-        public Guid RawGuid { get; set; }
+        public MaskedGuid RawGuid { get; set; }
 
         public MaskedGuid MaskedGuid { get; set; }
 

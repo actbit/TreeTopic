@@ -26,17 +26,17 @@ public class FileController : ControllerBase
         return HandleResult(result);
     }
 
-    [HttpGet("message/{messageId:guid}")]
-    public async Task<IActionResult> GetByMessage(Guid messageId, CancellationToken cancellationToken)
+    [HttpGet("message/{messageId}")]
+    public async Task<IActionResult> GetByMessage([FromRoute] MaskedGuid messageId, CancellationToken cancellationToken)
     {
-        var result = await _fileManagementService.GetFilesByMessageAsync(messageId, cancellationToken);
+        var result = await _fileManagementService.GetFilesByMessageAsync((Guid)messageId, cancellationToken);
         return HandleResult(result);
     }
 
-    [HttpGet("{fileId:guid}")]
-    public async Task<IActionResult> GetById(Guid fileId, CancellationToken cancellationToken)
+    [HttpGet("{fileId}")]
+    public async Task<IActionResult> GetById([FromRoute] MaskedGuid fileId, CancellationToken cancellationToken)
     {
-        var result = await _fileManagementService.GetFileByIdAsync(fileId, cancellationToken);
+        var result = await _fileManagementService.GetFileByIdAsync((Guid)fileId, cancellationToken);
         return HandleResult(result);
     }
 
@@ -50,13 +50,13 @@ public class FileController : ControllerBase
         return HandleResult(result);
     }
 
-    [HttpPut("{fileId:guid}")]
-    public async Task<IActionResult> Update([FromRoute] Guid fileId, [FromBody] UpdateFileRequest request, CancellationToken cancellationToken)
+    [HttpPut("{fileId}")]
+    public async Task<IActionResult> Update([FromRoute] MaskedGuid fileId, [FromBody] UpdateFileRequest request, CancellationToken cancellationToken)
     {
         if (!ModelState.IsValid)
             return ValidationProblem(ModelState);
 
-        var result = await _fileManagementService.UpdateFileAsync(fileId, request, cancellationToken);
+        var result = await _fileManagementService.UpdateFileAsync((Guid)fileId, request, cancellationToken);
         return HandleResult(result);
     }
 

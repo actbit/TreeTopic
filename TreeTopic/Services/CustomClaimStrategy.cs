@@ -83,11 +83,19 @@ public class CustomClaimStrategy : IMultiTenantStrategy
                     var firstSegment = segments[0];
                     // tenant IDは英数字とハイフン、アンダースコアのみを許可
                     if (!string.IsNullOrWhiteSpace(firstSegment) &&
-                        !string.Equals(firstSegment, "_app", StringComparison.OrdinalIgnoreCase) &&
-                        firstSegment.All(c => char.IsLetterOrDigit(c) || c == '-' || c == '_'))
+                        !string.Equals(firstSegment, "_app", StringComparison.OrdinalIgnoreCase))
                     {
-                        _logger.LogInformation("[CustomClaimStrategy] Tenant resolved from path (fallback): {TenantId}", firstSegment);
-                        return firstSegment;
+                        if (string.Equals(firstSegment, "api", StringComparison.OrdinalIgnoreCase))
+                        {
+                            _logger.LogDebug("[CustomClaimStrategy] Skipping tenant resolution for reserved segment: {Segment}", firstSegment);
+                            return null;
+                        }
+
+                        if (firstSegment.All(c => char.IsLetterOrDigit(c) || c == '-' || c == '_'))
+                        {
+                            _logger.LogInformation("[CustomClaimStrategy] Tenant resolved from path (fallback): {TenantId}", firstSegment);
+                            return firstSegment;
+                        }
                     }
                 }
             }

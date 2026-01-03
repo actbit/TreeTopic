@@ -256,8 +256,29 @@ public static class OpenIdConnectExtensions
         var userSync = ctx.HttpContext.RequestServices.GetRequiredService<UserSyncService>();
         await userSync.SyncUserAsync(ctx.Principal);
 
-        // claim に tenant を追加（claim 戦略で自動的にテナント解決される）
         var identity = (ClaimsIdentity)ctx.Principal!.Identity!;
+
+        // Prefer the internal Identity user id as NameIdentifier to satisfy FK constraints.
+        var subClaim = ctx.Principal?.FindFirst("sub")?.Value
+            ?? ctx.Principal?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        string? identityUserId = null;
+        if (!string.IsNullOrEmpty(subClaim))
+        {
+            var dbContext = ctx.HttpContext.RequestServices.GetRequiredService<ApplicationDbContext>();
+            var user = await dbContext.Users.FirstOrDefaultAsync(u => u.Sub == subClaim);
+            if (user != null)
+            {
+                identityUserId = user.Id.ToString();
+                var existingNameId = identity.FindFirst(ClaimTypes.NameIdentifier);
+                if (existingNameId != null)
+                {
+                    identity.RemoveClaim(existingNameId);
+                }
+                identity.AddClaim(new Claim(ClaimTypes.NameIdentifier, identityUserId));
+            }
+        }
+
+        // claim に tenant を追加（claim 戦略で自動的にテナント解決される）
         if (identity.FindFirst("tenant") == null)
         {
             identity.AddClaim(new Claim("tenant", tenantId));
@@ -266,8 +287,10 @@ public static class OpenIdConnectExtensions
 
         // Reduce cookie size by keeping only essential claims.
         var minimalClaims = new List<Claim>();
-        var nameId = ctx.Principal.FindFirst(ClaimTypes.NameIdentifier)
-            ?? ctx.Principal.FindFirst("sub");
+        var nameId = identityUserId != null
+            ? new Claim(ClaimTypes.NameIdentifier, identityUserId)
+            : (ctx.Principal.FindFirst(ClaimTypes.NameIdentifier)
+                ?? ctx.Principal.FindFirst("sub"));
         if (nameId != null)
         {
             minimalClaims.Add(new Claim(ClaimTypes.NameIdentifier, nameId.Value));

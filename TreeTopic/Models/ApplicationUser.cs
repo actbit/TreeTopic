@@ -12,8 +12,7 @@ namespace TreeTopic.Models
         public string? TenantId { get; set; }
         public ApplicationUser() : base()
         {
-            Id = Guid.NewGuid();
-
+            Id = Guid.CreateVersion7();
         }
         public ApplicationUser(string userName) : this()
         {

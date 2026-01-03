@@ -29,17 +29,17 @@ public class MessageController : ControllerBase
         return HandleResult(result);
     }
 
-    [HttpGet("topic/{topicId:guid}")]
-    public async Task<IActionResult> GetByTopic(Guid topicId, CancellationToken cancellationToken)
+    [HttpGet("topic/{topicId}")]
+    public async Task<IActionResult> GetByTopic([FromRoute] MaskedGuid topicId, CancellationToken cancellationToken)
     {
-        var result = await _messageManagementService.GetMessagesByTopicAsync(topicId, cancellationToken);
+        var result = await _messageManagementService.GetMessagesByTopicAsync((Guid)topicId, cancellationToken);
         return HandleResult(result);
     }
 
-    [HttpGet("{messageId:guid}")]
-    public async Task<IActionResult> GetById(Guid messageId, CancellationToken cancellationToken)
+    [HttpGet("{messageId}")]
+    public async Task<IActionResult> GetById([FromRoute] MaskedGuid messageId, CancellationToken cancellationToken)
     {
-        var result = await _messageManagementService.GetMessageByIdAsync(messageId, cancellationToken);
+        var result = await _messageManagementService.GetMessageByIdAsync((Guid)messageId, cancellationToken);
         return HandleResult(result);
     }
 
@@ -54,13 +54,13 @@ public class MessageController : ControllerBase
         return HandleResult(result);
     }
 
-    [HttpPut("{messageId:guid}")]
-    public async Task<IActionResult> Update([FromRoute] Guid messageId, [FromBody] UpdateMessageRequest request, CancellationToken cancellationToken)
+    [HttpPut("{messageId}")]
+    public async Task<IActionResult> Update([FromRoute] MaskedGuid messageId, [FromBody] UpdateMessageRequest request, CancellationToken cancellationToken)
     {
         if (!ModelState.IsValid)
             return ValidationProblem(ModelState);
 
-        var result = await _messageManagementService.UpdateMessageAsync(messageId, request, cancellationToken);
+        var result = await _messageManagementService.UpdateMessageAsync((Guid)messageId, request, cancellationToken);
         return HandleResult(result);
     }
 

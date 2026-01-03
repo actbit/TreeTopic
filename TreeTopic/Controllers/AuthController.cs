@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using MaskedUUID.AspNetCore.Types;
 using System.Security.Claims;
 using Finbuckle.MultiTenant;
 using TreeTopic.Models;
@@ -111,6 +112,11 @@ public class AuthController : ControllerBase
         }
 
         var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        MaskedGuid? maskedUserId = null;
+        if (!string.IsNullOrEmpty(userId) && Guid.TryParse(userId, out var userGuid))
+        {
+            maskedUserId = userGuid;
+        }
         var email = User.FindFirst(ClaimTypes.Email)?.Value;
         var roles = User.FindAll(ClaimTypes.Role).Select(c => c.Value).ToList();
         var tenant = User.FindFirst("tenant")?.Value;
@@ -126,7 +132,7 @@ public class AuthController : ControllerBase
 
         return Ok(new
         {
-            userId,
+            userId = maskedUserId,
             userName,
             email,
             roles,

@@ -1,6 +1,12 @@
+using System.Collections.Concurrent;
+using Finbuckle.MultiTenant.Abstractions;
 using MaskedUUID.AspNetCore.KeyProviders;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
+using TreeTopic;
+using TreeTopic.Constants;
 using TreeTopic.Models;
 
 namespace TreeTopic.KeyProviders;
@@ -11,19 +17,25 @@ public class TreeTopicMaskedUUIDKeyProvider : IMaskedUUIDKeyProvider
     private readonly IServiceScopeFactory _serviceScopeFactory;
     private readonly IMemoryCache _cache;
     private readonly ILogger<TreeTopicMaskedUUIDKeyProvider> _logger;
+    private readonly IMultiTenantContextAccessor<ApplicationTenantInfo> _multiTenantContextAccessor;
     private const string CacheKeyPrefix = "MaskedUUID_Keys_";
     private static readonly TimeSpan CacheDuration = TimeSpan.FromDays(7);
+    private readonly ConcurrentDictionary<string, Guid> _tenantIdentifierCache = new();
+    private readonly object _defaultTenantLock = new();
+    private Guid? _defaultTenantId;
 
     public TreeTopicMaskedUUIDKeyProvider(
         IHttpContextAccessor httpContextAccessor,
         IServiceScopeFactory serviceScopeFactory,
         IMemoryCache cache,
-        ILogger<TreeTopicMaskedUUIDKeyProvider> logger)
+        ILogger<TreeTopicMaskedUUIDKeyProvider> logger,
+        IMultiTenantContextAccessor<ApplicationTenantInfo> multiTenantContextAccessor)
     {
         _httpContextAccessor = httpContextAccessor;
         _serviceScopeFactory = serviceScopeFactory;
         _cache = cache;
         _logger = logger;
+        _multiTenantContextAccessor = multiTenantContextAccessor;
     }
 
     public async Task<(ulong K0, ulong K1)> GetKeysAsync()
@@ -80,13 +92,135 @@ public class TreeTopicMaskedUUIDKeyProvider : IMaskedUUIDKeyProvider
     {
         var httpContext = _httpContextAccessor.HttpContext;
         if (httpContext == null)
-            throw new InvalidOperationException("HttpContext is not available");
+        {
+            return GetFallbackTenantId();
+        }
 
-        var tenantId = httpContext.GetRouteValue("tenant")?.ToString();
-        if (string.IsNullOrEmpty(tenantId) || !Guid.TryParse(tenantId, out var parsedTenantId))
-            throw new InvalidOperationException("Valid tenant ID not found in route");
+        var tenantInfo = _multiTenantContextAccessor.MultiTenantContext?.TenantInfo;
+        if (tenantInfo != null && Guid.TryParse(tenantInfo.Id, out var infoGuid))
+        {
+            return infoGuid;
+        }
 
-        return parsedTenantId;
+        var identifier = ResolveTenantIdentifier(httpContext);
+        if (!string.IsNullOrEmpty(identifier))
+        {
+            return ResolveTenantIdFromIdentifier(identifier);
+        }
+
+        return GetFallbackTenantId();
+    }
+
+    private string? ResolveTenantIdentifier(HttpContext httpContext)
+    {
+        var tenantClaim = httpContext.User?.FindFirst(AuthenticationConstants.TenantClaimType)?.Value;
+        if (!string.IsNullOrEmpty(tenantClaim))
+        {
+            return tenantClaim;
+        }
+
+        var routeTenant = httpContext.GetRouteValue(AuthenticationConstants.TenantClaimType)?.ToString();
+        if (!string.IsNullOrEmpty(routeTenant))
+        {
+            return routeTenant;
+        }
+
+        if (httpContext.Items.TryGetValue(AuthenticationConstants.Cookie.TenantForCookieKey, out var tenantObj) &&
+            tenantObj is string tenantForCookie &&
+            !string.IsNullOrEmpty(tenantForCookie))
+        {
+            return tenantForCookie;
+        }
+
+        var queryTenant = httpContext.Request.Query[AuthenticationConstants.TenantClaimType].ToString();
+        if (!string.IsNullOrEmpty(queryTenant))
+        {
+            return queryTenant;
+        }
+
+        return null;
+    }
+
+    private Guid ResolveTenantIdFromIdentifier(string tenantIdentifier)
+    {
+        var normalizedIdentifier = tenantIdentifier.Trim();
+        if (_tenantIdentifierCache.TryGetValue(normalizedIdentifier, out var cached))
+        {
+            return cached;
+        }
+
+        if (Guid.TryParse(normalizedIdentifier, out var parsedGuid))
+        {
+            _tenantIdentifierCache.TryAdd(normalizedIdentifier, parsedGuid);
+            return parsedGuid;
+        }
+
+        using var scope = _serviceScopeFactory.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<TenantCatalogDbContext>();
+        var tenantInfo = dbContext.Tenants
+            .AsNoTracking()
+            .FirstOrDefault(t => t.Identifier == normalizedIdentifier || t.Id == normalizedIdentifier);
+
+        if (tenantInfo == null)
+        {
+            _logger.LogWarning("Tenant identifier '{TenantIdentifier}' not found when resolving MaskedUUID keys", normalizedIdentifier);
+            throw new InvalidOperationException($"Tenant '{normalizedIdentifier}' not found for MaskedUUID encoding");
+        }
+
+        if (!Guid.TryParse(tenantInfo.Id, out var tenantGuid))
+        {
+            throw new InvalidOperationException($"Tenant ID '{tenantInfo.Id}' is not a valid GUID");
+        }
+
+        _tenantIdentifierCache.TryAdd(normalizedIdentifier, tenantGuid);
+        _tenantIdentifierCache.TryAdd(tenantInfo.Id, tenantGuid);
+
+        if (!string.IsNullOrEmpty(tenantInfo.Identifier))
+        {
+            _tenantIdentifierCache.TryAdd(tenantInfo.Identifier, tenantGuid);
+        }
+
+        return tenantGuid;
+    }
+
+    private Guid GetFallbackTenantId()
+    {
+        if (_defaultTenantId.HasValue)
+        {
+            return _defaultTenantId.Value;
+        }
+
+        lock (_defaultTenantLock)
+        {
+            if (_defaultTenantId.HasValue)
+            {
+                return _defaultTenantId.Value;
+            }
+
+            using var scope = _serviceScopeFactory.CreateScope();
+            var dbContext = scope.ServiceProvider.GetRequiredService<TenantCatalogDbContext>();
+            var tenantInfo = dbContext.Tenants.AsNoTracking().FirstOrDefault();
+
+            if (tenantInfo == null || string.IsNullOrEmpty(tenantInfo.Id))
+            {
+                throw new InvalidOperationException("No tenant configured for MaskedUUID encoding");
+            }
+
+            if (!Guid.TryParse(tenantInfo.Id, out var fallbackGuid))
+            {
+                throw new InvalidOperationException($"Configured tenant ID '{tenantInfo.Id}' is not a valid GUID");
+            }
+
+            _defaultTenantId = fallbackGuid;
+            _tenantIdentifierCache.TryAdd(tenantInfo.Id, fallbackGuid);
+            if (!string.IsNullOrEmpty(tenantInfo.Identifier))
+            {
+                _tenantIdentifierCache.TryAdd(tenantInfo.Identifier, fallbackGuid);
+            }
+
+            _logger.LogWarning("MaskedUUID fallback tenant used: {TenantIdentifier}", tenantInfo.Identifier ?? tenantInfo.Id);
+            return fallbackGuid;
+        }
     }
 
     private async Task<(ulong K0, ulong K1)> FetchKeysFromDatabaseAsync(Guid tenantId)

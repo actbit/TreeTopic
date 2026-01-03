@@ -34,10 +34,10 @@ public class PermissionsController : ControllerBase
         return Ok(permissionDtos);
     }
 
-    [HttpGet("{permissionId:guid}")]
-    public async Task<ActionResult<PermissionDto>> Get(Guid permissionId, CancellationToken cancellationToken)
+    [HttpGet("{permissionId}")]
+    public async Task<ActionResult<PermissionDto>> Get([FromRoute] MaskedGuid permissionId, CancellationToken cancellationToken)
     {
-        var result = await _permissionManagementService.GetPermissionByIdAsync(permissionId);
+        var result = await _permissionManagementService.GetPermissionByIdAsync((Guid)permissionId);
 
         if (result.IsFailure)
         {
@@ -67,15 +67,15 @@ public class PermissionsController : ControllerBase
         return CreatedAtAction(nameof(Get), new { permissionId = dto.Id }, dto);
     }
 
-    [HttpPut("{permissionId:guid}")]
-    public async Task<ActionResult<PermissionDto>> Update([FromRoute] Guid permissionId, [FromBody] PermissionModificationRequest request)
+    [HttpPut("{permissionId}")]
+    public async Task<ActionResult<PermissionDto>> Update([FromRoute] MaskedGuid permissionId, [FromBody] PermissionModificationRequest request)
     {
         if (!ModelState.IsValid)
         {
             return ValidationProblem(ModelState);
         }
 
-        var result = await _permissionManagementService.UpdatePermissionAsync(permissionId, request);
+        var result = await _permissionManagementService.UpdatePermissionAsync((Guid)permissionId, request);
 
         if (result.IsFailure)
         {

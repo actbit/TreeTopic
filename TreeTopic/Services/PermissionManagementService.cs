@@ -95,7 +95,7 @@ public class PermissionManagementService : BaseService
 
             var permission = new Permission
             {
-                Id = Guid.NewGuid(),
+                Id = Guid.CreateVersion7(),
                 Name = request.Name.Trim(),
                 RoleId = request.RoleId,
                 TenantId = CurrentTenantId ?? string.Empty,
