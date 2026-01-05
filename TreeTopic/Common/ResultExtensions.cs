@@ -37,6 +37,28 @@ public static class ResultExtensions
         var mappedData = mapper(result.Data!);
         return new ObjectResult(mappedData) { StatusCode = result.StatusCode };
     }
+
+    public static IActionResult ToApiResult<T>(this Result<T> result)
+    {
+        if (result.IsSuccess)
+        {
+            return new ObjectResult(result.Data) { StatusCode = result.StatusCode };
+        }
+
+        var errorResponse = new ErrorResponse(result.Error!);
+        return new ObjectResult(errorResponse) { StatusCode = result.StatusCode };
+    }
+
+    public static IActionResult ToApiResult(this Result result)
+    {
+        if (result.IsSuccess)
+        {
+            return new StatusCodeResult(result.StatusCode);
+        }
+
+        var errorResponse = new ErrorResponse(result.Error!);
+        return new ObjectResult(errorResponse) { StatusCode = result.StatusCode };
+    }
 }
 
 public class ErrorResponse

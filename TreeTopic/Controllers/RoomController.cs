@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using MaskedUUID.AspNetCore.Types;
+using TreeTopic.Common;
 using TreeTopic.Dtos;
 using TreeTopic.Services;
 using System.Security.Claims;
@@ -26,14 +27,14 @@ public class RoomController : ControllerBase
     public async Task<IActionResult> GetAll(CancellationToken cancellationToken)
     {
         var result = await _roomManagementService.GetAllRoomsAsync(cancellationToken);
-        return HandleResult(result);
+        return result.ToApiResult();
     }
 
     [HttpGet("{roomId}")]
     public async Task<IActionResult> GetById([FromRoute] MaskedGuid roomId, CancellationToken cancellationToken)
     {
         var result = await _roomManagementService.GetRoomByIdAsync((Guid)roomId, cancellationToken);
-        return HandleResult(result);
+        return result.ToApiResult();
     }
 
     [HttpPost]
@@ -43,7 +44,7 @@ public class RoomController : ControllerBase
             return ValidationProblem(ModelState);
 
         var result = await _roomManagementService.CreateRoomAsync(request, CurrentUserId, cancellationToken);
-        return HandleResult(result);
+        return result.ToApiResult();
     }
 
     [HttpPut("{roomId}")]
@@ -53,31 +54,16 @@ public class RoomController : ControllerBase
             return ValidationProblem(ModelState);
 
         var result = await _roomManagementService.UpdateRoomAsync((Guid)roomId, request, cancellationToken);
-        return HandleResult(result);
+        return result.ToApiResult();
     }
 
     [HttpDelete("{roomId}")]
     public async Task<IActionResult> Delete([FromRoute] MaskedGuid roomId, CancellationToken cancellationToken)
     {
         var result = await _roomManagementService.DeleteRoomAsync((Guid)roomId, cancellationToken);
-        return HandleResult(result);
+        return result.ToApiResult();
     }
 
-    private IActionResult HandleResult<T>(Common.Result<T> result)
-    {
-        if (result.IsSuccess)
-            return StatusCode(result.StatusCode, result.Data);
-
-        return StatusCode(result.StatusCode, new { error = result.Error?.Message });
-    }
-
-    private IActionResult HandleResult(Common.Result result)
-    {
-        if (result.IsSuccess)
-            return StatusCode(result.StatusCode);
-
-        return StatusCode(result.StatusCode, new { error = result.Error?.Message });
-    }
 }
 
 

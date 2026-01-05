@@ -8,7 +8,7 @@ export interface PublicTenantInfo {
   name: string;
 }
 
-function normalizeTenantInfo(raw: any): PublicTenantInfo {
+export function normalizeTenantInfo(raw: any): PublicTenantInfo {
   const identifier = raw?.identifier ?? raw?.Identifier ?? '';
   const name = raw?.name ?? raw?.Name ?? identifier;
   return { identifier, name };

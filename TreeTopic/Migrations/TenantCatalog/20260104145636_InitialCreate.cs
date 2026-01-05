@@ -65,8 +65,8 @@ namespace TreeTopic.Migrations.TenantCatalog
                     OpenIdConnectTokenEndpoint = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
                     OpenIdConnectJwksUri = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
                     OpenIdConnectEndSessionEndpoint = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
-                    OpenIdConnecClientId = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
-                    OpenIdConnecClientSecret = table.Column<string>(type: "character varying(1000)", maxLength: 1000, nullable: true),
+                    OpenIdConnectClientId = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
+                    OpenIdConnectClientSecret = table.Column<string>(type: "character varying(1000)", maxLength: 1000, nullable: true),
                     RoleClaimName = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
                     TenantObfuscationKeyK0 = table.Column<decimal>(type: "numeric(20,0)", nullable: false),
                     TenantObfuscationKeyK1 = table.Column<decimal>(type: "numeric(20,0)", nullable: false)

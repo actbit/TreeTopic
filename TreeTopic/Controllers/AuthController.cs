@@ -72,7 +72,19 @@ public class AuthController : ControllerBase
         // 同じテナント内の URL か確認
         if (!string.IsNullOrEmpty(currentTenant))
         {
-            return returnUrl.StartsWith($"/{currentTenant}/");
+            var normalizedTenantPath = $"/{currentTenant}";
+            if (returnUrl.StartsWith(normalizedTenantPath, StringComparison.OrdinalIgnoreCase))
+            {
+                if (returnUrl.Length == normalizedTenantPath.Length)
+                {
+                    return true;
+                }
+
+                var nextChar = returnUrl[normalizedTenantPath.Length];
+                return nextChar == '/' || nextChar == '?' || nextChar == '#';
+            }
+
+            return false;
         }
 
         return true;

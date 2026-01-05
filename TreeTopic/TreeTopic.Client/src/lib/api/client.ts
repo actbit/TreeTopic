@@ -69,6 +69,27 @@ function buildHeaders(customHeaders?: Record<string, string>): Record<string, st
   return headers;
 }
 
+function buildReturnUrl(tenant: string): string {
+  if (typeof window !== 'undefined') {
+    const { pathname, search, hash } = window.location;
+    return `${pathname}${search}${hash}`;
+  }
+
+  return tenant ? `/${tenant}/` : '/';
+}
+
+function redirectToTenantOidc(tenant: string): void {
+  const returnUrl = buildReturnUrl(tenant);
+  const encodedReturnUrl = encodeURIComponent(returnUrl);
+  const loginUrl = `/${tenant}/auth/login?returnUrl=${encodedReturnUrl}`;
+
+  if (typeof window !== 'undefined') {
+    window.location.href = loginUrl;
+  } else {
+    goto(loginUrl);
+  }
+}
+
 /**
  * Handle API response
  */
@@ -96,6 +117,7 @@ async function handleResponse<T>(response: Response): Promise<T> {
       // Redirect to login page for current tenant
       const tenant = apiClientConfig.tenant || '';
       let path = '';
+
       if (response.url) {
         try {
           path = new URL(response.url).pathname;
@@ -103,6 +125,7 @@ async function handleResponse<T>(response: Response): Promise<T> {
           path = response.url;
         }
       }
+
       const isAuthStatusCheck = path.endsWith('/auth/me') || path.endsWith('/auth/check');
       const currentPath = typeof window !== 'undefined' ? window.location.pathname : '';
       const isOnLoginPage = tenant &&
@@ -110,7 +133,7 @@ async function handleResponse<T>(response: Response): Promise<T> {
 
       if (!isAuthStatusCheck && !isOnLoginPage) {
         if (tenant) {
-          goto(`/${tenant}/login`);
+          redirectToTenantOidc(tenant);
         } else {
           // If no tenant in context, redirect to home
           goto('/');

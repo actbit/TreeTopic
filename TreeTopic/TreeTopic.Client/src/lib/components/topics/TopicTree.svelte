@@ -27,7 +27,7 @@
     </button>
   </div>
 
-  <div class="panel-body overflow-y-auto">
+  <div class="panel-body overflow-y-auto overflow-x-auto">
     <div class="list">
       {#each $topicTree as node (node.id)}
         <TopicNode {node} />

@@ -12,10 +12,12 @@ namespace TreeTopic.Models
         public Room Room { get; set; }
 
         [ForeignKey(nameof(Parent))]
-        public Guid ParentId { get; set; }
-        public Topic Parent { get;set; }
+        public Guid? ParentId { get; set; }
+        public Topic? Parent { get; set; }
 
         public BrainBoard? BrainBoard { get; set; }
+        public string Title { get; set; } = string.Empty;
+        public string? Description { get; set; }
 
         public List<Message> Messages { get; set; } = new List<Message>();
         public List<Topic> ChildTopics { get; set; } = new List<Topic>();
