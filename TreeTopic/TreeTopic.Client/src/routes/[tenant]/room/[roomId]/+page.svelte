@@ -4,7 +4,7 @@
   import { goto } from '$app/navigation';
   import { auth, isAuthenticated } from '$lib/stores/auth';
   import { currentRoom, setRooms, setCurrentRoom } from '$lib/stores/rooms';
-  import { selectedTopic } from '$lib/stores/topics';
+  import { selectedTopic, setTopics } from '$lib/stores/topics';
   import AppLayout from '$lib/components/layout/AppLayout.svelte';
   import RoomSelector from '$lib/components/rooms/RoomSelector.svelte';
   import RoomCreateModal from '$lib/components/rooms/RoomCreateModal.svelte';
@@ -43,6 +43,31 @@
     };
   }
 
+  function normalizeTopic(raw: any) {
+    const id = raw?.id ?? raw?.Id ?? '';
+    const createdAt = raw?.createdAt ?? raw?.CreatedAt ?? null;
+    const updatedAt = raw?.updatedAt ?? raw?.UpdatedAt ?? null;
+
+    return {
+      id,
+      roomId: raw?.roomId ?? raw?.RoomId ?? '',
+      title: raw?.title ?? raw?.Title ?? '',
+      description: raw?.description ?? raw?.Description,
+      parentId: raw?.parentId ?? raw?.ParentId ?? null,
+      childIds: raw?.childIds ?? raw?.ChildIds ?? [],
+      createdAt: createdAt ? new Date(createdAt) : new Date(),
+      updatedAt: updatedAt ? new Date(updatedAt) : new Date(),
+      creatorId: raw?.creatorId ?? raw?.CreatorId ?? '',
+      messageCount: raw?.messageCount ?? raw?.MessageCount ?? 0,
+      unreadCount: raw?.unreadCount ?? raw?.UnreadCount ?? 0,
+      userPermission: raw?.userPermission ?? raw?.UserPermission ?? 'read',
+      permissions: raw?.permissions ?? raw?.Permissions ?? [],
+      isArchived: raw?.isArchived ?? raw?.IsArchived ?? false,
+      tags: raw?.tags ?? raw?.Tags ?? [],
+      hasChildren: raw?.hasChildren ?? raw?.HasChildren ?? false,
+    };
+  }
+
   async function loadTenantData() {
     isLoading = true;
     loadError = null;
@@ -62,6 +87,17 @@
       const initialRoom =
         rooms.find((room) => room.id === roomId) ?? rooms[0] ?? null;
       setCurrentRoom(initialRoom);
+
+      // Load root topics for the current room (children are loaded on demand)
+      if (initialRoom) {
+        try {
+          const topicsResponse = await api.get<any[]>(`/${tenant}/api/Topic/room/${initialRoom.id}/root`);
+          const topics = Array.isArray(topicsResponse) ? topicsResponse.map(normalizeTopic) : [];
+          setTopics(topics);
+        } catch (err) {
+          console.error('Failed to load root topics:', err);
+        }
+      }
 
       if (initialRoom && initialRoom.id !== roomId) {
         goto(`/${tenant}/room/${initialRoom.id}`, {

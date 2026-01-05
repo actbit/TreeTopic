@@ -18,6 +18,7 @@ export interface UIStateData {
   isMobile: boolean;
   isTablet: boolean;
   isDesktop: boolean;
+  viewportWidth: number;
 }
 
 /**
@@ -38,6 +39,7 @@ function createUIStore() {
     isMobile: false,
     isTablet: false,
     isDesktop: true,
+    viewportWidth: 0,
   });
 
   return {
@@ -258,6 +260,7 @@ function createUIStore() {
           isMobile,
           isTablet,
           isDesktop,
+          viewportWidth: width,
         };
       });
     },
@@ -297,6 +300,7 @@ export const selectedItems = derived(ui, ($ui) => $ui.selectedItems);
 export const isMobile = derived(ui, ($ui) => $ui.isMobile);
 export const isTablet = derived(ui, ($ui) => $ui.isTablet);
 export const isDesktop = derived(ui, ($ui) => $ui.isDesktop);
+export const responsiveLayout = derived(ui, ($ui) => $ui.viewportWidth <= 1030);
 
 /**
  * Check if there are active modals

@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using TreeTopic.Common;
 using TreeTopic.Dtos;
 using TreeTopic.Services;
 using System.Security.Claims;
@@ -26,21 +27,21 @@ public class MessageController : ControllerBase
     public async Task<IActionResult> GetAll(CancellationToken cancellationToken)
     {
         var result = await _messageManagementService.GetAllMessagesAsync(cancellationToken);
-        return HandleResult(result);
+        return result.ToApiResult();
     }
 
     [HttpGet("topic/{topicId}")]
     public async Task<IActionResult> GetByTopic([FromRoute] MaskedGuid topicId, CancellationToken cancellationToken)
     {
         var result = await _messageManagementService.GetMessagesByTopicAsync((Guid)topicId, cancellationToken);
-        return HandleResult(result);
+        return result.ToApiResult();
     }
 
     [HttpGet("{messageId}")]
     public async Task<IActionResult> GetById([FromRoute] MaskedGuid messageId, CancellationToken cancellationToken)
     {
         var result = await _messageManagementService.GetMessageByIdAsync((Guid)messageId, cancellationToken);
-        return HandleResult(result);
+        return result.ToApiResult();
     }
 
     [HttpPost]
@@ -51,7 +52,7 @@ public class MessageController : ControllerBase
             return ValidationProblem(ModelState);
 
         var result = await _messageManagementService.CreateMessageAsync(request, CurrentUserId, cancellationToken);
-        return HandleResult(result);
+        return result.ToApiResult();
     }
 
     [HttpPut("{messageId}")]
@@ -61,31 +62,16 @@ public class MessageController : ControllerBase
             return ValidationProblem(ModelState);
 
         var result = await _messageManagementService.UpdateMessageAsync((Guid)messageId, request, cancellationToken);
-        return HandleResult(result);
+        return result.ToApiResult();
     }
 
     [HttpDelete("{messageId}")]
     public async Task<IActionResult> Delete([FromRoute] MaskedGuid messageId, CancellationToken cancellationToken)
     {
         var result = await _messageManagementService.DeleteMessageAsync(messageId, cancellationToken);
-        return HandleResult(result);
+        return result.ToApiResult();
     }
 
-    private IActionResult HandleResult<T>(Common.Result<T> result)
-    {
-        if (result.IsSuccess)
-            return StatusCode(result.StatusCode, result.Data);
-
-        return StatusCode(result.StatusCode, new { error = result.Error?.Message });
-    }
-
-    private IActionResult HandleResult(Common.Result result)
-    {
-        if (result.IsSuccess)
-            return StatusCode(result.StatusCode);
-
-        return StatusCode(result.StatusCode, new { error = result.Error?.Message });
-    }
 }
 
 

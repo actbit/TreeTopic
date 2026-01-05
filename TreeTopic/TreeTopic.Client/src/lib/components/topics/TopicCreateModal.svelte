@@ -4,7 +4,7 @@
   import Input from '../common/Input.svelte';
   import ErrorMessage from '../common/ErrorMessage.svelte';
   import { ui, activeModals } from '$lib/stores/ui';
-  import { topicList, addTopic, selectedTopic } from '$lib/stores/topics';
+  import { topicList, addTopic, updateTopic, selectedTopic, createTopicParentId } from '$lib/stores/topics';
   import { currentRoom } from '$lib/stores/rooms';
   import { isRequired, minLength } from '$lib/utils/validation';
   import { api } from '$lib/api/client';
@@ -14,10 +14,12 @@
 
   let title = $state('');
   let description = $state('');
-  let parentId = $state<string | null>(null);
   let isLoading = $state(false);
   let error = $state<string | null>(null);
   let titleError = $state<string | null>(null);
+
+  // Use derived to track parentId from store
+  let parentId = $derived($createTopicParentId);
 
   async function handleCreate(e: Event) {
     e.preventDefault();
@@ -51,7 +53,36 @@
         parentId: parentId || null,
       });
 
-      addTopic(response);
+      // Normalize response to ensure all required fields exist
+      const normalizedTopic = {
+        id: response.id || response.Id || '',
+        roomId: response.roomId || response.RoomId || $currentRoom.id,
+        title: response.title || response.Title || '',
+        description: response.description || response.Description || undefined,
+        parentId: response.parentId || response.ParentId || null,
+        childIds: response.childIds || response.ChildIds || [],
+        createdAt: response.createdAt || response.CreatedAt ? new Date(response.createdAt || response.CreatedAt) : new Date(),
+        updatedAt: response.updatedAt || response.UpdatedAt ? new Date(response.updatedAt || response.UpdatedAt) : new Date(),
+        creatorId: response.creatorId || response.CreatorId || '',
+        messageCount: response.messageCount || response.MessageCount || 0,
+        unreadCount: response.unreadCount || response.UnreadCount || 0,
+        userPermission: response.userPermission || response.UserPermission || 'admin',
+        permissions: response.permissions || response.Permissions || [],
+        isArchived: response.isArchived || response.IsArchived || false,
+        tags: response.tags || response.Tags || [],
+        hasChildren: response.hasChildren || response.HasChildren || false,
+      };
+
+      addTopic(normalizedTopic);
+
+      // Update parent's hasChildren flag if this is a child topic
+      if (parentId) {
+        const parent = $topicList.find((t) => t.id === parentId);
+        if (parent && !parent.hasChildren) {
+          updateTopic(parentId, { hasChildren: true });
+        }
+      }
+
       resetForm();
       ui.closeModal(modalId);
     } catch (err: unknown) {
@@ -70,6 +101,7 @@
   function handleClose() {
     ui.closeModal(modalId);
     resetForm();
+    createTopicParentId.set(null);
   }
 </script>
 
@@ -98,23 +130,6 @@
         class="form-input"
         style="resize: vertical; min-height: 80px;"
       />
-    </div>
-
-    <div class="form-group">
-      <label for="parentId" class="form-label">Parent Topic (Optional)</label>
-      <select
-        id="parentId"
-        bind:value={parentId}
-        disabled={isLoading}
-        class="form-input"
-      >
-        <option value={null}>None (Root level)</option>
-        {#each $topicList as topic (topic.id)}
-          {#if !topic.parentId}
-            <option value={topic.id}>{topic.title}</option>
-          {/if}
-        {/each}
-      </select>
     </div>
 
     <div class="flex spacing-md padding-top-md">

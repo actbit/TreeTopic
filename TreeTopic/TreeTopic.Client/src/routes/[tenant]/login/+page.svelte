@@ -5,20 +5,10 @@
 
   const { tenant } = data;
 
-  console.log('Login page loaded with tenant:', tenant);
-
   function handleOIDCLogin() {
-    // Redirect to backend OIDC login endpoint with returnUrl
-    // Backend will handle the OIDC flow, authenticate, and redirect back
     const returnUrl = `/${tenant}/`;
     const encodedReturnUrl = encodeURIComponent(returnUrl);
     const loginUrl = `/${tenant}/auth/login?returnUrl=${encodedReturnUrl}`;
-
-    console.log('Initiating OIDC login:');
-    console.log('  Tenant:', tenant);
-    console.log('  Return URL:', returnUrl);
-    console.log('  Encoded Return URL:', encodedReturnUrl);
-    console.log('  Login URL:', loginUrl);
 
     window.location.href = loginUrl;
   }
@@ -38,15 +28,21 @@
 
       <div class="welcome-section">
         <h2>Welcome back</h2>
-        <p>Sign in to continue to your workspace</p>
+        <p>Sign in to continue.</p>
       </div>
 
-      <button on:click={handleOIDCLogin} class="login-button">
-        Sign in with SSO
-      </button>
+      <div class="form-section">
+        <p class="text-center">
+          Signing in to <strong>{tenant}</strong> workspace uses your organization's secure SSO.
+        </p>
+
+        <button class="sso-button" on:click={handleOIDCLogin}>
+          Sign in with SSO
+        </button>
+      </div>
 
       <div class="footer-section">
-        <p>Protected by secure OIDC authentication</p>
+        <p>Protected by secure OIDC authentication.</p>
       </div>
     </div>
 
@@ -63,7 +59,7 @@
     align-items: center;
     justify-content: center;
     padding: var(--spacing-lg);
-    background-color: #f9fafb;
+    background-color: #1a1a1a;
   }
 
   .login-card-wrapper {
@@ -113,21 +109,42 @@
     color: var(--color-text-light);
   }
 
-  .login-button {
+  .form-section {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+  }
+
+  .form-section p {
+    text-align: center;
+    font-size: var(--font-size-sm);
+    color: var(--color-text-light);
+  }
+
+  .form-section p strong {
+    color: var(--color-text);
+    font-weight: 600;
+  }
+
+  .sso-button {
     width: 100%;
-    padding: 12px 20px;
+    padding: 14px 20px;
     background-color: var(--color-primary);
     color: var(--color-text-inverse);
     font-weight: 600;
     border-radius: var(--border-radius-lg);
     border: none;
     cursor: pointer;
-    font-size: var(--font-size-sm);
-    transition: background-color 0.2s ease;
+    font-size: var(--font-size-base);
+    transition: all 0.2s ease;
   }
 
-  .login-button:hover {
+  .sso-button:hover {
     background-color: var(--color-primary-hover);
+  }
+
+  .sso-button:active {
+    background-color: var(--color-primary-active);
   }
 
   .footer-section {
@@ -150,5 +167,9 @@
   .copyright p {
     font-size: var(--font-size-sm);
     color: var(--color-text-light);
+  }
+
+  .text-center {
+    text-align: center;
   }
 </style>

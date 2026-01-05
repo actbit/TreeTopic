@@ -114,7 +114,9 @@ public class MessageManagementService : BaseService, IMessageManagementService
                 ApplicationUserId = userId,
                 Header = request.Header,
                 Body = request.Body,
-                ReplyId = request.ReplyId ?? Guid.Empty
+                ReplyId = request.ReplyId.HasValue && request.ReplyId != Guid.Empty
+                    ? request.ReplyId
+                    : null
             };
 
             await _messageRepository.AddAsync(message, cancellationToken);

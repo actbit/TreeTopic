@@ -32,9 +32,15 @@
     }
   });
 
-  function handleSelectTenant() {
+  async function handleSelectTenant() {
     if (selectedTenant) {
-      goto(`/${selectedTenant}/login`);
+      try {
+        console.log('Navigating to:', `/${selectedTenant}/login`);
+        await goto(`/${selectedTenant}/login`);
+      } catch (err) {
+        console.error('Navigation error:', err);
+        error = 'Failed to navigate to login page';
+      }
     }
   }
 </script>
@@ -108,7 +114,7 @@
     align-items: center;
     justify-content: center;
     padding: var(--spacing-lg);
-    background-color: #f9fafb;
+    background-color: #1a1a1a;
   }
 
   .workspace-card-wrapper {

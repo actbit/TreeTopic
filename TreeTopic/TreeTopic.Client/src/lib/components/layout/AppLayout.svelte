@@ -3,7 +3,7 @@
   import Sidebar from './Sidebar.svelte';
   import MainPanel from './MainPanel.svelte';
   import SubPanel from './SubPanel.svelte';
-  import { ui } from '$lib/stores/ui';
+  import { ui, sidebarCollapsed, responsiveLayout } from '$lib/stores/ui';
 
   interface Props {
     subPanelTitle?: string;
@@ -18,6 +18,12 @@
   function toggleSubpanel() {
     ui.toggleSubpanel();
   }
+
+  function closeMobileSidebar() {
+    if (!$sidebarCollapsed) {
+      ui.setSidebarCollapsed(true);
+    }
+  }
 </script>
 
 <div class="app-container min-h-screen flex flex-col">
@@ -25,7 +31,16 @@
     <slot name="headerContent" />
   </Header>
 
-  <div class="flex overflow-hidden layout-body">
+  {#if $responsiveLayout}
+    <div
+      class="sidebar-backdrop"
+      class:visible={!$sidebarCollapsed}
+      on:click={closeMobileSidebar}
+      aria-hidden="true"
+    />
+  {/if}
+
+  <div class="overflow-hidden layout-body" class:stacked={$responsiveLayout}>
     <Sidebar>
       <slot name="sidebarContent" />
     </Sidebar>
@@ -34,9 +49,11 @@
       <slot name="mainContent" />
     </MainPanel>
 
-    <SubPanel title={subPanelTitle}>
-      <slot name="subPanelContent" />
-    </SubPanel>
+    {#if !$responsiveLayout}
+      <SubPanel title={subPanelTitle}>
+        <slot name="subPanelContent" />
+      </SubPanel>
+    {/if}
   </div>
 </div>
 
@@ -54,6 +71,27 @@
     display: grid;
     grid-template-columns: auto 1fr auto;
     gap: 0;
+    min-height: calc(100vh - 60px);
+    align-items: stretch;
+    grid-template-rows: 1fr;
+  }
+
+  .layout-body.stacked {
+    display: flex;
+    flex-direction: column;
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar-backdrop {
+    display: none;
+  }
+
+  .sidebar-backdrop.visible {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background-color: rgba(0, 0, 0, 0.45);
+    z-index: 20;
   }
 
   @media (max-width: 1024px) {

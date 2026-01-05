@@ -11,6 +11,8 @@ public interface ITopicManagementService
 {
     Task<Result<List<TopicDto>>> GetAllTopicsAsync(CancellationToken cancellationToken = default);
     Task<Result<List<TopicDto>>> GetTopicsByRoomAsync(Guid roomId, CancellationToken cancellationToken = default);
+    Task<Result<List<TopicDto>>> GetRootTopicsByRoomAsync(Guid roomId, CancellationToken cancellationToken = default);
+    Task<Result<List<TopicDto>>> GetTopicsByParentAsync(Guid parentId, CancellationToken cancellationToken = default);
     Task<Result<TopicDto>> GetTopicByIdAsync(Guid topicId, CancellationToken cancellationToken = default);
     Task<Result<TopicDto>> CreateTopicAsync(CreateTopicRequest request, CancellationToken cancellationToken = default);
     Task<Result<TopicDto>> UpdateTopicAsync(Guid topicId, UpdateTopicRequest request, CancellationToken cancellationToken = default);
@@ -56,6 +58,32 @@ public class TopicManagementService : BaseService, ITopicManagementService
         }, nameof(GetTopicsByRoomAsync));
     }
 
+    public async Task<Result<List<TopicDto>>> GetRootTopicsByRoomAsync(Guid roomId, CancellationToken cancellationToken = default)
+    {
+        return await ExecuteAsync(async () =>
+        {
+            var topics = await _topicRepository.Query()
+                .Where(t => t.RoomId == roomId && t.ParentId == null)
+                .ToListAsync(cancellationToken);
+
+            var dtos = topics.Select(MapToDto).ToList();
+            return Result<List<TopicDto>>.Success(dtos);
+        }, nameof(GetRootTopicsByRoomAsync));
+    }
+
+    public async Task<Result<List<TopicDto>>> GetTopicsByParentAsync(Guid parentId, CancellationToken cancellationToken = default)
+    {
+        return await ExecuteAsync(async () =>
+        {
+            var topics = await _topicRepository.Query()
+                .Where(t => t.ParentId == parentId)
+                .ToListAsync(cancellationToken);
+
+            var dtos = topics.Select(MapToDto).ToList();
+            return Result<List<TopicDto>>.Success(dtos);
+        }, nameof(GetTopicsByParentAsync));
+    }
+
     public async Task<Result<TopicDto>> GetTopicByIdAsync(Guid topicId, CancellationToken cancellationToken = default)
     {
         return await ExecuteAsync(async () =>
@@ -80,9 +108,11 @@ public class TopicManagementService : BaseService, ITopicManagementService
             if (room == null)
                 return Result<TopicDto>.NotFound("Room not found");
 
-            if (request.ParentId.HasValue)
+            Guid? parentId = request.ParentId.HasValue ? (Guid)request.ParentId.Value : null;
+
+            if (parentId.HasValue)
             {
-                var parent = await _topicRepository.GetByIdAsync(request.ParentId.Value, cancellationToken);
+                var parent = await _topicRepository.GetByIdAsync(parentId.Value, cancellationToken);
                 if (parent == null)
                     return Result<TopicDto>.NotFound("Parent topic not found");
             }
@@ -90,8 +120,10 @@ public class TopicManagementService : BaseService, ITopicManagementService
             var topic = new Topic
             {
                 RoomId = request.RoomId,
-                ParentId = request.ParentId ?? Guid.Empty
+                ParentId = parentId
             };
+            topic.Title = request.Title?.Trim() ?? string.Empty;
+            topic.Description = request.Description?.Trim();
 
             await _topicRepository.AddAsync(topic, cancellationToken);
             await _topicRepository.SaveChangesAsync(cancellationToken);
@@ -113,13 +145,28 @@ public class TopicManagementService : BaseService, ITopicManagementService
             if (topic == null)
                 return Result<TopicDto>.NotFound("Topic not found");
 
-            if (request.ParentId.HasValue && request.ParentId.Value != new MaskedGuid(Guid.Empty))
+            Guid? parentId = request.ParentId.HasValue ? (Guid)request.ParentId.Value : null;
+            if (parentId.HasValue)
             {
-                var parent = await _topicRepository.GetByIdAsync(request.ParentId.Value, cancellationToken);
+                var parent = await _topicRepository.GetByIdAsync(parentId.Value, cancellationToken);
                 if (parent == null)
                     return Result<TopicDto>.NotFound("Parent topic not found");
 
-                topic.ParentId = request.ParentId.Value;
+                topic.ParentId = parentId;
+            }
+            else
+            {
+                topic.ParentId = null;
+            }
+
+            if (request.Title != null)
+            {
+                topic.Title = request.Title.Trim();
+            }
+
+            if (request.Description != null)
+            {
+                topic.Description = request.Description.Trim();
             }
 
             topic.UpdatedAt = DateTime.UtcNow;
@@ -147,13 +194,20 @@ public class TopicManagementService : BaseService, ITopicManagementService
         }, nameof(DeleteTopicAsync));
     }
 
-    private static TopicDto MapToDto(Topic topic)
+    private TopicDto MapToDto(Topic topic)
     {
+        // Check if this topic has any children
+        var hasChildren = _topicRepository.Query()
+            .Any(t => t.ParentId == topic.Id);
+
         return new TopicDto
         {
             Id = topic.Id,
             RoomId = topic.RoomId,
-            ParentId = topic.ParentId != Guid.Empty ? topic.ParentId : null,
+            ParentId = topic.ParentId.HasValue ? topic.ParentId : null,
+            Title = topic.Title,
+            Description = topic.Description,
+            HasChildren = hasChildren,
             CreatedAt = topic.CreatedAt,
             UpdatedAt = topic.UpdatedAt
         };
