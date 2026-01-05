@@ -12,8 +12,8 @@ using TreeTopic.Data;
 namespace TreeTopic.Migrations.Application
 {
     [DbContext(typeof(ApplicationDbContextPostgreSQL))]
-    [Migration("20251231122700_AddBrainIdeaVoting")]
-    partial class AddBrainIdeaVoting
+    [Migration("20260104145551_InitialCreate")]
+    partial class InitialCreate
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -633,7 +633,10 @@ namespace TreeTopic.Migrations.Application
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<Guid>("ParentId")
+                    b.Property<string>("Description")
+                        .HasColumnType("text");
+
+                    b.Property<Guid?>("ParentId")
                         .HasColumnType("uuid");
 
                     b.Property<Guid>("RoomId")
@@ -643,6 +646,10 @@ namespace TreeTopic.Migrations.Application
                         .IsRequired()
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasColumnType("text");
 
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -864,8 +871,7 @@ namespace TreeTopic.Migrations.Application
                     b.HasOne("TreeTopic.Models.Topic", "Parent")
                         .WithMany("ChildTopics")
                         .HasForeignKey("ParentId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Cascade);
 
                     b.HasOne("TreeTopic.Models.Room", "Room")
                         .WithMany("Topics")

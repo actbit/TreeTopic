@@ -4,7 +4,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
 #nullable disable
 
-namespace TreeTopic.Migrations.Application_MySQL
+namespace TreeTopic.Migrations.Application
 {
     /// <inheritdoc />
     public partial class InitialCreate : Migration
@@ -16,7 +16,7 @@ namespace TreeTopic.Migrations.Application_MySQL
                 name: "AspNetRoles",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "BINARY(16)", nullable: false),
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
                     TenantId = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false),
                     Name = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
                     NormalizedName = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
@@ -31,7 +31,7 @@ namespace TreeTopic.Migrations.Application_MySQL
                 name: "AspNetUsers",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "BINARY(16)", nullable: false),
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
                     DisplayName = table.Column<string>(type: "text", nullable: true),
                     Sub = table.Column<string>(type: "text", nullable: true),
                     TenantId = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false),
@@ -61,7 +61,7 @@ namespace TreeTopic.Migrations.Application_MySQL
                 {
                     Id = table.Column<int>(type: "integer", nullable: false)
                         .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    RoleId = table.Column<Guid>(type: "BINARY(16)", nullable: false),
+                    RoleId = table.Column<Guid>(type: "uuid", nullable: false),
                     ClaimType = table.Column<string>(type: "text", nullable: true),
                     ClaimValue = table.Column<string>(type: "text", nullable: true),
                     TenantId = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false)
@@ -81,9 +81,9 @@ namespace TreeTopic.Migrations.Application_MySQL
                 name: "Permissions",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "BINARY(16)", nullable: false),
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
                     Name = table.Column<string>(type: "text", nullable: true),
-                    RoleId = table.Column<Guid>(type: "BINARY(16)", nullable: false),
+                    RoleId = table.Column<Guid>(type: "uuid", nullable: false),
                     CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     UpdatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     TenantId = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false)
@@ -105,7 +105,7 @@ namespace TreeTopic.Migrations.Application_MySQL
                 {
                     Id = table.Column<int>(type: "integer", nullable: false)
                         .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    UserId = table.Column<Guid>(type: "BINARY(16)", nullable: false),
+                    UserId = table.Column<Guid>(type: "uuid", nullable: false),
                     ClaimType = table.Column<string>(type: "text", nullable: true),
                     ClaimValue = table.Column<string>(type: "text", nullable: true),
                     TenantId = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false)
@@ -128,7 +128,7 @@ namespace TreeTopic.Migrations.Application_MySQL
                     LoginProvider = table.Column<string>(type: "text", nullable: false),
                     ProviderKey = table.Column<string>(type: "text", nullable: false),
                     ProviderDisplayName = table.Column<string>(type: "text", nullable: true),
-                    UserId = table.Column<Guid>(type: "BINARY(16)", nullable: false),
+                    UserId = table.Column<Guid>(type: "uuid", nullable: false),
                     TenantId = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false)
                 },
                 constraints: table =>
@@ -146,8 +146,8 @@ namespace TreeTopic.Migrations.Application_MySQL
                 name: "AspNetUserRoles",
                 columns: table => new
                 {
-                    UserId = table.Column<Guid>(type: "BINARY(16)", nullable: false),
-                    RoleId = table.Column<Guid>(type: "BINARY(16)", nullable: false),
+                    UserId = table.Column<Guid>(type: "uuid", nullable: false),
+                    RoleId = table.Column<Guid>(type: "uuid", nullable: false),
                     TenantId = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false)
                 },
                 constraints: table =>
@@ -171,7 +171,7 @@ namespace TreeTopic.Migrations.Application_MySQL
                 name: "AspNetUserTokens",
                 columns: table => new
                 {
-                    UserId = table.Column<Guid>(type: "BINARY(16)", nullable: false),
+                    UserId = table.Column<Guid>(type: "uuid", nullable: false),
                     LoginProvider = table.Column<string>(type: "text", nullable: false),
                     Name = table.Column<string>(type: "text", nullable: false),
                     Value = table.Column<string>(type: "text", nullable: true),
@@ -192,9 +192,9 @@ namespace TreeTopic.Migrations.Application_MySQL
                 name: "Rooms",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "BINARY(16)", nullable: false),
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
                     Name = table.Column<string>(type: "text", nullable: false),
-                    CreatedUserId = table.Column<Guid>(type: "BINARY(16)", nullable: false),
+                    CreatedUserId = table.Column<Guid>(type: "uuid", nullable: false),
                     CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     UpdatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     TenantId = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false)
@@ -214,9 +214,9 @@ namespace TreeTopic.Migrations.Application_MySQL
                 name: "RoomUsers",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "BINARY(16)", nullable: false),
-                    ApplicationUserId = table.Column<Guid>(type: "BINARY(16)", nullable: false),
-                    RoomId = table.Column<Guid>(type: "BINARY(16)", nullable: false),
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    ApplicationUserId = table.Column<Guid>(type: "uuid", nullable: false),
+                    RoomId = table.Column<Guid>(type: "uuid", nullable: false),
                     CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     UpdatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     TenantId = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false)
@@ -242,9 +242,11 @@ namespace TreeTopic.Migrations.Application_MySQL
                 name: "Topics",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "BINARY(16)", nullable: false),
-                    RoomId = table.Column<Guid>(type: "BINARY(16)", nullable: false),
-                    ParentId = table.Column<Guid>(type: "BINARY(16)", nullable: false),
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    RoomId = table.Column<Guid>(type: "uuid", nullable: false),
+                    ParentId = table.Column<Guid>(type: "uuid", nullable: true),
+                    Title = table.Column<string>(type: "text", nullable: false),
+                    Description = table.Column<string>(type: "text", nullable: true),
                     CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     UpdatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     TenantId = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false)
@@ -270,8 +272,8 @@ namespace TreeTopic.Migrations.Application_MySQL
                 name: "RoomPermissions",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "BINARY(16)", nullable: false),
-                    RoomUserId = table.Column<Guid>(type: "BINARY(16)", nullable: false),
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    RoomUserId = table.Column<Guid>(type: "uuid", nullable: false),
                     Name = table.Column<string>(type: "text", nullable: false),
                     CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     UpdatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
@@ -292,8 +294,8 @@ namespace TreeTopic.Migrations.Application_MySQL
                 name: "BrainBoards",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "BINARY(16)", nullable: false),
-                    TopicId = table.Column<Guid>(type: "BINARY(16)", nullable: false),
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    TopicId = table.Column<Guid>(type: "uuid", nullable: false),
                     Name = table.Column<string>(type: "text", nullable: false),
                     IsSign = table.Column<bool>(type: "boolean", nullable: false),
                     CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
@@ -315,12 +317,12 @@ namespace TreeTopic.Migrations.Application_MySQL
                 name: "Messages",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "BINARY(16)", nullable: false),
-                    TopicId = table.Column<Guid>(type: "BINARY(16)", nullable: false),
-                    ApplicationUserId = table.Column<Guid>(type: "BINARY(16)", nullable: false),
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    TopicId = table.Column<Guid>(type: "uuid", nullable: false),
+                    ApplicationUserId = table.Column<Guid>(type: "uuid", nullable: false),
                     Header = table.Column<string>(type: "text", nullable: false),
                     Body = table.Column<string>(type: "text", nullable: false),
-                    ReplyId = table.Column<Guid>(type: "BINARY(16)", nullable: true),
+                    ReplyId = table.Column<Guid>(type: "uuid", nullable: true),
                     CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     UpdatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     TenantId = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false)
@@ -352,10 +354,10 @@ namespace TreeTopic.Migrations.Application_MySQL
                 name: "BrainIdeas",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "BINARY(16)", nullable: false),
-                    BrainBoardId = table.Column<Guid>(type: "BINARY(16)", nullable: false),
-                    TopicId = table.Column<Guid>(type: "BINARY(16)", nullable: false),
-                    ApplicationUserId = table.Column<Guid>(type: "BINARY(16)", nullable: true),
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    BrainBoardId = table.Column<Guid>(type: "uuid", nullable: false),
+                    TopicId = table.Column<Guid>(type: "uuid", nullable: false),
+                    ApplicationUserId = table.Column<Guid>(type: "uuid", nullable: true),
                     Idea = table.Column<string>(type: "text", nullable: false),
                     PositionTop = table.Column<double>(type: "double precision", nullable: false),
                     PositionLeft = table.Column<double>(type: "double precision", nullable: false),
@@ -390,9 +392,9 @@ namespace TreeTopic.Migrations.Application_MySQL
                 name: "Files",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "BINARY(16)", nullable: false),
-                    SourceFileId = table.Column<Guid>(type: "BINARY(16)", nullable: true),
-                    MessageId = table.Column<Guid>(type: "BINARY(16)", nullable: true),
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    SourceFileId = table.Column<Guid>(type: "uuid", nullable: true),
+                    MessageId = table.Column<Guid>(type: "uuid", nullable: true),
                     FileName = table.Column<string>(type: "text", nullable: false),
                     SaveFileName = table.Column<string>(type: "text", nullable: false),
                     FileType = table.Column<string>(type: "text", nullable: false),
@@ -416,6 +418,36 @@ namespace TreeTopic.Migrations.Application_MySQL
                         principalTable: "Messages",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.SetNull);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "BrainIdeaVotes",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    BrainIdeaId = table.Column<Guid>(type: "uuid", nullable: false),
+                    ApplicationUserId = table.Column<Guid>(type: "uuid", nullable: true),
+                    VoteType = table.Column<string>(type: "text", nullable: false),
+                    Value = table.Column<int>(type: "integer", nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    UpdatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    TenantId = table.Column<string>(type: "text", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_BrainIdeaVotes", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_BrainIdeaVotes_AspNetUsers_ApplicationUserId",
+                        column: x => x.ApplicationUserId,
+                        principalTable: "AspNetUsers",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.SetNull);
+                    table.ForeignKey(
+                        name: "FK_BrainIdeaVotes_BrainIdeas_BrainIdeaId",
+                        column: x => x.BrainIdeaId,
+                        principalTable: "BrainIdeas",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
                 });
 
             migrationBuilder.CreateIndex(
@@ -481,6 +513,16 @@ namespace TreeTopic.Migrations.Application_MySQL
                 name: "IX_BrainIdeas_TopicId",
                 table: "BrainIdeas",
                 column: "TopicId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_BrainIdeaVotes_ApplicationUserId",
+                table: "BrainIdeaVotes",
+                column: "ApplicationUserId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_BrainIdeaVotes_BrainIdeaId",
+                table: "BrainIdeaVotes",
+                column: "BrainIdeaId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_Files_MessageId",
@@ -562,7 +604,7 @@ namespace TreeTopic.Migrations.Application_MySQL
                 name: "AspNetUserTokens");
 
             migrationBuilder.DropTable(
-                name: "BrainIdeas");
+                name: "BrainIdeaVotes");
 
             migrationBuilder.DropTable(
                 name: "Files");
@@ -574,7 +616,7 @@ namespace TreeTopic.Migrations.Application_MySQL
                 name: "RoomPermissions");
 
             migrationBuilder.DropTable(
-                name: "BrainBoards");
+                name: "BrainIdeas");
 
             migrationBuilder.DropTable(
                 name: "Messages");
@@ -584,6 +626,9 @@ namespace TreeTopic.Migrations.Application_MySQL
 
             migrationBuilder.DropTable(
                 name: "RoomUsers");
+
+            migrationBuilder.DropTable(
+                name: "BrainBoards");
 
             migrationBuilder.DropTable(
                 name: "Topics");

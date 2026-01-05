@@ -80,9 +80,11 @@ public class TopicManagementService : BaseService, ITopicManagementService
             if (room == null)
                 return Result<TopicDto>.NotFound("Room not found");
 
-            if (request.ParentId.HasValue)
+            Guid? parentId = request.ParentId.HasValue ? (Guid)request.ParentId.Value : null;
+
+            if (parentId.HasValue)
             {
-                var parent = await _topicRepository.GetByIdAsync(request.ParentId.Value, cancellationToken);
+                var parent = await _topicRepository.GetByIdAsync(parentId.Value, cancellationToken);
                 if (parent == null)
                     return Result<TopicDto>.NotFound("Parent topic not found");
             }
@@ -90,8 +92,10 @@ public class TopicManagementService : BaseService, ITopicManagementService
             var topic = new Topic
             {
                 RoomId = request.RoomId,
-                ParentId = request.ParentId ?? Guid.Empty
+                ParentId = parentId
             };
+            topic.Title = request.Title?.Trim() ?? string.Empty;
+            topic.Description = request.Description?.Trim();
 
             await _topicRepository.AddAsync(topic, cancellationToken);
             await _topicRepository.SaveChangesAsync(cancellationToken);
@@ -113,13 +117,28 @@ public class TopicManagementService : BaseService, ITopicManagementService
             if (topic == null)
                 return Result<TopicDto>.NotFound("Topic not found");
 
-            if (request.ParentId.HasValue && request.ParentId.Value != new MaskedGuid(Guid.Empty))
+            Guid? parentId = request.ParentId.HasValue ? (Guid)request.ParentId.Value : null;
+            if (parentId.HasValue)
             {
-                var parent = await _topicRepository.GetByIdAsync(request.ParentId.Value, cancellationToken);
+                var parent = await _topicRepository.GetByIdAsync(parentId.Value, cancellationToken);
                 if (parent == null)
                     return Result<TopicDto>.NotFound("Parent topic not found");
 
-                topic.ParentId = request.ParentId.Value;
+                topic.ParentId = parentId;
+            }
+            else
+            {
+                topic.ParentId = null;
+            }
+
+            if (request.Title != null)
+            {
+                topic.Title = request.Title.Trim();
+            }
+
+            if (request.Description != null)
+            {
+                topic.Description = request.Description.Trim();
             }
 
             topic.UpdatedAt = DateTime.UtcNow;
@@ -153,7 +172,9 @@ public class TopicManagementService : BaseService, ITopicManagementService
         {
             Id = topic.Id,
             RoomId = topic.RoomId,
-            ParentId = topic.ParentId != Guid.Empty ? topic.ParentId : null,
+            ParentId = topic.ParentId.HasValue ? topic.ParentId : null,
+            Title = topic.Title,
+            Description = topic.Description,
             CreatedAt = topic.CreatedAt,
             UpdatedAt = topic.UpdatedAt
         };
