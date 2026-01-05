@@ -154,6 +154,7 @@ export interface TopicTreeNode {
   unreadCount: number;
   isSelected: boolean;
   isExpanded: boolean;
+  hasChildren: boolean;
   canRead: boolean;
   canWrite: boolean;
   canDelete: boolean;

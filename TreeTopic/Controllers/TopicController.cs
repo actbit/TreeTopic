@@ -9,7 +9,7 @@ namespace TreeTopic.Controllers;
 
 [ApiController]
 [Route("{tenant}/api/[controller]")]
-[Authorize]
+[Authorize(Policy = "Topic:read")]
 public class TopicController : ControllerBase
 {
     private readonly ITopicManagementService _topicManagementService;
@@ -31,6 +31,20 @@ public class TopicController : ControllerBase
     public async Task<IActionResult> GetByRoom([FromRoute] MaskedGuid roomId, CancellationToken cancellationToken)
     {
         var result = await _topicManagementService.GetTopicsByRoomAsync((Guid)roomId, cancellationToken);
+        return result.ToApiResult();
+    }
+
+    [HttpGet("room/{roomId}/root")]
+    public async Task<IActionResult> GetRootByRoom([FromRoute] MaskedGuid roomId, CancellationToken cancellationToken)
+    {
+        var result = await _topicManagementService.GetRootTopicsByRoomAsync((Guid)roomId, cancellationToken);
+        return result.ToApiResult();
+    }
+
+    [HttpGet("parent/{parentId}")]
+    public async Task<IActionResult> GetByParent([FromRoute] MaskedGuid parentId, CancellationToken cancellationToken)
+    {
+        var result = await _topicManagementService.GetTopicsByParentAsync((Guid)parentId, cancellationToken);
         return result.ToApiResult();
     }
 

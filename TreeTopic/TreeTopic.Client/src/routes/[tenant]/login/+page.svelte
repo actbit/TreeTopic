@@ -59,7 +59,7 @@
     align-items: center;
     justify-content: center;
     padding: var(--spacing-lg);
-    background-color: #f9fafb;
+    background-color: #1a1a1a;
   }
 
   .login-card-wrapper {

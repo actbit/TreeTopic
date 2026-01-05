@@ -4,8 +4,6 @@
 	import { ui } from '$lib/stores/ui';
 	import { onMount } from 'svelte';
 
-	let { children } = $props();
-
 	onMount(() => {
 		// Restore UI state from localStorage
 		ui.restoreState();
@@ -31,7 +29,7 @@
 </svelte:head>
 
 <div class="min-h-screen bg-background font-sans">
-	{@render children()}
+	<slot />
 </div>
 
 <style>

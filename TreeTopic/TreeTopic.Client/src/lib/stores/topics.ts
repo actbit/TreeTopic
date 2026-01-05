@@ -34,6 +34,7 @@ export interface Topic {
   permissions?: TopicPermission[];
   isArchived: boolean;
   tags?: string[];
+  hasChildren: boolean;
 }
 
 /**
@@ -94,10 +95,28 @@ function createTopicsStore() {
      * Add a new topic
      */
     addTopic: (topic: Topic) => {
-      update((state) => ({
-        ...state,
-        topics: [...state.topics, topic],
-      }));
+      update((state) => {
+        const updatedTopics = [...state.topics, topic];
+
+        // If the new topic has a parent, add it to the parent's childIds
+        if (topic.parentId) {
+          const parentIndex = updatedTopics.findIndex((t) => t.id === topic.parentId);
+          if (parentIndex !== -1) {
+            const parent = updatedTopics[parentIndex];
+            if (!parent.childIds.includes(topic.id)) {
+              updatedTopics[parentIndex] = {
+                ...parent,
+                childIds: [...parent.childIds, topic.id],
+              };
+            }
+          }
+        }
+
+        return {
+          ...state,
+          topics: updatedTopics,
+        };
+      });
     },
     /**
      * Update topic
@@ -233,7 +252,7 @@ export const getTopicById = (topicId: string) =>
 /**
  * Build topic tree structure
  */
-export const topicTree = derived(topicList, ($topics) => {
+export const topicTree = derived([topicList, expandedTopics], ([$topics, $expandedTopics]) => {
   const buildTree = (): TopicTreeNode[] => {
     const topicMap = new Map($topics.map((t) => [t.id, t]));
     const roots: TopicTreeNode[] = [];
@@ -248,7 +267,8 @@ export const topicTree = derived(topicList, ($topics) => {
         children: [],
         unreadCount: topic.unreadCount,
         isSelected: false,
-        isExpanded: new Set([topic.id]).has(topic.id), // simplified, should check store
+        isExpanded: $expandedTopics.has(topic.id),
+        hasChildren: topic.hasChildren,
         canRead: topic.userPermission !== 'none',
         canWrite: topic.userPermission === 'write' || topic.userPermission === 'admin',
         canDelete: topic.userPermission === 'admin',
@@ -347,3 +367,8 @@ export function toggleTopicExpansion(topicId: string) {
 export function setTopics(topicsList: Topic[]) {
   topics.setTopics(topicsList);
 }
+
+/**
+ * Store for managing parent topic selection in topic creation modal
+ */
+export const createTopicParentId = writable<string | null>(null);

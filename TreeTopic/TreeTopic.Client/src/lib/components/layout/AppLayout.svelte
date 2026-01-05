@@ -1,19 +1,15 @@
 <script lang="ts">
-  import { derived } from 'svelte/store';
   import Header from './Header.svelte';
   import Sidebar from './Sidebar.svelte';
   import MainPanel from './MainPanel.svelte';
   import SubPanel from './SubPanel.svelte';
   import { ui, sidebarCollapsed, responsiveLayout } from '$lib/stores/ui';
-  import { onDestroy } from 'svelte';
 
   interface Props {
     subPanelTitle?: string;
   }
 
   let { subPanelTitle }: Props = $props();
-
-  let responsiveSidebarInitialized = false;
 
   function toggleSidebar() {
     ui.toggleSidebar();
@@ -28,21 +24,6 @@
       ui.setSidebarCollapsed(true);
     }
   }
-
-  const responsiveCollapse = responsiveLayout;
-
-  const unsubscribeResponsive = responsiveCollapse.subscribe((shouldCollapse) => {
-    if (shouldCollapse && !responsiveSidebarInitialized) {
-      ui.setSidebarCollapsed(true);
-      responsiveSidebarInitialized = true;
-    } else if (!shouldCollapse && responsiveSidebarInitialized) {
-      responsiveSidebarInitialized = false;
-    }
-  });
-
-  onDestroy(() => {
-    unsubscribeResponsive();
-  });
 </script>
 
 <div class="app-container min-h-screen flex flex-col">
@@ -50,7 +31,7 @@
     <slot name="headerContent" />
   </Header>
 
-  {#if $responsiveCollapse}
+  {#if $responsiveLayout}
     <div
       class="sidebar-backdrop"
       class:visible={!$sidebarCollapsed}
@@ -59,7 +40,7 @@
     />
   {/if}
 
-  <div class="overflow-hidden layout-body" class:stacked={$responsiveCollapse}>
+  <div class="overflow-hidden layout-body" class:stacked={$responsiveLayout}>
     <Sidebar>
       <slot name="sidebarContent" />
     </Sidebar>
@@ -68,7 +49,7 @@
       <slot name="mainContent" />
     </MainPanel>
 
-    {#if !$responsiveCollapse}
+    {#if !$responsiveLayout}
       <SubPanel title={subPanelTitle}>
         <slot name="subPanelContent" />
       </SubPanel>
