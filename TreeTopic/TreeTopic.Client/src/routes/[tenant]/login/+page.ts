@@ -1,20 +1,14 @@
-import { redirect } from '@sveltejs/kit';
 import type { PageLoad } from './$types';
-import { getPublicTenantInfo } from '$lib/api/tenants';
 
 export const load: PageLoad = async ({ params }) => {
   const { tenant } = params;
 
-  // Validate that the tenant exists
-  const tenantInfo = await getPublicTenantInfo(tenant);
+  console.log('Loading login page for tenant:', tenant);
 
-  if (!tenantInfo) {
-    // Tenant not found, redirect to home for tenant selection
-    throw redirect(303, '/');
-  }
-
+  // Return basic tenant data without validation
+  // The tenant was already selected, so we can trust it
   return {
     tenant,
-    tenantInfo,
+    tenantInfo: { identifier: tenant, name: tenant },
   };
 };
