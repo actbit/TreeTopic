@@ -16,7 +16,7 @@ public interface ITopicManagementService
     Task<Result<TopicDto>> GetTopicByIdAsync(Guid topicId, CancellationToken cancellationToken = default);
     Task<Result<TopicDto>> CreateTopicAsync(CreateTopicRequest request, CancellationToken cancellationToken = default);
     Task<Result<TopicDto>> UpdateTopicAsync(Guid topicId, UpdateTopicRequest request, CancellationToken cancellationToken = default);
-    Task<Result> DeleteTopicAsync(Guid topicId, CancellationToken cancellationToken = default);
+    Task<Result> DeleteTopicAsync(Guid topicId, TopicDeleteStrategy strategy = TopicDeleteStrategy.Cascade, CancellationToken cancellationToken = default);
 }
 
 public class TopicManagementService : BaseService, ITopicManagementService
@@ -148,9 +148,34 @@ public class TopicManagementService : BaseService, ITopicManagementService
             Guid? parentId = request.ParentId.HasValue ? (Guid)request.ParentId.Value : null;
             if (parentId.HasValue)
             {
+                if (parentId.Value == topicId)
+                    return Result<TopicDto>.BadRequest("A topic cannot be its own parent");
+
                 var parent = await _topicRepository.GetByIdAsync(parentId.Value, cancellationToken);
                 if (parent == null)
                     return Result<TopicDto>.NotFound("Parent topic not found");
+
+                if (parent.RoomId != topic.RoomId)
+                    return Result<TopicDto>.BadRequest("Parent topic must be in the same room");
+
+                // Prevent cycles: the new parent cannot be a descendant of the topic.
+                var cursor = parent;
+                var visited = new HashSet<Guid> { parent.Id };
+                while (cursor.ParentId.HasValue)
+                {
+                    var nextId = cursor.ParentId.Value;
+                    if (nextId == topicId)
+                        return Result<TopicDto>.BadRequest("Cannot move a topic under its descendant");
+
+                    if (!visited.Add(nextId))
+                        break; // Defensive: existing cycle in DB
+
+                    var next = await _topicRepository.GetByIdAsync(nextId, cancellationToken);
+                    if (next == null)
+                        break;
+
+                    cursor = next;
+                }
 
                 topic.ParentId = parentId;
             }
@@ -178,7 +203,7 @@ public class TopicManagementService : BaseService, ITopicManagementService
         }, nameof(UpdateTopicAsync));
     }
 
-    public async Task<Result> DeleteTopicAsync(Guid topicId, CancellationToken cancellationToken = default)
+    public async Task<Result> DeleteTopicAsync(Guid topicId, TopicDeleteStrategy strategy = TopicDeleteStrategy.Cascade, CancellationToken cancellationToken = default)
     {
         return await ExecuteAsync(async () =>
         {
@@ -186,6 +211,22 @@ public class TopicManagementService : BaseService, ITopicManagementService
 
             if (topic == null)
                 return Result.NotFound("Topic not found");
+
+            if (strategy == TopicDeleteStrategy.ReparentToParent)
+            {
+                var children = await _topicRepository.Query()
+                    .Where(t => t.ParentId == topic.Id)
+                    .ToListAsync(cancellationToken);
+
+                foreach (var child in children)
+                {
+                    child.ParentId = topic.ParentId;
+                    child.UpdatedAt = DateTime.UtcNow;
+                    _topicRepository.Update(child);
+                }
+
+                await _topicRepository.SaveChangesAsync(cancellationToken);
+            }
 
             _topicRepository.Delete(topic);
             await _topicRepository.SaveChangesAsync(cancellationToken);

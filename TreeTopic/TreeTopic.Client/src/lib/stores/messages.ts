@@ -336,6 +336,16 @@ export const getMessageById = (messageId: string) =>
   derived(messageList, ($messages) => $messages.find((m) => m.id === messageId));
 
 /**
+ * Reply target (message being replied to)
+ */
+export const replyTargetId = writable<string | null>(null);
+export const replyTarget = derived(
+  [replyTargetId, messageList],
+  ([$replyTargetId, $messages]) =>
+    $replyTargetId ? $messages.find((m) => m.id === $replyTargetId) ?? null : null
+);
+
+/**
  * Get unread messages count
  */
 export const unreadMessagesCount = derived(messageList, ($messages) => {
@@ -380,4 +390,12 @@ export function deleteMessage(messageId: string) {
 
 export function setMessages(topicId: string, messagesList: Message[]) {
   messages.setMessages(topicId, messagesList);
+}
+
+export function startReply(messageId: string) {
+  replyTargetId.set(messageId);
+}
+
+export function cancelReply() {
+  replyTargetId.set(null);
 }

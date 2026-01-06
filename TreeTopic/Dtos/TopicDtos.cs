@@ -38,3 +38,9 @@ public class UpdateTopicRequest : BaseUpdateRequest
 
     public string? Description { get; set; }
 }
+
+public enum TopicDeleteStrategy
+{
+    Cascade = 0,
+    ReparentToParent = 1
+}

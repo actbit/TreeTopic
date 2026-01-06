@@ -134,6 +134,68 @@ function createTopicsStore() {
       }));
     },
     /**
+     * Move topic to a new parent (or root if null)
+     */
+    moveTopicParent: (topicId: string, newParentId: string | null) => {
+      update((state) => {
+        const moving = state.topics.find((t) => t.id === topicId);
+        if (!moving) return state;
+
+        const oldParentId = moving.parentId;
+        const now = new Date();
+
+        const topics = state.topics.map((t) => ({ ...t }));
+
+        const movingIndex = topics.findIndex((t) => t.id === topicId);
+        if (movingIndex === -1) return state;
+        topics[movingIndex] = {
+          ...topics[movingIndex],
+          parentId: newParentId,
+          updatedAt: now,
+        };
+
+        if (oldParentId) {
+          const oldParentIndex = topics.findIndex((t) => t.id === oldParentId);
+          if (oldParentIndex !== -1) {
+            const oldParent = topics[oldParentIndex];
+            const nextChildIds = (oldParent.childIds ?? []).filter((id) => id !== topicId);
+            topics[oldParentIndex] = {
+              ...oldParent,
+              childIds: nextChildIds,
+              // Avoid incorrectly flipping to false when children aren't fully loaded.
+              hasChildren: nextChildIds.length > 0 ? true : oldParent.hasChildren,
+              updatedAt: now,
+            };
+          }
+        }
+
+        if (newParentId) {
+          const newParentIndex = topics.findIndex((t) => t.id === newParentId);
+          if (newParentIndex !== -1) {
+            const newParent = topics[newParentIndex];
+            const nextChildIds = newParent.childIds?.includes(topicId)
+              ? newParent.childIds
+              : [...(newParent.childIds ?? []), topicId];
+            topics[newParentIndex] = {
+              ...newParent,
+              childIds: nextChildIds,
+              hasChildren: true,
+              updatedAt: now,
+            };
+          }
+        }
+
+        return {
+          ...state,
+          topics,
+          selectedTopic:
+            state.selectedTopic?.id === topicId
+              ? { ...state.selectedTopic, parentId: newParentId, updatedAt: now }
+              : state.selectedTopic,
+        };
+      });
+    },
+    /**
      * Delete topic
      */
     deleteTopic: (topicId: string) => {
@@ -350,6 +412,10 @@ export function addTopic(topic: Topic) {
 
 export function updateTopic(topicId: string, updates: Partial<Topic>) {
   topics.updateTopic(topicId, updates);
+}
+
+export function moveTopicParent(topicId: string, newParentId: string | null) {
+  topics.moveTopicParent(topicId, newParentId);
 }
 
 export function deleteTopic(topicId: string) {

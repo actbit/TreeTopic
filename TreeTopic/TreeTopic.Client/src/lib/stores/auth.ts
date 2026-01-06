@@ -26,6 +26,17 @@ export interface AuthContext {
 /**
  * Initialize auth store
  */
+interface AuthCheckResponse {
+  isAuthenticated?: boolean;
+}
+
+interface AuthMeResponse {
+  userId: string;
+  userName: string;
+  email: string;
+  roles?: string[];
+}
+
 function createAuthStore() {
   const { subscribe, set, update } = writable<AuthContext>({
     user: null,
@@ -41,8 +52,8 @@ function createAuthStore() {
      */
     async checkSession(tenant: string): Promise<boolean> {
       try {
-        const response = await api.get(`/${tenant}/auth/check`);
-        return response.isAuthenticated ?? false;
+        const response = await api.get<AuthCheckResponse>(`/${tenant}/auth/check`);
+        return response?.isAuthenticated ?? false;
       } catch {
         return false;
       }
@@ -52,10 +63,10 @@ function createAuthStore() {
      */
     async fetchCurrentUser(tenant: string): Promise<void> {
       try {
-        const userData = await api.get(`/${tenant}/auth/me`);
-        set({
-          user: {
-            id: userData.userId,
+      const userData = await api.get<AuthMeResponse>(`/${tenant}/auth/me`);
+      set({
+        user: {
+          id: userData.userId,
             userName: userData.userName,
             email: userData.email,
             displayName: userData.userName,

@@ -31,6 +31,11 @@ public abstract class BaseService
 
             return result;
         }
+        catch (OperationCanceledException)
+        {
+            Logger.LogDebug("Operation {OperationName} was canceled", operationName);
+            throw;
+        }
         catch (Exception ex)
         {
             Logger.LogError(ex, "An unexpected error occurred during operation: {OperationName}", operationName);
@@ -57,6 +62,11 @@ public abstract class BaseService
             }
 
             return result;
+        }
+        catch (OperationCanceledException)
+        {
+            Logger.LogDebug("Operation {OperationName} was canceled", operationName);
+            throw;
         }
         catch (Exception ex)
         {
@@ -85,6 +95,11 @@ public abstract class BaseService
 
             return result;
         }
+        catch (OperationCanceledException)
+        {
+            Logger.LogDebug("Operation {OperationName} was canceled", operationName);
+            throw;
+        }
         catch (Exception ex)
         {
             Logger.LogError(ex, "An unexpected error occurred during operation: {OperationName}", operationName);
@@ -111,6 +126,11 @@ public abstract class BaseService
             }
 
             return result;
+        }
+        catch (OperationCanceledException)
+        {
+            Logger.LogDebug("Operation {OperationName} was canceled", operationName);
+            throw;
         }
         catch (Exception ex)
         {

@@ -2,24 +2,28 @@
  * Drag and drop utilities
  */
 
-export interface DragEvent {
+export interface DragPayload {
   type: 'message' | 'topic' | 'idea' | 'file';
   id: string;
   data?: any;
 }
 
+// Some browsers restrict reading custom drag data during dragover.
+// Keep a best-effort in-memory copy so drop zones can still allow dropping.
+let cachedDragPayload: DragPayload | null = null;
+
 export interface DropZone {
   id: string;
   type: string;
   accept: string[];
-  onDrop: (event: DragEvent, position?: { x: number; y: number }) => void;
+  onDrop: (event: DragPayload, position?: { x: number; y: number }) => void;
 }
 
 /**
  * Check if drag event is over drop zone
  */
 export function isOverDropZone(
-  dragEvent: DragEvent,
+  dragEvent: DragPayload,
   dropZone: DropZone
 ): boolean {
   return dropZone.accept.includes(dragEvent.type);
@@ -29,7 +33,7 @@ export function isOverDropZone(
  * Get drop effect based on drag data
  */
 export function getDropEffect(
-  dragEvent: DragEvent,
+  dragEvent: DragPayload,
   dropZone: DropZone
 ): DataTransfer['dropEffect'] {
   if (isOverDropZone(dragEvent, dropZone)) {
@@ -118,31 +122,40 @@ export function createDragImage(
  */
 export function setDragData(
   event: DragEvent,
-  dragEvent: DragEvent
+  dragPayload: DragPayload
 ): void {
   const dataTransfer = (event as any).dataTransfer;
   if (dataTransfer) {
     dataTransfer.effectAllowed = 'move';
-    dataTransfer.setData('application/json', JSON.stringify(dragEvent));
+    dataTransfer.setData('application/json', JSON.stringify(dragPayload));
+    // Fallback for environments that block application/json reads mid-drag.
+    dataTransfer.setData('text/plain', `${dragPayload.type}:${dragPayload.id}`);
+    cachedDragPayload = dragPayload;
   }
 }
 
 /**
  * Get drag data
  */
-export function getDragData(event: DragEvent): DragEvent | null {
+export function getDragData(event: DragEvent): DragPayload | null {
   const dataTransfer = (event as any).dataTransfer;
   if (dataTransfer) {
     const data = dataTransfer.getData('application/json');
     if (data) {
       try {
-        return JSON.parse(data);
+        const parsed = JSON.parse(data) as DragPayload;
+        cachedDragPayload = parsed;
+        return parsed;
       } catch {
-        return null;
+        return cachedDragPayload;
       }
     }
   }
-  return null;
+  return cachedDragPayload;
+}
+
+export function clearDragData(): void {
+  cachedDragPayload = null;
 }
 
 /**

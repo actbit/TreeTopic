@@ -10,7 +10,7 @@
   import { isRequired } from '$lib/utils/validation';
 
   const modalId = 'brainstorm-create';
-  let isOpen = $derived($activeModals.some((m) => m.id === modalId));
+  let isOpen = $derived.by(() => $activeModals.some((m) => m.id === modalId));
 
   let title = $state('');
   let description = $state('');

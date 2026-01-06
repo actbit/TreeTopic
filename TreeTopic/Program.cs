@@ -557,11 +557,23 @@ public class Program
             .AddControllers()
             .ConfigureApiBehaviorOptions(options =>
             {
-                // ファイルアップロード時のサイズ制限を設定
+                // Return a stable, JSON-serializable error payload for model binding / validation errors.
                 options.InvalidModelStateResponseFactory = context =>
                 {
-                    var result = new BadHttpRequestException("Invalid request");
-                    return new BadRequestObjectResult(result);
+                    var errors = context.ModelState
+                        .Where(kvp => kvp.Value?.Errors != null && kvp.Value.Errors.Count > 0)
+                        .ToDictionary(
+                            kvp => kvp.Key,
+                            kvp => kvp.Value!.Errors
+                                .Select(e => string.IsNullOrWhiteSpace(e.ErrorMessage) ? "Invalid value." : e.ErrorMessage)
+                                .ToArray()
+                        );
+
+                    return new BadRequestObjectResult(new
+                    {
+                        message = "Invalid request",
+                        errors
+                    });
                 };
             });
 

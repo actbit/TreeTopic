@@ -45,6 +45,7 @@ export interface ModalConfig {
   title: string;
   type: 'alert' | 'confirm' | 'prompt' | 'custom';
   message?: string;
+  data?: Record<string, any>;
   onConfirm?: () => void | Promise<void>;
   onCancel?: () => void | Promise<void>;
   isLoading?: boolean;

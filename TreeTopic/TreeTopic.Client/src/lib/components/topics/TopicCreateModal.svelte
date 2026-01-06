@@ -10,21 +10,20 @@
   import { api } from '$lib/api/client';
 
   const modalId = 'topic-create';
-  let isOpen = $derived($activeModals.some((m) => m.id === modalId));
+  let isOpen = $derived.by(() => $activeModals.some((m) => m.id === modalId));
 
   let title = $state('');
   let description = $state('');
   let isLoading = $state(false);
   let error = $state<string | null>(null);
-  let titleError = $state<string | null>(null);
+  let titleError = $state<string | undefined>(undefined);
 
-  // Use derived to track parentId from store
-  let parentId = $derived($createTopicParentId);
+  let parentId = $derived.by(() => $createTopicParentId);
 
   async function handleCreate(e: Event) {
     e.preventDefault();
 
-    titleError = null;
+    titleError = undefined;
     error = null;
 
     if (!isRequired(title)) {
@@ -46,12 +45,12 @@
 
     try {
       const tenant = api.getCurrentTenant();
-      const response = await api.post(`/${tenant}/api/Topic`, {
+      const response = (await api.post(`/${tenant}/api/Topic`, {
         roomId: $currentRoom.id,
         title: title.trim(),
         description: description.trim(),
         parentId: parentId || null,
-      });
+      })) as Record<string, any>;
 
       // Normalize response to ensure all required fields exist
       const normalizedTopic = {
