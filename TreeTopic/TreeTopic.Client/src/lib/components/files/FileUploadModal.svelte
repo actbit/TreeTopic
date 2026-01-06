@@ -9,7 +9,7 @@
   import { api } from '$lib/api/client';
 
   const modalId = 'file-upload';
-  let isOpen = $derived($activeModals.some((m) => m.id === modalId));
+  let isOpen = $derived.by(() => $activeModals.some((m) => m.id === modalId));
 
   let fileInput: HTMLInputElement | undefined = $state();
   let selectedFiles: File[] = $state([]);

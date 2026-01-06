@@ -46,7 +46,7 @@
     <div class="flex items-center justify-center h-full">
       <LoadingSpinner message="Loading messages..." />
     </div>
-  {:else if $topicMessages.length === 0}
+  {:else if topicMessages.length === 0}
     <div class="flex items-center justify-center h-full">
       <div class="text-center text-light">
         <p class="text-large text-bold margin-bottom-sm">No messages yet</p>
@@ -54,7 +54,7 @@
       </div>
     </div>
   {:else}
-    {#each $topicMessages as message (message.id)}
+    {#each topicMessages as message (message.id)}
       <MessageItem {message} />
     {/each}
   {/if}

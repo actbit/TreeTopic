@@ -73,4 +73,4 @@ export {
   autoScroll,
 } from './dragdrop';
 
-export type { DragEvent, DropZone } from './dragdrop';
+export type { DragPayload, DropZone } from './dragdrop';

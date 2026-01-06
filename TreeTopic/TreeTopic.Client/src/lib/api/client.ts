@@ -50,8 +50,10 @@ export function initializeApiClient(config: ApiClientConfig): void {
 /**
  * Global API client configuration
  */
+const DEFAULT_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string) ?? '';
+
 let apiClientConfig: ApiClientConfig = {
-  baseUrl: process.env.VITE_API_BASE_URL || '',
+  baseUrl: DEFAULT_BASE_URL,
   tenant: '',
 };
 

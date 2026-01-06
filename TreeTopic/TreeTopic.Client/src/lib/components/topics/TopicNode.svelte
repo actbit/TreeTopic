@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { topicList, addTopic, toggleTopicExpansion, selectedTopic, setSelectedTopic, createTopicParentId } from '$lib/stores/topics';
+  import { topicList, addTopic, toggleTopicExpansion, setSelectedTopic, createTopicParentId, moveTopicParent, updateTopic } from '$lib/stores/topics';
   import { currentRoom } from '$lib/stores/rooms';
   import { ui } from '$lib/stores/ui';
   import { api, getCurrentTenant } from '$lib/api/client';
@@ -7,19 +7,22 @@
   import type { ModalConfig } from '$lib/types/ui';
   import ContextMenu from '../common/ContextMenu.svelte';
   import type { ContextMenuItem } from '../common/ContextMenu.svelte';
+  import { clearDragData, getDragData, preventDragDefaults, setDragData } from '$lib/utils/dragdrop';
 
   interface Props {
     node: TopicTreeNode;
     level?: number;
+    selectedTopicId?: string | null;
   }
 
-  let { node, level = 0 }: Props = $props();
+  let { node, level = 0, selectedTopicId = null }: Props = $props();
   let showContextMenu = $state(false);
   let contextMenuX = $state(0);
   let contextMenuY = $state(0);
   let isLoadingChildren = $state(false);
+  let isDragOver = $state(false);
+  let isDraggingSelf = $state(false);
 
-  const paddingLeft = level * 16 + 8;
 
   function normalizeTopic(raw: any) {
     const id = raw?.id ?? raw?.Id ?? '';
@@ -44,6 +47,54 @@
       tags: raw?.tags ?? raw?.Tags ?? [],
       hasChildren: raw?.hasChildren ?? raw?.HasChildren ?? false,
     };
+  }
+
+  function wouldCreateCycle(topicId: string, proposedParentId: string): boolean {
+    if (topicId === proposedParentId) return true;
+
+    let cursorId: string | null = proposedParentId;
+    const visited = new Set<string>();
+    while (cursorId) {
+      if (cursorId === topicId) return true;
+      if (visited.has(cursorId)) return true;
+      visited.add(cursorId);
+      const cursor = $topicList.find((t) => t.id === cursorId);
+      cursorId = cursor?.parentId ?? null;
+    }
+
+    return false;
+  }
+
+  async function refreshHasChildren(topicId: string) {
+    try {
+      const tenant = getCurrentTenant();
+      const updated = await api.get<any>(`/${tenant}/api/Topic/${topicId}`);
+      const hasChildren = updated?.hasChildren ?? updated?.HasChildren ?? undefined;
+      if (typeof hasChildren === 'boolean') {
+        updateTopic(topicId, { hasChildren });
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  async function moveTopic(draggedTopicId: string, newParentId: string | null) {
+    const dragged = $topicList.find((t) => t.id === draggedTopicId);
+    if (!dragged) return;
+
+    if (newParentId && wouldCreateCycle(draggedTopicId, newParentId)) return;
+
+    const tenant = getCurrentTenant();
+    const oldParentId = dragged.parentId;
+
+    await api.put(`/${tenant}/api/Topic/${draggedTopicId}`, {
+      parentId: newParentId,
+    });
+
+    moveTopicParent(draggedTopicId, newParentId);
+
+    if (oldParentId) await refreshHasChildren(oldParentId);
+    if (newParentId) await refreshHasChildren(newParentId);
   }
 
   async function fetchChildTopics() {
@@ -93,21 +144,71 @@
     showContextMenu = true;
   }
 
+  function handleDragStart(e: DragEvent) {
+    if (!e.dataTransfer) return;
+    const target = e.target as HTMLElement | null;
+    if (target?.closest('button')) return;
+    isDraggingSelf = true;
+    setDragData(e, { type: 'topic', id: node.id });
+    e.dataTransfer.effectAllowed = 'move';
+  }
+
+  function handleDragEnd() {
+    isDraggingSelf = false;
+    isDragOver = false;
+    clearDragData();
+  }
+
+  function handleDragOver(e: DragEvent) {
+    const payload = getDragData(e);
+    if (!payload || payload.type !== 'topic') return;
+    if (payload.id === node.id) return;
+    preventDragDefaults(e);
+    isDragOver = true;
+  }
+
+  function handleDragLeave() {
+    isDragOver = false;
+  }
+
+  async function handleDrop(e: DragEvent) {
+    const payload = getDragData(e);
+    if (!payload || payload.type !== 'topic') return;
+    preventDragDefaults(e);
+    isDragOver = false;
+    if (payload.id === node.id) return;
+
+    try {
+      await moveTopic(payload.id, node.id);
+    } catch (err) {
+      console.error('Failed to move topic:', err);
+    } finally {
+      clearDragData();
+    }
+  }
+
   function openEditModal() {
+    // Ensure the topic to edit is selected
+    const topic = $topicList.find((t) => t.id === node.id);
+    if (topic) setSelectedTopic(topic);
     const modal: ModalConfig = {
       id: 'topic-edit',
       title: 'Edit Topic',
       type: 'custom',
+      data: { topicId: node.id },
     };
     ui.openModal(modal);
     showContextMenu = false;
   }
 
   function openDeleteModal() {
+    const topic = $topicList.find((t) => t.id === node.id);
+    if (topic) setSelectedTopic(topic);
     const modal: ModalConfig = {
       id: 'topic-delete',
       title: 'Delete Topic',
       type: 'custom',
+      data: { topicId: node.id },
     };
     ui.openModal(modal);
     showContextMenu = false;
@@ -123,30 +224,34 @@
     ui.openModal(modal);
   }
 
-  const contextMenuItems: ContextMenuItem[] = [
-    {
-      id: 'edit',
-      label: 'Edit',
-      icon: '✏️',
-      action: openEditModal,
-      isVisible: node.canWrite,
-    },
-    {
-      id: 'delete',
-      label: 'Delete',
-      icon: '🗑️',
-      action: openDeleteModal,
-      isDangerous: true,
-      isVisible: node.canDelete,
-    },
-  ];
+  function getContextMenuItems(): ContextMenuItem[] {
+    return [
+      {
+        id: 'edit',
+        label: 'Edit',
+        action: openEditModal,
+      },
+      {
+        id: 'delete',
+        label: 'Delete',
+        action: openDeleteModal,
+        isDangerous: true,
+      },
+    ];
+  }
 </script>
 
 <div class="topic-item" style="--topic-level: {level}">
   <div
-    class="topic-header {$selectedTopic?.id === node.id ? 'topic-header-active' : ''}"
+    class="topic-header {selectedTopicId === node.id ? 'topic-header-active' : ''} {isDragOver ? 'topic-header-drop' : ''} {isDraggingSelf ? 'topic-header-dragging' : ''}"
     on:click={selectTopic}
     on:contextmenu={handleContextMenu}
+    draggable={true}
+    on:dragstart={handleDragStart}
+    on:dragend={handleDragEnd}
+    on:dragover={handleDragOver}
+    on:dragleave={handleDragLeave}
+    on:drop={handleDrop}
     role="button"
     tabindex="0"
   >
@@ -195,7 +300,7 @@
   {#if node.isExpanded && node.children.length > 0}
     <div class="topic-children">
       {#each node.children as childNode (childNode.id)}
-        <svelte:self node={childNode} level={level + 1} />
+        <svelte:self node={childNode} level={level + 1} selectedTopicId={selectedTopicId} />
       {/each}
     </div>
   {/if}
@@ -203,7 +308,7 @@
 
 {#if showContextMenu}
   <ContextMenu
-    items={contextMenuItems.filter((item) => item.isVisible !== false)}
+    items={getContextMenuItems()}
     x={contextMenuX}
     y={contextMenuY}
     onClose={() => (showContextMenu = false)}
@@ -242,6 +347,16 @@
 
   .topic-header-active {
     background-color: color-mix(in srgb, var(--color-primary) 5%, var(--color-background));
+  }
+
+  .topic-header-drop {
+    outline: 2px dashed var(--color-primary);
+    outline-offset: 2px;
+    background-color: color-mix(in srgb, var(--color-primary) 8%, var(--color-background));
+  }
+
+  .topic-header-dragging {
+    opacity: 0.5;
   }
 
   .topic-toggle-button {

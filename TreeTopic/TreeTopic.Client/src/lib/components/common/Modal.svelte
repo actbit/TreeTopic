@@ -101,6 +101,7 @@
 
   .modal-content {
     background-color: var(--color-background);
+    color: var(--color-text);
     border-radius: var(--border-radius-lg);
     box-shadow: var(--shadow-xl);
     width: 100%;

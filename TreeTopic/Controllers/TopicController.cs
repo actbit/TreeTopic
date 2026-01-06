@@ -9,7 +9,6 @@ namespace TreeTopic.Controllers;
 
 [ApiController]
 [Route("{tenant}/api/[controller]")]
-[Authorize(Policy = "Topic:read")]
 public class TopicController : ControllerBase
 {
     private readonly ITopicManagementService _topicManagementService;
@@ -21,9 +20,14 @@ public class TopicController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<IActionResult> GetAll(CancellationToken cancellationToken)
+    public async Task<IActionResult> GetAll([FromQuery] MaskedGuid? roomId, CancellationToken cancellationToken)
     {
-        var result = await _topicManagementService.GetAllTopicsAsync(cancellationToken);
+        if (!roomId.HasValue)
+        {
+            return BadRequest(new { message = "roomId is required. Use /{tenant}/api/Topic/room/{roomId} or /{tenant}/api/Topic?roomId=..." });
+        }
+
+        var result = await _topicManagementService.GetTopicsByRoomAsync((Guid)roomId.Value, cancellationToken);
         return result.ToApiResult();
     }
 
@@ -76,9 +80,22 @@ public class TopicController : ControllerBase
     }
 
     [HttpDelete("{topicId}")]
-    public async Task<IActionResult> Delete([FromRoute] MaskedGuid topicId, CancellationToken cancellationToken)
+    public async Task<IActionResult> Delete(
+        [FromRoute] MaskedGuid topicId,
+        [FromQuery] string? strategy,
+        CancellationToken cancellationToken)
     {
-        var result = await _topicManagementService.DeleteTopicAsync((Guid)topicId, cancellationToken);
+        TopicDeleteStrategy deleteStrategy = TopicDeleteStrategy.Cascade;
+
+        if (!string.IsNullOrWhiteSpace(strategy))
+        {
+            if (!Enum.TryParse<TopicDeleteStrategy>(strategy, ignoreCase: true, out deleteStrategy))
+            {
+                return BadRequest(new { message = $"Invalid strategy '{strategy}'. Use 'Cascade' or 'ReparentToParent'." });
+            }
+        }
+
+        var result = await _topicManagementService.DeleteTopicAsync((Guid)topicId, deleteStrategy, cancellationToken);
         return result.ToApiResult();
     }
 

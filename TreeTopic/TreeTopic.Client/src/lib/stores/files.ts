@@ -299,18 +299,18 @@ export const uploadProgress = (fileId: string) =>
 /**
  * Helper functions to interact with files store
  */
-export function addFile(file: File) {
-  filesStore.addFile(file);
+export function addFile(file: Material) {
+  files.addFile(file);
 }
 
-export function updateFile(fileId: string, updates: Partial<File>) {
-  filesStore.updateFile(fileId, updates);
+export function updateFile(fileId: string, updates: Partial<Material>) {
+  files.updateFile(fileId, updates);
 }
 
 export function deleteFile(fileId: string) {
-  filesStore.deleteFile(fileId);
+  files.deleteFile(fileId);
 }
 
-export function setFiles(filesList: File[]) {
-  filesStore.setFiles(filesList);
+export function setFiles(filesList: Material[]) {
+  files.setFiles(filesList);
 }
