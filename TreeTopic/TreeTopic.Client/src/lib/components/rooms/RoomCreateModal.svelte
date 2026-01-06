@@ -9,7 +9,7 @@
   import { api } from '$lib/api/client';
 
   const modalId = 'room-create';
-  let isOpen = $derived($activeModals.some((m) => m.id === modalId));
+  let isOpen = $derived.by(() => $activeModals.some((m) => m.id === modalId));
 
   let name = $state('');
   let description = $state('');

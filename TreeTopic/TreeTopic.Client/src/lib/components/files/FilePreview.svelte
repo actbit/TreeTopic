@@ -8,7 +8,7 @@
   }
 
   let { file }: Props = $props();
-  let isOpen = $derived(file !== null && $activeModals.some((m) => m.id === 'file-preview'));
+  let isOpen = $derived.by(() => file !== null && $activeModals.some((m) => m.id === 'file-preview'));
 
   function handleClose() {
     ui.closeModal('file-preview');

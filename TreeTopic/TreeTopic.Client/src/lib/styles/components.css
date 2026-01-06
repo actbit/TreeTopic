@@ -422,6 +422,12 @@
 .text-success { color: var(--color-success); }
 .text-warning { color: var(--color-warning); }
 
+/* Tailwind-like aliases used across templates */
+.text-text { color: var(--color-text); }
+.text-text-secondary { color: var(--color-text-secondary); }
+.text-text-light { color: var(--color-text-light); }
+.text-white { color: var(--color-text-inverse); }
+
 .text-center { text-align: center; }
 .text-left { text-align: left; }
 .text-right { text-align: right; }
@@ -435,6 +441,10 @@
 .bg-primary { background-color: var(--color-primary); color: var(--color-text-inverse); }
 .bg-error { background-color: var(--color-error); color: var(--color-text-inverse); }
 .bg-success { background-color: var(--color-success); color: var(--color-text-inverse); }
+
+/* Tailwind-like aliases */
+.bg-white { background-color: var(--color-background); }
+.bg-background { background-color: var(--color-background); }
 
 /* Interactive States */
 .clickable {

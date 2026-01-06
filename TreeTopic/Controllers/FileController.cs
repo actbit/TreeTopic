@@ -1,9 +1,11 @@
-﻿using Microsoft.AspNetCore.Authorization;
+using MaskedUUID.AspNetCore.Types;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.StaticFiles;
+using System.Security.Claims;
 using TreeTopic.Common;
 using TreeTopic.Dtos;
 using TreeTopic.Services;
-using MaskedUUID.AspNetCore.Types;
 
 namespace TreeTopic.Controllers;
 
@@ -13,12 +15,65 @@ namespace TreeTopic.Controllers;
 public class FileController : ControllerBase
 {
     private readonly IFileManagementService _fileManagementService;
+    private readonly IWebHostEnvironment _environment;
+    private readonly FileExtensionContentTypeProvider _contentTypeProvider = new();
 
     public FileController(
-        IFileManagementService fileManagementService)
+        IFileManagementService fileManagementService,
+        IWebHostEnvironment environment)
     {
         _fileManagementService = fileManagementService;
+        _environment = environment;
     }
+
+    private Guid CurrentUserId =>
+        Guid.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? Guid.Empty.ToString());
+
+    private string CurrentUserName =>
+        User.FindFirst(ClaimTypes.Name)?.Value
+        ?? User.FindFirst(ClaimTypes.Email)?.Value
+        ?? User.Identity?.Name
+        ?? "Unknown";
+
+    private static string GetFileType(string fileName, string contentType)
+    {
+        if (!string.IsNullOrWhiteSpace(contentType) &&
+            contentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
+        {
+            return "image";
+        }
+
+        var ext = Path.GetExtension(fileName);
+        if (string.Equals(ext, ".pdf", StringComparison.OrdinalIgnoreCase))
+            return "pdf";
+
+        var docExts = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".txt", ".md", ".rtf", ".csv"
+        };
+
+        if (docExts.Contains(ext))
+            return "document";
+
+        return "other";
+    }
+
+    private sealed record RoomMaterialDto(
+        string Id,
+        string RoomId,
+        string? MessageId,
+        string FileName,
+        string OriginalFileName,
+        string MimeType,
+        long Size,
+        string Url,
+        string FileType,
+        DateTime UploadedAt,
+        string UploadedBy,
+        string UploadedByName,
+        IReadOnlyList<object> Versions,
+        bool IsArchived
+    );
 
     [HttpGet]
     public async Task<IActionResult> GetAll(CancellationToken cancellationToken)
@@ -39,6 +94,113 @@ public class FileController : ControllerBase
     {
         var result = await _fileManagementService.GetFileByIdAsync((Guid)fileId, cancellationToken);
         return result.ToApiResult();
+    }
+
+    [HttpGet("room/{roomId}")]
+    public IActionResult GetByRoom([FromRoute] MaskedGuid roomId)
+    {
+        var tenant = RouteData.Values["tenant"]?.ToString() ?? "default";
+        var webRoot = _environment.WebRootPath ?? Path.Combine(_environment.ContentRootPath, "wwwroot");
+        var roomDir = Path.Combine(webRoot, "uploads", tenant, roomId.ToString());
+
+        if (!Directory.Exists(roomDir))
+            return Ok(Array.Empty<RoomMaterialDto>());
+
+        var list = Directory.EnumerateFiles(roomDir)
+            .Select(path => new FileInfo(path))
+            .OrderByDescending(f => f.CreationTimeUtc)
+            .Select(fileInfo =>
+            {
+                var storedName = fileInfo.Name;
+                var id = Guid.NewGuid().ToString();
+                var originalFileName = storedName;
+
+                if (storedName.Length > 33 && storedName[32] == '_' &&
+                    Guid.TryParseExact(storedName.Substring(0, 32), "N", out var parsedId))
+                {
+                    id = parsedId.ToString();
+                    originalFileName = storedName.Substring(33);
+                }
+
+                var mime = _contentTypeProvider.TryGetContentType(originalFileName, out var ct)
+                    ? ct
+                    : "application/octet-stream";
+
+                var url = $"/uploads/{tenant}/{roomId}/{storedName}".Replace("\\", "/");
+
+                return new RoomMaterialDto(
+                    Id: id,
+                    RoomId: roomId.ToString(),
+                    MessageId: null,
+                    FileName: originalFileName,
+                    OriginalFileName: originalFileName,
+                    MimeType: mime,
+                    Size: fileInfo.Length,
+                    Url: url,
+                    FileType: GetFileType(originalFileName, mime),
+                    UploadedAt: fileInfo.CreationTimeUtc,
+                    UploadedBy: Guid.Empty.ToString(),
+                    UploadedByName: "Unknown",
+                    Versions: Array.Empty<object>(),
+                    IsArchived: false
+                );
+            })
+            .ToList();
+
+        return Ok(list);
+    }
+
+    [HttpPost("room/{roomId}")]
+    [Consumes("multipart/form-data")]
+    public async Task<IActionResult> UploadToRoom(
+        [FromRoute] MaskedGuid roomId,
+        [FromForm] IFormFile file,
+        CancellationToken cancellationToken)
+    {
+        if (file is null || file.Length <= 0)
+            return BadRequest(new { message = "File is required." });
+
+        var tenant = RouteData.Values["tenant"]?.ToString() ?? "default";
+        var webRoot = _environment.WebRootPath ?? Path.Combine(_environment.ContentRootPath, "wwwroot");
+        var roomDir = Path.Combine(webRoot, "uploads", tenant, roomId.ToString());
+        Directory.CreateDirectory(roomDir);
+
+        var originalFileName = Path.GetFileName(file.FileName);
+        var id = Guid.NewGuid();
+        var savedFileName = $"{id:N}_{originalFileName}";
+        var savePath = Path.Combine(roomDir, savedFileName);
+
+        await using (var stream = System.IO.File.Create(savePath))
+        {
+            await file.CopyToAsync(stream, cancellationToken);
+        }
+
+        var mime = !string.IsNullOrWhiteSpace(file.ContentType)
+            ? file.ContentType
+            : (_contentTypeProvider.TryGetContentType(originalFileName, out var ct)
+                ? ct
+                : "application/octet-stream");
+
+        var url = $"/uploads/{tenant}/{roomId}/{savedFileName}".Replace("\\", "/");
+
+        var dto = new RoomMaterialDto(
+            Id: id.ToString(),
+            RoomId: roomId.ToString(),
+            MessageId: null,
+            FileName: originalFileName,
+            OriginalFileName: originalFileName,
+            MimeType: mime,
+            Size: file.Length,
+            Url: url,
+            FileType: GetFileType(originalFileName, mime),
+            UploadedAt: DateTime.UtcNow,
+            UploadedBy: CurrentUserId.ToString(),
+            UploadedByName: CurrentUserName,
+            Versions: Array.Empty<object>(),
+            IsArchived: false
+        );
+
+        return Ok(dto);
     }
 
     [HttpPost]
@@ -67,9 +229,4 @@ public class FileController : ControllerBase
         var result = await _fileManagementService.DeleteFileAsync(fileId, cancellationToken);
         return result.ToApiResult();
     }
-
 }
-
-
-
-

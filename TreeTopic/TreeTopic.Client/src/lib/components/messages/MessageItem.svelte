@@ -4,6 +4,7 @@
   import ContextMenu from '../common/ContextMenu.svelte';
   import type { ContextMenuItem } from '../common/ContextMenu.svelte';
   import type { Message } from '$lib/stores/messages';
+  import { messageList, startReply } from '$lib/stores/messages';
   import { ui } from '$lib/stores/ui';
   import type { ModalConfig } from '$lib/types/ui';
 
@@ -16,8 +17,14 @@
   let contextMenuX = $state(0);
   let contextMenuY = $state(0);
 
+  let replyTo = $derived.by(() => {
+    if (!message.replyToId) return null;
+    return $messageList.find((m) => m.id === message.replyToId) ?? null;
+  });
+
   function handleContextMenu(e: MouseEvent) {
     e.preventDefault();
+    e.stopPropagation();
     contextMenuX = e.clientX;
     contextMenuY = e.clientY;
     showContextMenu = true;
@@ -28,6 +35,7 @@
       id: 'message-edit',
       title: 'Edit Message',
       type: 'custom',
+      data: { messageId: message.id },
     };
     ui.openModal(modal);
     showContextMenu = false;
@@ -38,18 +46,30 @@
       id: 'message-delete',
       title: 'Delete Message',
       type: 'custom',
+      data: { messageId: message.id },
     };
     ui.openModal(modal);
     showContextMenu = false;
   }
 
+  function replyToMessage() {
+    startReply(message.id);
+    showContextMenu = false;
+  }
+
   const contextMenuItems: ContextMenuItem[] = [
+    {
+      id: 'reply',
+      label: 'Reply',
+      icon: '↩',
+      action: replyToMessage,
+    },
     {
       id: 'edit',
       label: 'Edit',
       icon: '✏️',
       action: openEditModal,
-      isVisible: message.canEdit,
+
     },
     {
       id: 'delete',
@@ -57,14 +77,14 @@
       icon: '🗑️',
       action: openDeleteModal,
       isDangerous: true,
-      isVisible: message.canDelete,
+
     },
   ];
 </script>
 
 <div
   class="card hoverable"
-  on:contextmenu={handleContextMenu}
+  on:contextmenu|stopPropagation={handleContextMenu}
 >
   <div class="flex items-start gap-3">
     {#if message.userAvatar}
@@ -82,6 +102,20 @@
     {/if}
 
     <div class="flex-1 min-w-0">
+      {#if replyTo}
+        <div class="reply-preview">
+          <div class="reply-preview__bar"></div>
+          <div class="reply-preview__content">
+            <div class="reply-preview__meta">
+              <span class="text-small text-light">Reply to</span>
+              <span class="text-small text-bold">{replyTo.userDisplayName || replyTo.userName}</span>
+            </div>
+            <div class="text-small text-light reply-preview__text">
+              {replyTo.subject || replyTo.content}
+            </div>
+          </div>
+        </div>
+      {/if}
       <div class="flex items-baseline spacing-sm margin-bottom-xs">
         <span class="text-bold">{message.userDisplayName || message.userName}</span>
         <span class="text-small text-light">{formatTime(message.createdAt)}</span>
@@ -129,21 +163,19 @@
       {/if}
     </div>
 
-    {#if message.canEdit || message.canDelete}
       <button
-        on:click={handleContextMenu}
+        on:click|stopPropagation={handleContextMenu}
         class="button clickable message-options-button"
         title="Options"
       >
         ⋮
       </button>
-    {/if}
   </div>
 </div>
 
 {#if showContextMenu}
   <ContextMenu
-    items={contextMenuItems.filter((item) => item.isVisible !== false)}
+    items={contextMenuItems}
     x={contextMenuX}
     y={contextMenuY}
     onClose={() => (showContextMenu = false)}
@@ -151,6 +183,41 @@
 {/if}
 
 <style>
+  .reply-preview {
+    display: flex;
+    gap: var(--spacing-sm);
+    padding: var(--spacing-xs) var(--spacing-sm);
+    border: 1px solid var(--color-border);
+    border-radius: var(--border-radius-sm);
+    background-color: var(--color-surface);
+    margin-bottom: var(--spacing-sm);
+  }
+
+  .reply-preview__bar {
+    width: 3px;
+    border-radius: 2px;
+    background-color: var(--color-primary);
+    flex-shrink: 0;
+  }
+
+  .reply-preview__content {
+    min-width: 0;
+    flex: 1;
+  }
+
+  .reply-preview__meta {
+    display: flex;
+    gap: var(--spacing-xs);
+    align-items: baseline;
+    margin-bottom: 2px;
+  }
+
+  .reply-preview__text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
   .message-options-button {
     padding: var(--spacing-xs);
     opacity: 0;

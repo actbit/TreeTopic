@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { createEventDispatcher } from 'svelte';
+
   type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'success' | 'danger';
   type ButtonSize = 'small' | 'base' | 'large';
 
@@ -27,12 +29,19 @@
     children,
     ariaLabel,
   }: Props = $props();
+
+  const dispatch = createEventDispatcher<{ click: MouseEvent }>();
+
+  function handleClick(e: MouseEvent) {
+    onclick?.(e);
+    dispatch('click', e);
+  }
 </script>
 
 <button
   {type}
   {disabled}
-  {onclick}
+  onclick={handleClick}
   class="btn btn-{variant} btn-{size} {fullWidth ? 'btn-full-width' : ''}"
   aria-label={ariaLabel}
   aria-busy={loading}

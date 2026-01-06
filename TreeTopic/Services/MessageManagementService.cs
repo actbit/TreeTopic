@@ -106,6 +106,9 @@ public class MessageManagementService : BaseService, IMessageManagementService
                 var replyTo = await _messageRepository.GetByIdAsync(request.ReplyId.Value, cancellationToken);
                 if (replyTo == null)
                     return Result<MessageDto>.NotFound("Reply message not found");
+
+                if (replyTo.TopicId != (Guid)request.TopicId)
+                    return Result<MessageDto>.BadRequest("Reply message must be in the same topic");
             }
 
             var message = new Message
