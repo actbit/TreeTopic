@@ -5,6 +5,7 @@
   import { ui, activeModals } from '$lib/stores/ui';
   import { messageList, deleteMessage } from '$lib/stores/messages';
   import { api } from '$lib/api/client';
+  import { getMessageAnchorId } from '$lib/utils/messageAnchor';
 
   const modalId = 'message-delete';
 
@@ -46,6 +47,35 @@
   function handleClose() {
     ui.closeModal(modalId);
   }
+
+  async function copyMessageUrl() {
+    if (typeof window === 'undefined') return;
+    if (!messageId) return;
+
+    const url = new URL(window.location.href);
+    url.hash = getMessageAnchorId(messageId);
+    const link = url.toString();
+
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(link);
+      } else {
+        const textarea = document.createElement('textarea');
+        textarea.value = link;
+        textarea.style.position = 'fixed';
+        textarea.style.left = '-9999px';
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+      }
+
+      window.history.replaceState(null, '', link);
+      ui.addNotification({ type: 'success', message: 'Message URL copied' });
+    } catch {
+      ui.addNotification({ type: 'error', message: 'Failed to copy message URL' });
+    }
+  }
 </script>
 
 <Modal {isOpen} title="Delete Message" onClose={handleClose} size="small">
@@ -65,9 +95,17 @@
     <div class="flex spacing-md padding-top-md">
       <Button
         type="button"
+        variant="secondary"
+        size="base"
+        disabled={isLoading || !messageId}
+        on:click={copyMessageUrl}
+      >
+        Copy URL
+      </Button>
+      <Button
+        type="button"
         variant="danger"
         size="base"
-        fullWidth
         loading={isLoading}
         disabled={isLoading}
         on:click={handleDelete}
@@ -78,7 +116,6 @@
         type="button"
         variant="secondary"
         size="base"
-        fullWidth
         disabled={isLoading}
         on:click={handleClose}
       >
@@ -87,4 +124,3 @@
     </div>
   </div>
 </Modal>
-

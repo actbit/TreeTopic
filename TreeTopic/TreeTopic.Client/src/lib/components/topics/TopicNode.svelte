@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { goto } from '$app/navigation';
+  import { page } from '$app/stores';
   import { topicList, addTopic, toggleTopicExpansion, setSelectedTopic, createTopicParentId, moveTopicParent, updateTopic } from '$lib/stores/topics';
   import { currentRoom } from '$lib/stores/rooms';
   import { ui } from '$lib/stores/ui';
@@ -131,10 +133,15 @@
   }
 
   function selectTopic() {
-    const topic = $topicList.find((t) => t.id === node.id);
-    if (topic) {
-      setSelectedTopic(topic);
-    }
+    if (!$currentRoom) return;
+
+    const tenant = ($page.params as any)?.tenant ?? getCurrentTenant();
+    if (!tenant) return;
+
+    // If already selected, keep selection (don't toggle off).
+    if (selectedTopicId === node.id) return;
+
+    goto(`/${tenant}/room/${$currentRoom.id}/topic/${node.id}`, { keepFocus: true, noScroll: true });
   }
 
   function handleContextMenu(e: MouseEvent) {

@@ -3,9 +3,12 @@
   import LoadingSpinner from '../common/LoadingSpinner.svelte';
   import { messageList, messagesLoading } from '$lib/stores/messages';
   import { selectedTopic } from '$lib/stores/topics';
+  import { page } from '$app/stores';
+  import { getMessageAnchorIdFromHash, scrollToMessageAnchor } from '$lib/utils/messageAnchor';
 
   let messagesContainer: HTMLDivElement | undefined = $state();
   let selectedUser = $state<string | null>(null);
+  let targetAnchorId = $derived.by(() => getMessageAnchorIdFromHash($page.url.hash));
 
   let topicMessages = $derived.by(() => {
     if (!$selectedTopic) return [];
@@ -37,6 +40,14 @@
   let filteredMessages = $derived.by(() => {
     if (!selectedUser) return topicMessages;
     return topicMessages.filter((msg) => (msg.userDisplayName || msg.userName) === selectedUser);
+  });
+
+  $effect(() => {
+    if ($messagesLoading) return;
+    if (!targetAnchorId) return;
+    setTimeout(() => {
+      scrollToMessageAnchor(targetAnchorId, 'auto');
+    }, 0);
   });
 </script>
 

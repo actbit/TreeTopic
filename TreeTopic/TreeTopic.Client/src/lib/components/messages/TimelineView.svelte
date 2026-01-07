@@ -4,8 +4,11 @@
   import { messageList, messagesLoading } from '$lib/stores/messages';
   import { selectedTopic } from '$lib/stores/topics';
   import { currentRoom } from '$lib/stores/rooms';
+  import { page } from '$app/stores';
+  import { getMessageAnchorIdFromHash, scrollToMessageAnchor } from '$lib/utils/messageAnchor';
 
   let messagesContainer: HTMLDivElement | undefined = $state();
+  let targetAnchorId = $derived.by(() => getMessageAnchorIdFromHash($page.url.hash));
 
   let topicMessages = $derived.by(() => {
     if (!$selectedTopic) return [];
@@ -34,6 +37,14 @@
     });
 
     return Object.entries(grouped).reverse();
+  });
+
+  $effect(() => {
+    if ($messagesLoading) return;
+    if (!targetAnchorId) return;
+    setTimeout(() => {
+      scrollToMessageAnchor(targetAnchorId, 'auto');
+    }, 0);
   });
 </script>
 

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { page } from '$app/stores';
   import type { PageData } from './$types';
 
   export let data: PageData;
@@ -6,7 +7,7 @@
   const { tenant } = data;
 
   function handleOIDCLogin() {
-    const returnUrl = `/${tenant}/`;
+    const returnUrl = $page.url.searchParams.get('returnUrl') ?? `/${tenant}/`;
     const encodedReturnUrl = encodeURIComponent(returnUrl);
     const loginUrl = `/${tenant}/auth/login?returnUrl=${encodedReturnUrl}`;
 

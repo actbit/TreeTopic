@@ -48,6 +48,27 @@ public class MessageManagementService : BaseService, IMessageManagementService
     }
 
     private string? CurrentTenantId => _tenantAccessor.MultiTenantContext?.TenantInfo?.Id;
+    private string? CurrentTenantIdentifier => _tenantAccessor.MultiTenantContext?.TenantInfo?.Identifier;
+
+    private string GetTenantUploadsFolderName()
+    {
+        // Prefer the tenant identifier (matches route segment), fallback to internal tenant id.
+        return CurrentTenantIdentifier
+               ?? CurrentTenantId
+               ?? "default";
+    }
+
+    private string GetUploadsRootPath()
+    {
+        var webRoot = _webHostEnvironment.WebRootPath ?? _webHostEnvironment.ContentRootPath;
+        return Path.Combine(webRoot, "uploads", GetTenantUploadsFolderName());
+    }
+
+    private string BuildUploadUrl(string savedFileName)
+    {
+        var folder = GetTenantUploadsFolderName();
+        return $"/uploads/{folder}/{savedFileName}".Replace("\\", "/");
+    }
 
     public async Task<Result<List<MessageDto>>> GetAllMessagesAsync(CancellationToken cancellationToken = default)
     {
@@ -55,6 +76,7 @@ public class MessageManagementService : BaseService, IMessageManagementService
         {
             var messages = await _messageRepository.Query()
                 .Include(m => m.ApplicationUser)
+                .Include(m => m.Files)
                 .ToListAsync(cancellationToken);
 
             var dtos = messages.Select(MapToDto).ToList();
@@ -69,6 +91,7 @@ public class MessageManagementService : BaseService, IMessageManagementService
             var messages = await _messageRepository.Query()
                 .Where(m => m.TopicId == topicId)
                 .Include(m => m.ApplicationUser)
+                .Include(m => m.Files)
                 .ToListAsync(cancellationToken);
 
             var dtos = messages.Select(MapToDto).ToList();
@@ -80,7 +103,11 @@ public class MessageManagementService : BaseService, IMessageManagementService
     {
         return await ExecuteAsync(async () =>
         {
-            var message = await _messageRepository.GetByIdAsync(messageId, cancellationToken);
+            var message = await _messageRepository.Query()
+                .Where(m => m.Id == messageId)
+                .Include(m => m.ApplicationUser)
+                .Include(m => m.Files)
+                .FirstOrDefaultAsync(cancellationToken);
 
             if (message == null)
                 return Result<MessageDto>.NotFound("Message not found");
@@ -132,6 +159,11 @@ public class MessageManagementService : BaseService, IMessageManagementService
 
             var user = await _userManager.FindByIdAsync(userId.ToString());
             message.ApplicationUser = user;
+
+            // Ensure files are available on response DTO.
+            message.Files = await _fileRepository.Query()
+                .Where(f => f.MessageId == message.Id)
+                .ToListAsync(cancellationToken);
 
             var dto = MapToDto(message);
             return Result<MessageDto>.Success(dto, 201);
@@ -188,8 +220,7 @@ public class MessageManagementService : BaseService, IMessageManagementService
     {
         try
         {
-            var tenantId = CurrentTenantId ?? Guid.Empty.ToString();
-            var uploadPath = Path.Combine(_webHostEnvironment.WebRootPath ?? _webHostEnvironment.ContentRootPath, "uploads", tenantId);
+            var uploadPath = GetUploadsRootPath();
 
             if (!Directory.Exists(uploadPath))
             {
@@ -232,8 +263,10 @@ public class MessageManagementService : BaseService, IMessageManagementService
         }
     }
 
-    private static MessageDto MapToDto(Message message)
+    private MessageDto MapToDto(Message message)
     {
+        var uploadsRoot = GetUploadsRootPath();
+
         return new MessageDto
         {
             Id = message.Id,
@@ -244,7 +277,36 @@ public class MessageManagementService : BaseService, IMessageManagementService
             Body = message.Body,
             ReplyId = message.ReplyId != Guid.Empty ? message.ReplyId : null,
             CreatedAt = message.CreatedAt,
-            UpdatedAt = message.UpdatedAt
+            UpdatedAt = message.UpdatedAt,
+            Files = message.Files?.Select(f =>
+            {
+                var path = Path.Combine(uploadsRoot, f.SaveFileName);
+                long size = 0;
+                try
+                {
+                    if (System.IO.File.Exists(path))
+                        size = new FileInfo(path).Length;
+                }
+                catch
+                {
+                    size = 0;
+                }
+
+                return new FileDto
+                {
+                    Id = f.Id,
+                    FileName = f.FileName,
+                    SaveFileName = f.SaveFileName,
+                    FileType = f.FileType,
+                    MessageId = f.MessageId != Guid.Empty ? f.MessageId : null,
+                    SourceFileId = f.SourceFileId != Guid.Empty ? f.SourceFileId : null,
+                    IsLatest = f.IsLatast,
+                    CreatedAt = f.CreatedAt,
+                    UpdatedAt = f.UpdatedAt,
+                    Size = size,
+                    Url = BuildUploadUrl(f.SaveFileName)
+                };
+            }).ToList()
         };
     }
 }

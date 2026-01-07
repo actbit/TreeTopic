@@ -40,10 +40,10 @@
   let loadRequestId = $state(0);
   let loadedRoomFilesId = $state<string | null>(null);
   let filesLoadRequestId = $state(0);
-  let suppressUrlSync = $state(false);
   let lastAppliedUrlTopicId = $state<string | null>(null);
 
-  let urlTopicId = $derived.by(() => $page.url.searchParams.get('topicId'));
+  let urlTopicId = $derived.by(() => ($page.params as any)?.topicId ?? null);
+  let legacyQueryTopicId = $derived.by(() => $page.url.searchParams.get('topicId'));
 
   function normalizeRoom(raw: any) {
     const id = raw?.id ?? raw?.Id ?? '';
@@ -134,11 +134,7 @@
   async function selectTopicFromUrl(tenant: string) {
     if (!$currentRoom) return;
     if (!urlTopicId) {
-      if ($selectedTopic) {
-        suppressUrlSync = true;
-        setSelectedTopic(null);
-        Promise.resolve().then(() => (suppressUrlSync = false));
-      }
+      if ($selectedTopic) setSelectedTopic(null);
       return;
     }
 
@@ -146,20 +142,14 @@
 
     const existing = $topicList.find((t) => t.id === urlTopicId) ?? null;
     if (existing) {
-      if (existing.roomId === $currentRoom.id) {
-        suppressUrlSync = true;
-        setSelectedTopic(existing);
-        Promise.resolve().then(() => (suppressUrlSync = false));
-      }
+      if (existing.roomId === $currentRoom.id) setSelectedTopic(existing);
       return;
     }
 
     try {
       const loaded = await ensureTopicPathLoaded(tenant, urlTopicId);
       if (loaded && loaded.roomId === $currentRoom.id) {
-        suppressUrlSync = true;
         setSelectedTopic(loaded);
-        Promise.resolve().then(() => (suppressUrlSync = false));
       }
     } catch {
       // ignore
@@ -170,6 +160,39 @@
     const id = raw?.id ?? raw?.Id ?? '';
     const createdAt = raw?.createdAt ?? raw?.CreatedAt ?? null;
     const updatedAt = raw?.updatedAt ?? raw?.UpdatedAt ?? null;
+
+    function getAttachmentKind(fileName: string, mimeType: string): 'image' | 'pdf' | 'document' | 'other' {
+      if (mimeType?.startsWith('image/')) return 'image';
+      const ext = (fileName?.split('.').pop() ?? '').toLowerCase();
+      if (ext === 'pdf') return 'pdf';
+      const docExts = new Set(['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'md', 'rtf', 'csv']);
+      if (docExts.has(ext)) return 'document';
+      return 'other';
+    }
+
+    const rawFiles = raw?.files ?? raw?.Files ?? [];
+    const attachments =
+      Array.isArray(rawFiles)
+        ? rawFiles.map((f: any) => {
+            const fid = f?.id ?? f?.Id ?? '';
+            const fileName = f?.fileName ?? f?.FileName ?? '';
+            const mimeType = f?.fileType ?? f?.FileType ?? 'application/octet-stream';
+            const size = f?.size ?? f?.Size ?? 0;
+            const url = f?.url ?? f?.Url ?? '';
+            const uploadedAt = f?.createdAt ?? f?.CreatedAt ?? null;
+            return {
+              id: fid,
+              fileName,
+              mimeType,
+              size,
+              url,
+              fileType: getAttachmentKind(fileName, mimeType),
+              uploadedAt: uploadedAt ? new Date(uploadedAt) : new Date(),
+              uploadedBy:
+                f?.uploadedBy ?? f?.UploadedBy ?? raw?.applicationUserId ?? raw?.ApplicationUserId ?? '',
+            };
+          })
+        : [];
 
     return {
       id,
@@ -185,7 +208,7 @@
       replyToId: raw?.replyToId ?? raw?.ReplyToId ?? raw?.replyId ?? raw?.ReplyId ?? undefined,
       createdAt: createdAt ? new Date(createdAt) : new Date(),
       updatedAt: updatedAt ? new Date(updatedAt) : undefined,
-      attachments: [],
+      attachments,
       isOwner: false,
       canEdit: true,
       canDelete: true,
@@ -248,7 +271,8 @@
 
       if (initialRoom && initialRoom.id !== roomId) {
         const search = $page.url.search;
-        goto(`/${tenant}/room/${initialRoom.id}${search}`, {
+        const maybeTopic = urlTopicId ? `/topic/${urlTopicId}` : '';
+        goto(`/${tenant}/room/${initialRoom.id}${maybeTopic}${search}`, {
           replaceState: true,
           keepFocus: true,
           noScroll: true,
@@ -265,32 +289,22 @@
     loadTenantData();
   });
 
-  // Reflect selected topic in the URL (path segment) so it can be bookmarked/shared.
+  // Backward compatibility: convert old `?topicId=...` to the new page URL.
   $effect(() => {
-    if (!$currentRoom) return;
-    if (suppressUrlSync) return;
     const tenant = $page.params.tenant ?? getCurrentTenant();
-    if (!tenant) return;
+    const roomId = $page.params.roomId;
+    if (!tenant || !roomId) return;
+    if (urlTopicId) return;
+    if (!legacyQueryTopicId) return;
 
-    const roomId = $currentRoom.id;
-    const desiredTopicId = $selectedTopic?.id ?? null;
-
-    const currentRoomId = $page.params.roomId;
-    if (currentRoomId !== roomId) return;
-
-    const currentTopicId = $page.url.searchParams.get('topicId');
-    if (currentTopicId === desiredTopicId) return;
-
-    const next = new URL($page.url);
-    if (desiredTopicId) next.searchParams.set('topicId', desiredTopicId);
-    else next.searchParams.delete('topicId');
-
-    goto(`${next.pathname}${next.search}${next.hash}`, { replaceState: true, keepFocus: true, noScroll: true });
+    goto(`/${tenant}/room/${roomId}/topic/${legacyQueryTopicId}`, {
+      replaceState: true,
+      keepFocus: true,
+      noScroll: true,
+    });
   });
 
   // If URL changes (back/forward) reflect it into selected topic.
-  // Important: avoid depending on selectedTopic changes here, otherwise selection can get cleared
-  // before the URL-sync effect sets the query param.
   $effect(() => {
     const tenant = $page.params.tenant ?? getCurrentTenant();
     if (!tenant) return;
@@ -454,7 +468,8 @@
         class="button button-secondary"
         on:click={() => {
           const tenant = $page.params.tenant ?? getCurrentTenant();
-          window.location.href = `/${tenant}/login`;
+          const returnUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+          window.location.href = `/${tenant}/auth/login?returnUrl=${encodeURIComponent(returnUrl)}`;
         }}
       >
         Go to login

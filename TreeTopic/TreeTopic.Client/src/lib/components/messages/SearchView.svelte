@@ -3,9 +3,12 @@
   import { messageList, messagesLoading } from '$lib/stores/messages';
   import { selectedTopic } from '$lib/stores/topics';
   import { ui } from '$lib/stores/ui';
+  import { page } from '$app/stores';
+  import { getMessageAnchorIdFromHash, scrollToMessageAnchor } from '$lib/utils/messageAnchor';
 
   let searchQuery = $state('');
   let messagesContainer: HTMLDivElement | undefined = $state();
+  let targetAnchorId = $derived.by(() => getMessageAnchorIdFromHash($page.url.hash));
 
   let topicMessages = $derived.by(() => {
     if (!$selectedTopic) return [];
@@ -35,6 +38,14 @@
     const regex = new RegExp(`(${query})`, 'gi');
     return text.replace(regex, '<mark>$1</mark>');
   }
+
+  $effect(() => {
+    if ($messagesLoading) return;
+    if (!targetAnchorId) return;
+    setTimeout(() => {
+      scrollToMessageAnchor(targetAnchorId, 'auto');
+    }, 0);
+  });
 </script>
 
 <div class="flex flex-col h-full bg-white">

@@ -146,7 +146,8 @@
         class="button button-secondary"
         on:click={() => {
           const tenant = $page.params.tenant ?? getCurrentTenant();
-          window.location.href = `/${tenant}/login`;
+          const returnUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+          window.location.href = `/${tenant}/auth/login?returnUrl=${encodeURIComponent(returnUrl)}`;
         }}
       >
         Go to login
