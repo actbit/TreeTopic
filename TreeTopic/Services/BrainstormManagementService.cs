@@ -87,18 +87,33 @@ public class BrainstormManagementService : BaseService, IBrainstormManagementSer
     {
         return await ExecuteAsync(async () =>
         {
-            var topic = await _topicRepository.GetByIdAsync(request.TopicId, cancellationToken);
+            var topicId = (Guid)request.TopicId;
+
+            var topic = await _topicRepository.GetByIdAsync(topicId, cancellationToken);
             if (topic == null)
                 return Result<BrainstormBoardDto>.NotFound("Topic not found");
 
+            // Enforce "one board per topic" (DB unique index on TopicId).
+            // If a board already exists, return it instead of failing with a unique constraint violation.
+            var existing = await _boardRepository.Query()
+                .Include(b => b.Topic)
+                .Include(b => b.BrainIdeas)
+                .FirstOrDefaultAsync(b => b.TopicId == topicId, cancellationToken);
+            if (existing != null)
+            {
+                var existingDto = MapBoardToDto(existing);
+                return Result<BrainstormBoardDto>.Success(existingDto, 200);
+            }
+
             var board = new BrainBoard
             {
-                TopicId = request.TopicId,
+                TopicId = topicId,
                 Name = request.Title,
                 IsSign = false
             };
 
             await _boardRepository.AddAsync(board, cancellationToken);
+            await _boardRepository.SaveChangesAsync(cancellationToken);
 
             var dto = MapBoardToDto(board);
             return Result<BrainstormBoardDto>.Success(dto, 201);

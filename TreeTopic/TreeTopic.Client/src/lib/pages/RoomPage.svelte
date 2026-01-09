@@ -29,7 +29,7 @@
   import MessageEditModal from '$lib/components/messages/MessageEditModal.svelte';
   import MessageDeleteModal from '$lib/components/messages/MessageDeleteModal.svelte';
   import ViewModeSelector from '$lib/components/messages/ViewModeSelector.svelte';
-  import MaterialList from '$lib/components/files/MaterialList.svelte';
+  import ShareList from '$lib/components/shares/ShareList.svelte';
   import FileUploadModal from '$lib/components/files/FileUploadModal.svelte';
   import { ui } from '$lib/stores/ui';
   import { api, getCurrentTenant } from '$lib/api/client';
@@ -384,7 +384,7 @@
     </div>
   </div>
 {:else if $isAuthenticated}
-  <AppLayout subPanelTitle="Materials">
+  <AppLayout subPanelTitle="Shared">
     <svelte:fragment slot="headerContent">
       <RoomSelector />
     </svelte:fragment>
@@ -443,7 +443,7 @@
     </svelte:fragment>
 
     <svelte:fragment slot="subPanelContent">
-      <MaterialList />
+      <ShareList />
     </svelte:fragment>
   </AppLayout>
 
