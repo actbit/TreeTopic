@@ -10,9 +10,9 @@ namespace TreeTopic.Models
         [ForeignKey(nameof(Topic))]
         public Guid TopicId { get; set; }
         public Topic Topic { get; set; }
-        [ForeignKey(nameof(ApplicationUser))]
-        public Guid ApplicationUserId { get; set; }
-        public ApplicationUser ApplicationUser { get; set; }
+        [ForeignKey(nameof(RoomUser))]
+        public Guid RoomUserId { get; set; }
+        public RoomUser RoomUser { get; set; }
         public string Header { get; set; }
         public string Body { get; set; }
         

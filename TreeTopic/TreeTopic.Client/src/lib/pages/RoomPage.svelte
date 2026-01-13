@@ -4,6 +4,7 @@
   import { goto } from '$app/navigation';
   import { auth, isAuthenticated } from '$lib/stores/auth';
   import { currentRoom, setRooms, setCurrentRoom } from '$lib/stores/rooms';
+  import { rooms } from '$lib/stores/rooms';
   import {
     selectedTopic,
     setSelectedTopic,
@@ -20,6 +21,7 @@
   import RoomSelector from '$lib/components/rooms/RoomSelector.svelte';
   import RoomCreateModal from '$lib/components/rooms/RoomCreateModal.svelte';
   import RoomSettingsModal from '$lib/components/rooms/RoomSettingsModal.svelte';
+  import RoomUserJoinModal from '$lib/components/rooms/RoomUserJoinModal.svelte';
   import TopicTree from '$lib/components/topics/TopicTree.svelte';
   import TopicCreateModal from '$lib/components/topics/TopicCreateModal.svelte';
   import TopicEditModal from '$lib/components/topics/TopicEditModal.svelte';
@@ -41,6 +43,7 @@
   let loadedRoomFilesId = $state<string | null>(null);
   let filesLoadRequestId = $state(0);
   let lastAppliedUrlTopicId = $state<string | null>(null);
+  let checkedRoomUserId = $state<string | null>(null);
 
   let urlTopicId = $derived.by(() => ($page.params as any)?.topicId ?? null);
   let legacyQueryTopicId = $derived.by(() => $page.url.searchParams.get('topicId'));
@@ -189,7 +192,13 @@
               fileType: getAttachmentKind(fileName, mimeType),
               uploadedAt: uploadedAt ? new Date(uploadedAt) : new Date(),
               uploadedBy:
-                f?.uploadedBy ?? f?.UploadedBy ?? raw?.applicationUserId ?? raw?.ApplicationUserId ?? '',
+                f?.uploadedBy ??
+                f?.UploadedBy ??
+                raw?.roomUserId ??
+                raw?.RoomUserId ??
+                raw?.applicationUserId ??
+                raw?.ApplicationUserId ??
+                '',
             };
           })
         : [];
@@ -198,7 +207,13 @@
       id,
       topicId: raw?.topicId ?? raw?.TopicId ?? '',
       userId:
-        raw?.applicationUserId ?? raw?.ApplicationUserId ?? raw?.userId ?? raw?.UserId ?? '',
+        raw?.roomUserId ??
+        raw?.RoomUserId ??
+        raw?.applicationUserId ??
+        raw?.ApplicationUserId ??
+        raw?.userId ??
+        raw?.UserId ??
+        '',
       userName: raw?.userName ?? raw?.UserName ?? '',
       userDisplayName:
         raw?.userDisplayName ?? raw?.UserDisplayName ?? raw?.userName ?? raw?.UserName ?? '',
@@ -370,6 +385,38 @@
         setFiles([]);
       });
   });
+
+  $effect(() => {
+    if (!$currentRoom) return;
+
+    if (checkedRoomUserId === $currentRoom.id) return;
+    checkedRoomUserId = $currentRoom.id;
+
+    const tenant = $page.params.tenant ?? getCurrentTenant();
+    if (!tenant) return;
+
+    api.get<any>(`/${tenant}/api/RoomUsers/room/${$currentRoom.id}/me`)
+      .then((roomUserData: any) => {
+        if (roomUserData) {
+          rooms.setCurrentRoomUser({
+            id: roomUserData.id ?? roomUserData.Id ?? '',
+            displayName: roomUserData.displayName ?? roomUserData.DisplayName ?? '',
+            iconUrl: roomUserData.iconUrl ?? roomUserData.IconUrl,
+            useMainIcon: roomUserData.useMainIcon ?? roomUserData.UseMainIcon ?? false,
+          });
+        }
+      })
+      .catch((err: unknown) => {
+        if (err instanceof api.ApiError && err.status === 404) {
+          ui.openModal({
+            id: 'room-user-join',
+            title: 'Set your name',
+            type: 'custom',
+            data: { roomId: $currentRoom.id },
+          });
+        }
+      });
+  });
 </script>
 
 <svelte:head>
@@ -385,11 +432,11 @@
   </div>
 {:else if $isAuthenticated}
   <AppLayout subPanelTitle="Shared">
-    <svelte:fragment slot="headerContent">
+    {#snippet headerContent()}
       <RoomSelector />
-    </svelte:fragment>
+    {/snippet}
 
-    <svelte:fragment slot="sidebarContent">
+    {#snippet sidebarContent()}
       {#if $currentRoom}
         <div class="panel-header">
           <h3 class="panel-title">Top</h3>
@@ -401,12 +448,12 @@
           <p class="text-sm">Select a room to view topics</p>
         </div>
       {/if}
-    </svelte:fragment>
+    {/snippet}
 
-    <svelte:fragment slot="mainContent">
+    {#snippet mainContent()}
       {#if $currentRoom && $selectedTopic}
         <div class="flex flex-col h-full">
-          <div class="border-b border-border p-4 space-y-3">
+          <div class="border-b border-border room-topic-header">
             <div>
               <h2 class="text-lg font-semibold text-text">{$selectedTopic.title}</h2>
               {#if $selectedTopic.description}
@@ -433,22 +480,23 @@
             <h2 class="text-2xl font-bold text-text mb-2">Welcome to TreeTopic</h2>
             <p class="text-text-secondary">Select a room to get started</p>
             <div class="mt-4">
-              <button class="button button-primary" on:click={() => ui.openModal({ id: 'room-create', title: 'Create Room', type: 'custom' })}>
+              <button class="button button-primary" onclick={() => ui.openModal({ id: 'room-create', title: 'Create Room', type: 'custom' })}>
                 Create your first room
               </button>
             </div>
           </div>
         </div>
       {/if}
-    </svelte:fragment>
+    {/snippet}
 
-    <svelte:fragment slot="subPanelContent">
+    {#snippet subPanelContent()}
       <ShareList />
-    </svelte:fragment>
+    {/snippet}
   </AppLayout>
 
   <RoomCreateModal />
   <RoomSettingsModal />
+  <RoomUserJoinModal />
   <TopicCreateModal />
   <TopicEditModal />
   <TopicDeleteModal />
@@ -466,7 +514,7 @@
       {/if}
       <button
         class="button button-secondary"
-        on:click={() => {
+        onclick={() => {
           const tenant = $page.params.tenant ?? getCurrentTenant();
           const returnUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`;
           window.location.href = `/${tenant}/auth/login?returnUrl=${encodeURIComponent(returnUrl)}`;
@@ -477,3 +525,15 @@
     </div>
   </div>
 {/if}
+
+<style>
+  .room-topic-header {
+    padding: var(--spacing-sm) var(--spacing-md);
+  }
+
+  @media (max-width: 768px) {
+    .room-topic-header {
+      padding: var(--spacing-sm);
+    }
+  }
+</style>

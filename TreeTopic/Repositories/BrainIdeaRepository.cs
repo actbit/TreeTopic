@@ -28,10 +28,10 @@ public class BrainIdeaRepository : BaseRepository<BrainIdea>, IBrainIdeaReposito
             .ToListAsync(cancellationToken);
     }
 
-    public Task<List<BrainIdea>> GetByUserIdAsync(Guid userId, CancellationToken cancellationToken = default)
+    public Task<List<BrainIdea>> GetByUserIdAsync(Guid roomUserId, CancellationToken cancellationToken = default)
     {
         return Query()
-            .Where(bi => bi.ApplicationUserId == userId)
+            .Where(bi => bi.RoomUserId == roomUserId)
             .ToListAsync(cancellationToken);
     }
 

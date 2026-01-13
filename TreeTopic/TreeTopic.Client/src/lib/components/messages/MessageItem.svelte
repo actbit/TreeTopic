@@ -169,18 +169,29 @@
 <div
   id={getMessageAnchorId(message.id)}
   class="card hoverable"
-  on:contextmenu|stopPropagation={handleContextMenu}
+  role="button"
+  tabindex="0"
+  oncontextmenu={(e) => {
+    e.stopPropagation();
+    handleContextMenu(e);
+  }}
+  onkeydown={(e) => {
+    if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) {
+      e.preventDefault();
+      handleContextMenu(e as unknown as MouseEvent);
+    }
+  }}
 >
   <div class="flex items-start gap-3">
     {#if message.userAvatar}
       <img
         src={message.userAvatar}
         alt={message.userName}
-        class="w-8 h-8 rounded-full flex-shrink-0 bg-primary"
+        class="avatar avatar-xs bg-primary"
       />
     {:else}
       <div
-        class="w-8 h-8 rounded-full bg-primary text-white flex items-center justify-center text-xs font-bold flex-shrink-0"
+        class="avatar avatar-xs bg-primary text-white"
       >
         {message.userName?.charAt(0) ?? 'U'}
       </div>
@@ -257,7 +268,10 @@
     </div>
 
       <button
-        on:click|stopPropagation={handleContextMenu}
+        onclick={(e) => {
+          e.stopPropagation();
+          handleContextMenu(e as unknown as MouseEvent);
+        }}
         class="button clickable message-options-button"
         title="Options"
       >

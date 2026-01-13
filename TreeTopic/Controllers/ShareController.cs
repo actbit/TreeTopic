@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.StaticFiles;
 using Microsoft.EntityFrameworkCore;
 using TreeTopic.Models;
+using TreeTopic.Common;
 using FileModel = TreeTopic.Models.File;
 
 namespace TreeTopic.Controllers;
@@ -44,7 +45,7 @@ public class ShareController : ControllerBase
 
     private string GetShareItemFolder(string tenant, Guid shareItemId)
     {
-        var webRoot = _environment.WebRootPath ?? Path.Combine(_environment.ContentRootPath, "wwwroot");
+        var webRoot = _environment.ContentRootPath;
         return Path.Combine(webRoot, "uploads", tenant, "share", shareItemId.ToString());
     }
 
@@ -75,6 +76,45 @@ public class ShareController : ControllerBase
         return "document";
     }
 
+    private async Task<RoomUser?> GetRoomUserAsync(Guid roomId, CancellationToken cancellationToken)
+    {
+        return await _db.RoomUsers
+            .Include(ru => ru.ApplicationUser)
+            .FirstOrDefaultAsync(
+                ru => ru.RoomId == roomId && ru.ApplicationUserId == CurrentUserId,
+                cancellationToken);
+    }
+
+    private async Task<string> GetRoomUserDisplayNameAsync(Guid roomId, CancellationToken cancellationToken)
+    {
+        var roomUser = await GetRoomUserAsync(roomId, cancellationToken);
+        if (roomUser == null)
+            return CurrentUserName;
+
+        return RoomUserNameHelper.ResolveDisplayName(roomUser);
+    }
+
+    private sealed record ShareItemUserDto(
+        string Id,
+        string? Name,
+        string? DisplayName
+    );
+
+    private sealed record ShareItemMessageDto(
+        string Id,
+        string Header
+    );
+
+    private sealed record ShareItemFileDto(
+        string Id,
+        string FileName
+    );
+
+    private sealed record ShareItemShareDto(
+        string Id,
+        string Title
+    );
+
     private sealed record ShareItemDto(
         string Id,
         string RoomId,
@@ -87,8 +127,11 @@ public class ShareController : ControllerBase
         long Size,
         string Url,
         DateTime CreatedAt,
-        string CreatedBy,
-        string CreatedByName
+        ShareItemUserDto? CreatedByUser,
+        string CreatedByName,
+        ShareItemMessageDto? SourceMessage,
+        ShareItemFileDto? SourceFile,
+        ShareItemShareDto? SourceShareItem
     );
 
     public sealed record CreateBrainstormShareRequest(
@@ -115,6 +158,43 @@ public class ShareController : ControllerBase
                       ? BuildBrainstormUrl(tenant, share.BrainBoardId.Value)
                       : string.Empty);
 
+        ShareItemUserDto? createdByUser = null;
+        if (share.CreatedByRoomUser != null)
+        {
+            createdByUser = new ShareItemUserDto(
+                Id: _maskedUuidService.EncodeSynchronous(share.CreatedByRoomUser.Id),
+                Name: share.CreatedByRoomUser.Name,
+                DisplayName: RoomUserNameHelper.ResolveDisplayName(share.CreatedByRoomUser)
+            );
+        }
+
+        ShareItemMessageDto? sourceMessage = null;
+        if (share.SourceMessage != null)
+        {
+            sourceMessage = new ShareItemMessageDto(
+                Id: _maskedUuidService.EncodeSynchronous(share.SourceMessage.Id),
+                Header: share.SourceMessage.Header
+            );
+        }
+
+        ShareItemFileDto? sourceFile = null;
+        if (share.SourceFile != null)
+        {
+            sourceFile = new ShareItemFileDto(
+                Id: _maskedUuidService.EncodeSynchronous(share.SourceFile.Id),
+                FileName: share.SourceFile.FileName
+            );
+        }
+
+        ShareItemShareDto? sourceShare = null;
+        if (share.SourceShareItem != null)
+        {
+            sourceShare = new ShareItemShareDto(
+                Id: _maskedUuidService.EncodeSynchronous(share.SourceShareItem.Id),
+                Title: share.SourceShareItem.Title
+            );
+        }
+
         return new ShareItemDto(
             Id: id,
             RoomId: roomId,
@@ -127,8 +207,11 @@ public class ShareController : ControllerBase
             Size: size,
             Url: url,
             CreatedAt: share.CreatedAt,
-            CreatedBy: _maskedUuidService.EncodeSynchronous(share.CreatedByUserId),
-            CreatedByName: share.CreatedByName
+            CreatedByUser: createdByUser,
+            CreatedByName: share.CreatedByName,
+            SourceMessage: sourceMessage,
+            SourceFile: sourceFile,
+            SourceShareItem: sourceShare
         );
     }
 
@@ -151,6 +234,11 @@ public class ShareController : ControllerBase
             shareQuery = shareQuery.Where(s => s.Kind == normalizedKind);
 
         var shares = await shareQuery
+            .Include(s => s.CreatedByRoomUser)
+            .ThenInclude(ru => ru.ApplicationUser)
+            .Include(s => s.SourceMessage)
+            .Include(s => s.SourceFile)
+            .Include(s => s.SourceShareItem)
             .OrderByDescending(s => s.CreatedAt)
             .ToListAsync(cancellationToken);
 
@@ -242,6 +330,11 @@ public class ShareController : ControllerBase
 
         if (baseShare != null && !shouldUpdateShare)
         {
+            var roomUser = await GetRoomUserAsync(baseShare.RoomId, cancellationToken);
+            if (roomUser == null)
+                return Unauthorized(new { message = "Room user not found." });
+
+            var roomUserName = RoomUserNameHelper.ResolveDisplayName(roomUser);
             // Create a new share entry for the new version, copying metadata from the selected share.
             targetShare = new ShareItem
             {
@@ -249,8 +342,8 @@ public class ShareController : ControllerBase
                 TopicId = baseShare.TopicId,
                 Kind = baseShare.Kind,
                 Title = string.IsNullOrWhiteSpace(title) ? baseShare.Title : title.Trim(),
-                CreatedByUserId = CurrentUserId,
-                CreatedByName = CurrentUserName,
+                CreatedByRoomUserId = roomUser.Id,
+                CreatedByName = roomUserName,
                 SourceMessageId = baseShare.SourceMessageId,
                 SourceFileId = baseShare.SourceFileId,
                 SourceShareItemId = baseShare.SourceShareItemId
@@ -267,14 +360,19 @@ public class ShareController : ControllerBase
         }
         else
         {
+            var roomUser = await GetRoomUserAsync(roomGuid, cancellationToken);
+            if (roomUser == null)
+                return Unauthorized(new { message = "Room user not found." });
+
+            var roomUserName = RoomUserNameHelper.ResolveDisplayName(roomUser);
             targetShare = new ShareItem
             {
                 RoomId = roomGuid,
                 TopicId = topicGuid,
                 Kind = normalizedKind,
                 Title = string.IsNullOrWhiteSpace(title) ? originalFileName : title.Trim(),
-                CreatedByUserId = CurrentUserId,
-                CreatedByName = CurrentUserName,
+                CreatedByRoomUserId = roomUser.Id,
+                CreatedByName = roomUserName,
             };
             _db.ShareItems.Add(targetShare);
             await _db.SaveChangesAsync(cancellationToken);
@@ -359,6 +457,9 @@ public class ShareController : ControllerBase
         CancellationToken cancellationToken)
     {
         var tenant = GetTenantIdentifier();
+        var roomUser = await GetRoomUserAsync((Guid)roomId, cancellationToken);
+        if (roomUser == null)
+            return Unauthorized(new { message = "Room user not found." });
 
         var share = new ShareItem
         {
@@ -367,8 +468,8 @@ public class ShareController : ControllerBase
             Kind = "brainstorm",
             BrainBoardId = (Guid)request.BoardId,
             Title = string.IsNullOrWhiteSpace(request.Title) ? "Brainstorm" : request.Title.Trim(),
-            CreatedByUserId = CurrentUserId,
-            CreatedByName = CurrentUserName
+            CreatedByRoomUserId = roomUser.Id,
+            CreatedByName = RoomUserNameHelper.ResolveDisplayName(roomUser)
         };
 
         _db.ShareItems.Add(share);

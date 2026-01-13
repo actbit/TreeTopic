@@ -114,7 +114,7 @@
 </script>
 
 <Modal {isOpen} title="Edit Message" onClose={handleClose} size="medium">
-  <form on:submit={handleSave} class="spacing-md">
+  <form onsubmit={handleSave} class="spacing-md">
     {#if error}
       <ErrorMessage message={error} onDismiss={() => (error = null)} />
     {/if}
@@ -128,8 +128,9 @@
     />
 
     <div class="form-group">
-      <label class="form-label">Content</label>
+      <label for="message-edit-content" class="form-label">Content</label>
       <textarea
+        id="message-edit-content"
         bind:value={content}
         placeholder="Type your message..."
         disabled={isLoading}
@@ -147,7 +148,7 @@
         variant="secondary"
         size="base"
         disabled={isLoading || !messageId}
-        on:click={copyMessageUrl}
+        onclick={copyMessageUrl}
       >
         Copy URL
       </Button>
@@ -165,7 +166,7 @@
         variant="secondary"
         size="base"
         disabled={isLoading}
-        on:click={handleClose}
+        onclick={handleClose}
       >
         Cancel
       </Button>

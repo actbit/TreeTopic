@@ -74,7 +74,7 @@
     <div class="text-center py-8 text-text-light">
       <p class="text-lg mb-3">No materials yet</p>
       <button
-        on:click={openUploadModal}
+        onclick={openUploadModal}
         class="text-sm text-primary hover:text-primary-hover transition-colors"
       >
         Upload your first file
@@ -84,7 +84,7 @@
     <div class="flex justify-between items-center mb-4">
       <h3 class="font-semibold text-text">{filteredFiles.length} Materials</h3>
       <button
-        on:click={openUploadModal}
+        onclick={openUploadModal}
         class="px-3 py-1 text-sm bg-primary text-white rounded hover:bg-primary-hover transition-colors"
       >
         + Upload
@@ -117,7 +117,7 @@
                 </a>
                 <button
                   type="button"
-                  on:click={() => handleDownload(file.url, file.fileName)}
+                  onclick={() => handleDownload(file.url, file.fileName)}
                   class="px-3 py-2 text-sm text-text-light hover:text-primary rounded hover:bg-white transition-colors font-medium"
                   title="Download"
                 >
@@ -159,7 +159,7 @@
                   </a>
                   <button
                     type="button"
-                    on:click={(e) => {
+                    onclick={(e) => {
                       e.preventDefault();
                       handleDownload(file.url, file.fileName);
                     }}
@@ -196,7 +196,7 @@
                   </a>
                   <button
                     type="button"
-                    on:click={() => handleDownload(file.url, file.fileName)}
+                    onclick={() => handleDownload(file.url, file.fileName)}
                     class="px-3 py-2 text-sm text-text-light hover:text-primary rounded hover:bg-white transition-colors font-medium"
                     title="Download"
                   >
@@ -236,7 +236,7 @@
                 </a>
                 <button
                   type="button"
-                  on:click={() => handleDownload(file.url, file.fileName)}
+                  onclick={() => handleDownload(file.url, file.fileName)}
                   class="px-3 py-2 text-sm text-text-light hover:text-primary rounded hover:bg-white transition-colors font-medium"
                   title="Download"
                 >

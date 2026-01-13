@@ -116,11 +116,35 @@ namespace TreeTopic
                 .HasForeignKey(sif => sif.ShareItemId)
                 .OnDelete(DeleteBehavior.Cascade);
 
+            modelBuilder.Entity<ShareItem>()
+                .HasOne(s => s.CreatedByRoomUser)
+                .WithMany()
+                .HasForeignKey(s => s.CreatedByRoomUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<ShareItem>()
+                .HasOne(s => s.SourceMessage)
+                .WithMany()
+                .HasForeignKey(s => s.SourceMessageId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            modelBuilder.Entity<ShareItem>()
+                .HasOne(s => s.SourceFile)
+                .WithMany()
+                .HasForeignKey(s => s.SourceFileId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            modelBuilder.Entity<ShareItem>()
+                .HasOne(s => s.SourceShareItem)
+                .WithMany()
+                .HasForeignKey(s => s.SourceShareItemId)
+                .OnDelete(DeleteBehavior.SetNull);
+
             // BrainIdea リレーション
             modelBuilder.Entity<BrainIdea>()
-                .HasOne(bi => bi.ApplicationUser)
-                .WithMany(u => u.BrainIdeas)
-                .HasForeignKey(bi => bi.ApplicationUserId)
+                .HasOne(bi => bi.RoomUser)
+                .WithMany()
+                .HasForeignKey(bi => bi.RoomUserId)
                 .OnDelete(DeleteBehavior.SetNull);
 
             modelBuilder.Entity<BrainIdea>()
@@ -131,16 +155,16 @@ namespace TreeTopic
 
             // BrainIdeaVote リレーション
             modelBuilder.Entity<BrainIdeaVote>()
-                .HasOne(v => v.ApplicationUser)
-                .WithMany(u => u.BrainIdeaVotes)
-                .HasForeignKey(v => v.ApplicationUserId)
+                .HasOne(v => v.RoomUser)
+                .WithMany()
+                .HasForeignKey(v => v.RoomUserId)
                 .OnDelete(DeleteBehavior.SetNull);
 
             // Message リレーション
             modelBuilder.Entity<Message>()
-                .HasOne(m => m.ApplicationUser)
-                .WithMany(u => u.Messages)
-                .HasForeignKey(m => m.ApplicationUserId)
+                .HasOne(m => m.RoomUser)
+                .WithMany()
+                .HasForeignKey(m => m.RoomUserId)
                 .OnDelete(DeleteBehavior.Restrict);
 
             modelBuilder.Entity<Message>()

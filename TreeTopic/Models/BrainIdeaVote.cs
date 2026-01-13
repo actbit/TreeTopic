@@ -8,9 +8,9 @@ namespace TreeTopic.Models
         public Guid BrainIdeaId { get; set; }
         public BrainIdea BrainIdea { get; set; }
 
-        [ForeignKey(nameof(ApplicationUser))]
-        public Guid? ApplicationUserId { get; set; }
-        public ApplicationUser? ApplicationUser { get; set; }
+        [ForeignKey(nameof(RoomUser))]
+        public Guid? RoomUserId { get; set; }
+        public RoomUser? RoomUser { get; set; }
 
         public string VoteType { get; set; } // "agree", "consider", "priority", "disagree"
 

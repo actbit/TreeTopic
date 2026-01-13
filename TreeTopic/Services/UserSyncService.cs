@@ -18,15 +18,18 @@ namespace TreeTopic.Services;
 
         private readonly UserManager<ApplicationUser> _userManager;
         private readonly ApplicationDbContext _dbContext;
+        private readonly IconService _iconService;
         private readonly ILogger<UserSyncService> _logger;
 
         public UserSyncService(
             UserManager<ApplicationUser> userManager,
             ApplicationDbContext dbContext,
+            IconService iconService,
             ILogger<UserSyncService> logger)
         {
             _userManager = userManager;
             _dbContext = dbContext;
+            _iconService = iconService;
             _logger = logger;
         }
 
@@ -74,6 +77,13 @@ namespace TreeTopic.Services;
                         _logger.LogError("Failed to create user: {Sub} - {Errors}", sub,
                             string.Join(", ", result.Errors.Select(e => e.Description)));
                         return;
+                    }
+
+                    var iconFileName = await _iconService.EnsureDefaultUserIconAsync(user);
+                    if (!string.IsNullOrWhiteSpace(iconFileName))
+                    {
+                        user.IconFileName = iconFileName;
+                        await _userManager.UpdateAsync(user);
                     }
 
                     _logger.LogInformation("User created: {Sub} ({Email})", sub, email);

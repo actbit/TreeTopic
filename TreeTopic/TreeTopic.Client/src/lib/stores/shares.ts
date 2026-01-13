@@ -15,8 +15,24 @@ export interface ShareItem {
   size: number;
   url: string;
   createdAt: Date;
-  createdBy: string;
+  createdBy?: {
+    id: string;
+    name?: string | null;
+    displayName?: string | null;
+  } | null;
   createdByName: string;
+  sourceMessage?: {
+    id: string;
+    header: string;
+  } | null;
+  sourceFile?: {
+    id: string;
+    fileName: string;
+  } | null;
+  sourceShareItem?: {
+    id: string;
+    title: string;
+  } | null;
 }
 
 export interface SharesState {
@@ -42,8 +58,16 @@ function normalizeShare(raw: any): ShareItem {
     size: raw?.size ?? raw?.Size ?? 0,
     url: raw?.url ?? raw?.Url ?? '',
     createdAt: createdAt ? new Date(createdAt) : new Date(),
-    createdBy: raw?.createdBy ?? raw?.CreatedBy ?? '',
-    createdByName: raw?.createdByName ?? raw?.CreatedByName ?? '',
+    createdBy: raw?.createdByUser ?? raw?.CreatedByUser ?? null,
+    createdByName:
+      raw?.createdByName ??
+      raw?.CreatedByName ??
+      raw?.createdByUser?.displayName ??
+      raw?.CreatedByUser?.DisplayName ??
+      '',
+    sourceMessage: raw?.sourceMessage ?? raw?.SourceMessage ?? null,
+    sourceFile: raw?.sourceFile ?? raw?.SourceFile ?? null,
+    sourceShareItem: raw?.sourceShareItem ?? raw?.SourceShareItem ?? null,
   };
 }
 

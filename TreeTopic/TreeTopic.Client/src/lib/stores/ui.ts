@@ -28,7 +28,7 @@ function createUIStore() {
   const { subscribe, set, update } = writable<UIStateData>({
     viewMode: 'default',
     sidebarCollapsed: false,
-    subpanelCollapsed: false,
+    subpanelCollapsed: true,
     activeModals: [],
     notifications: [],
     isDragDropActive: false,
@@ -275,8 +275,8 @@ function createUIStore() {
       update((state) => ({
         ...state,
         viewMode: (savedViewMode as ViewMode) ?? state.viewMode,
-        sidebarCollapsed: savedSidebarCollapsed === 'true',
-        subpanelCollapsed: savedSubpanelCollapsed === 'true',
+        sidebarCollapsed: savedSidebarCollapsed === null ? state.sidebarCollapsed : savedSidebarCollapsed === 'true',
+        subpanelCollapsed: savedSubpanelCollapsed === null ? state.subpanelCollapsed : savedSubpanelCollapsed === 'true',
       }));
     },
   };

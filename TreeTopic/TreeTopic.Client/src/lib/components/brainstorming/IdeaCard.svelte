@@ -23,8 +23,6 @@
     onDelete,
   }: Props = $props();
 
-  let isHovered = $state(false);
-
   function getMarkIcon(type: string): string {
     switch (type) {
       case 'circle':
@@ -48,12 +46,6 @@
       cross: 'Disagree',
     };
     return labels[type] || type;
-  }
-
-  function handleKeyDown(e: KeyboardEvent) {
-    if (e.key === 'Enter' || e.key === ' ') {
-      e.preventDefault();
-    }
   }
 
   const voteCounts = $derived.by(() => {
@@ -92,19 +84,14 @@
   draggable={true}
   ondragstart={onDragStart}
   ondragend={onDragEnd}
-  onmouseenter={() => (isHovered = true)}
-  onmouseleave={() => (isHovered = false)}
   role="region"
   aria-label="Idea card: {idea.idea.substring(0, 50)}"
-  tabindex="0"
-  onkeydown={handleKeyDown}
 >
-  <div class="idea-card__header">
-    <span class="idea-card__label">Idea</span>
-    {#if idea.userName}
+  {#if idea.userName}
+    <div class="idea-card__header">
       <span class="idea-card__badge">{idea.userName}</span>
-    {/if}
-  </div>
+    </div>
+  {/if}
 
   <p class="idea-card__text" style="white-space: pre-wrap; word-break: break-word;">
     {idea.idea}
@@ -129,7 +116,7 @@
     {/each}
   </div>
 
-  {#if isHovered && onDelete}
+  {#if onDelete}
     <div class="idea-card__actions">
       <button onclick={onDelete} class="idea-card__delete">Delete</button>
     </div>
@@ -163,16 +150,12 @@
   .idea-card__header {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: flex-end;
     gap: 8px;
     font-size: 11px;
     text-transform: uppercase;
     letter-spacing: 0.12em;
     color: #94a3b8;
-  }
-
-  .idea-card__label {
-    font-weight: 600;
   }
 
   .idea-card__badge {
@@ -258,6 +241,12 @@
   .idea-card__actions {
     border-top: 1px solid rgba(255, 255, 255, 0.06);
     padding-top: 8px;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+  }
+
+  .idea-card:hover .idea-card__actions {
+    opacity: 1;
   }
 
   .idea-card__delete {

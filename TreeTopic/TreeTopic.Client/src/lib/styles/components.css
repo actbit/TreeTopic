@@ -484,6 +484,36 @@
   100% { background-position: -200% 0; }
 }
 
+/* User Avatar */
+.avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border-radius: 9999px;
+}
+
+.avatar-xs {
+  width: 32px;
+  height: 32px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.avatar-sm {
+  width: 28px;
+  height: 28px;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.avatar-md {
+  width: 32px;
+  height: 32px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
 /* Animations */
 .fade-in {
   animation: fadeIn 0.3s ease-out;

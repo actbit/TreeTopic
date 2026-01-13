@@ -55,7 +55,7 @@
       <div class="list">
         {#each topicsWithMessages as { topic, messageCount }}
           <button
-            on:click={() => (selectedTopic = selectedTopic === topic.id ? null : topic.id)}
+            onclick={() => (selectedTopic = selectedTopic === topic.id ? null : topic.id)}
             class="list-item clickable hoverable {selectedTopic === topic.id ? 'list-item-active' : ''}"
           >
             <div class="flex flex-col w-full" style="min-width: 0;">

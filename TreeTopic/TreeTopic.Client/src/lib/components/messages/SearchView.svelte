@@ -63,7 +63,7 @@
       {#if searchQuery}
         <button
           type="button"
-          on:click={clearSearch}
+          onclick={clearSearch}
           class="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-text-light hover:text-primary transition-colors"
           title="Clear search"
         >

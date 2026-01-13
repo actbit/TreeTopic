@@ -13,6 +13,7 @@
     helperText?: string;
     onchange?: (e: Event) => void;
     oninput?: (e: Event) => void;
+    id?: string;
   }
 
   let {
@@ -27,12 +28,20 @@
     helperText,
     onchange,
     oninput,
+    id,
   }: Props = $props();
+
+  const inputId = $derived.by(() => {
+    if (id) return id;
+    if (!label) return undefined;
+    const slug = label.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-');
+    return slug ? `input-${slug}` : undefined;
+  });
 </script>
 
 <div class="input-group">
   {#if label}
-    <label class="input-label">
+    <label class="input-label" for={inputId}>
       {label}
       {#if required}
         <span class="input-required">*</span>
@@ -46,6 +55,7 @@
     {/if}
 
     <input
+      id={inputId}
       {type}
       bind:value
       {placeholder}

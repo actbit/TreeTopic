@@ -1,6 +1,7 @@
 <script lang="ts">
   import { sidebarCollapsed } from '$lib/stores/ui';
   import { currentUser } from '$lib/stores/auth';
+  import { currentRoomUser } from '$lib/stores/rooms';
 
   interface Props {
     onMenuToggle?: () => void;
@@ -15,7 +16,7 @@
     {#if onMenuToggle}
       <button
         type="button"
-        on:click={onMenuToggle}
+        onclick={onMenuToggle}
         class="menu-toggle-button"
         aria-label={$sidebarCollapsed ? 'Open navigation menu' : 'Close navigation menu'}
         aria-expanded={!$sidebarCollapsed}
@@ -46,18 +47,33 @@
 
     {#if $currentUser}
       <div class="flex items-center header-user">
-        {#if $currentUser.avatar}
-          <img
-            src={$currentUser.avatar}
-            alt={$currentUser.displayName}
-            class="user-avatar"
-          />
+        {#if $currentRoomUser}
+          {#if $currentRoomUser.iconUrl}
+            <img
+              src={$currentRoomUser.iconUrl}
+              alt={$currentRoomUser.displayName}
+              class="avatar avatar-md bg-primary"
+            />
+          {:else}
+            <div class="avatar avatar-md bg-primary text-white">
+              {$currentRoomUser.displayName?.charAt(0) ?? 'U'}
+            </div>
+          {/if}
+          <span class="text-small text-bold">{$currentRoomUser.displayName}</span>
         {:else}
-          <div class="flex items-center justify-center user-avatar-placeholder bg-primary">
-            {$currentUser.displayName?.charAt(0) ?? 'U'}
-          </div>
+          {#if $currentUser.avatar}
+            <img
+              src={$currentUser.avatar}
+              alt={$currentUser.displayName}
+              class="avatar avatar-md bg-primary"
+            />
+          {:else}
+            <div class="avatar avatar-md bg-primary text-white">
+              {$currentUser.displayName?.charAt(0) ?? 'U'}
+            </div>
+          {/if}
+          <span class="text-small text-bold">{$currentUser.displayName}</span>
         {/if}
-        <span class="text-small text-bold">{$currentUser.displayName}</span>
       </div>
     {/if}
   </div>
@@ -143,22 +159,5 @@
     gap: var(--spacing-sm);
     padding-left: var(--spacing-xl);
     border-left: 1px solid var(--color-border);
-  }
-
-  .user-avatar,
-  .user-avatar-placeholder {
-    width: 32px;
-    height: 32px;
-    border-radius: var(--border-radius-full);
-  }
-
-  .user-avatar {
-    background-color: var(--color-surface);
-  }
-
-  .user-avatar-placeholder {
-    color: var(--color-white);
-    font-size: var(--font-size-sm);
-    font-weight: var(--font-weight-bold);
   }
 </style>

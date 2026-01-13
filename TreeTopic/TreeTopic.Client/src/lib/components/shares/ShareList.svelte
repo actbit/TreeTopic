@@ -185,12 +185,12 @@
           type="button"
           class="pill {filter === 'topic' ? 'active' : ''}"
           disabled={!$selectedTopic}
-          on:click={() => (filter = 'topic')}
+          onclick={() => (filter = 'topic')}
           title={!$selectedTopic ? 'Select a topic to filter' : 'Show current topic shares'}
         >
           Topic
         </button>
-        <button type="button" class="pill {filter === 'room' ? 'active' : ''}" on:click={() => (filter = 'room')}>
+        <button type="button" class="pill {filter === 'room' ? 'active' : ''}" onclick={() => (filter = 'room')}>
           Room
         </button>
       </div>
@@ -208,12 +208,12 @@
             type="button"
             class="pill {filter === 'topic' ? 'active' : ''}"
             disabled={!$selectedTopic}
-            on:click={() => (filter = 'topic')}
+            onclick={() => (filter = 'topic')}
             title={!$selectedTopic ? 'Select a topic to filter' : 'Show current topic shares'}
           >
             Topic
           </button>
-          <button type="button" class="pill {filter === 'room' ? 'active' : ''}" on:click={() => (filter = 'room')}>
+          <button type="button" class="pill {filter === 'room' ? 'active' : ''}" onclick={() => (filter = 'room')}>
             Room
           </button>
         </div>
@@ -247,13 +247,13 @@
           <div class="group-list">
             {#each grouped.documents as s (s.id)}
               <div class="item">
-                <button type="button" class="item-main" on:click={() => openDoc(s.url)}>
+                <button type="button" class="item-main" onclick={() => openDoc(s.url)}>
                   <div class="min-w-0">
                     <div class="text-small text-bold truncate">{s.title || s.fileName}</div>
                     <div class="text-small text-light truncate">{s.fileName}</div>
                   </div>
                 </button>
-                <button type="button" class="menu-button" title="More" on:click={(e) => openMenuForShare(s, e)}>
+                <button type="button" class="menu-button" title="More" onclick={(e) => openMenuForShare(s, e)}>
                   ?
                 </button>
               </div>
@@ -273,7 +273,7 @@
                 </a>
                 <div class="image-meta">
                   <div class="text-small truncate">{s.title || s.fileName}</div>
-                  <button type="button" class="menu-button" title="More" on:click={(e) => openMenuForShare(s, e)}>
+                  <button type="button" class="menu-button" title="More" onclick={(e) => openMenuForShare(s, e)}>
                     ?
                   </button>
                 </div>
@@ -289,7 +289,7 @@
           <div class="group-list">
             {#each grouped.brainstorms as s (s.id)}
               <div class="item">
-                <button type="button" class="item-main" on:click={() => openBrain(s.url, s.boardId)}>
+                <button type="button" class="item-main" onclick={() => openBrain(s.url, s.boardId)}>
                   <div class="min-w-0">
                     <div class="text-small text-bold truncate">{s.title}</div>
                     <div class="text-small text-light truncate">
@@ -297,7 +297,7 @@
                     </div>
                   </div>
                 </button>
-                <button type="button" class="menu-button" title="More" on:click={(e) => openMenuForShare(s, e)}>
+                <button type="button" class="menu-button" title="More" onclick={(e) => openMenuForShare(s, e)}>
                   ?
                 </button>
               </div>

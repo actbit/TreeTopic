@@ -22,11 +22,22 @@ namespace TreeTopic.Models
         public string Kind { get; set; } = "document";
         public string Title { get; set; } = string.Empty;
 
-        public Guid CreatedByUserId { get; set; }
+        [ForeignKey(nameof(CreatedByRoomUser))]
+        public Guid CreatedByRoomUserId { get; set; }
+        public RoomUser CreatedByRoomUser { get; set; }
+
         public string CreatedByName { get; set; } = "Unknown";
 
+        [ForeignKey(nameof(SourceMessage))]
         public Guid? SourceMessageId { get; set; }
+        public Message? SourceMessage { get; set; }
+
+        [ForeignKey(nameof(SourceFile))]
         public Guid? SourceFileId { get; set; }
+        public File? SourceFile { get; set; }
+
+        [ForeignKey(nameof(SourceShareItem))]
         public Guid? SourceShareItemId { get; set; }
+        public ShareItem? SourceShareItem { get; set; }
     }
 }

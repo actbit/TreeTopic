@@ -60,7 +60,14 @@
     return {
       id,
       topicId: raw?.topicId ?? raw?.TopicId ?? '',
-      userId: raw?.applicationUserId ?? raw?.ApplicationUserId ?? raw?.userId ?? raw?.UserId ?? '',
+      userId:
+        raw?.roomUserId ??
+        raw?.RoomUserId ??
+        raw?.applicationUserId ??
+        raw?.ApplicationUserId ??
+        raw?.userId ??
+        raw?.UserId ??
+        '',
       userName: raw?.userName ?? raw?.UserName ?? '',
       userDisplayName: raw?.userDisplayName ?? raw?.UserDisplayName ?? raw?.userName ?? raw?.UserName ?? '',
       userAvatar: raw?.userAvatar ?? raw?.UserAvatar ?? undefined,
@@ -101,21 +108,36 @@
 
       const trimmedContent = content.trim();
       const trimmedSubject = subject.trim();
-      const header = trimmedSubject || trimmedContent.split('\n')[0]?.slice(0, 500) || 'Message';
+      const header = trimmedSubject || '';
 
-      const form = new FormData();
-      form.append('TopicId', $selectedTopic.id);
-      form.append('Header', header);
-      form.append('Body', trimmedContent);
-      if ($replyTarget) {
-        form.append('ReplyId', $replyTarget.id);
+      let response;
+      if (selectedFiles.length > 0) {
+        // ファイルがある場合はFormDataで /upload エンドポイントに送信
+        const form = new FormData();
+        form.append('topicId', $selectedTopic.id);
+        if (header) {
+          form.append('header', header);
+        }
+        form.append('body', trimmedContent);
+        if ($replyTarget) {
+          form.append('replyId', $replyTarget.id);
+        }
+        for (const file of selectedFiles) {
+          form.append('files', file);
+        }
+        response = await api.post(`/${tenant}/api/Message/upload`, form);
+      } else {
+        // ファイルがない場合はJSONで送信
+        const payload = {
+          topicId: $selectedTopic.id,
+          header: header,
+          body: trimmedContent,
+        };
+        if ($replyTarget) {
+          payload.replyId = $replyTarget.id;
+        }
+        response = await api.post(`/${tenant}/api/Message`, payload);
       }
-
-      for (const file of selectedFiles) {
-        form.append('Files', file);
-      }
-
-      const response = await api.post(`/${tenant}/api/Message`, form);
       addMessage({
         ...normalizeMessage(response),
         subject: trimmedSubject,
@@ -183,7 +205,7 @@
 </script>
 
 <div class="panel-footer">
-  <form on:submit={handleSubmit} class="spacing-sm flex flex-col w-full">
+  <form onsubmit={handleSubmit} class="spacing-sm flex flex-col w-full">
     {#if error}
       <ErrorMessage message={error} onDismiss={() => (error = null)} />
     {/if}
@@ -195,8 +217,8 @@
             <div class="flex items-center gap-2">
               <span class="text-small text-light">Replying to</span>
               <span class="text-small text-bold">{$replyTarget.userDisplayName || $replyTarget.userName}</span>
-              <button type="button" class="replying-to__copy" on:click={copyReplyUrl} title="Copy reply URL">URL</button>
-              <button type="button" class="replying-to__cancel" on:click={() => cancelReply()} title="Cancel reply">×</button>
+              <button type="button" class="replying-to__copy" onclick={copyReplyUrl} title="Copy reply URL">URL</button>
+              <button type="button" class="replying-to__cancel" onclick={() => cancelReply()} title="Cancel reply">×</button>
             </div>
           <div class="text-small text-light replying-to__text">
             {$replyTarget.subject || $replyTarget.content}
@@ -220,13 +242,13 @@
       class="form-input w-full text-small"
       rows="3"
       style="resize: none;"
-    />
+    ></textarea>
 
     <div class="flex items-center gap-2">
       <input
         type="file"
         bind:this={fileInput}
-        on:change={handleFileSelect}
+        onchange={handleFileSelect}
         multiple
         disabled={isLoading}
         class="hidden"
@@ -234,7 +256,7 @@
 
       <button
         type="button"
-        on:click={() => fileInput?.click()}
+        onclick={() => fileInput?.click()}
         disabled={isLoading}
         class="button button-secondary button-small"
         title="Attach file"
@@ -270,7 +292,7 @@
               type="button"
               class="selected-file__remove"
               title="Remove file"
-              on:click={() => removeSelectedFile(file)}
+              onclick={() => removeSelectedFile(file)}
               disabled={isLoading}
             >
               ×

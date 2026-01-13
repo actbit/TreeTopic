@@ -158,7 +158,7 @@
                 <td class="px-4 py-3 text-sm">
                   <select
                     value={userPerm.role || 'user'}
-                    on:change={(e) => setRole(userPerm.userId, e.currentTarget.value)}
+                    onchange={(e) => setRole(userPerm.userId, e.currentTarget.value)}
                     class="px-2 py-1 border border-border rounded text-sm bg-white focus:outline-none focus:border-primary"
                   >
                     {#each roles as role}
@@ -171,7 +171,7 @@
                     <input
                       type="checkbox"
                       checked={userPerm[perm.id] || false}
-                      on:change={(e) =>
+                      onchange={(e) =>
                         updatePermission(userPerm.userId, perm.id, e.currentTarget.checked)}
                       title={perm.description}
                       class="w-4 h-4 accent-primary cursor-pointer"
@@ -180,7 +180,7 @@
                 {/each}
                 <td class="px-4 py-3 text-center">
                   <button
-                    on:click={() => removeUser(userPerm.userId)}
+                    onclick={() => removeUser(userPerm.userId)}
                     class="text-danger hover:text-red-700 transition-colors text-sm font-medium"
                   >
                     Remove
@@ -224,7 +224,7 @@
   {#if onClose}
     <div class="flex justify-end pt-4">
       <button
-        on:click={onClose}
+        onclick={onClose}
         class="px-4 py-2 bg-secondary text-white rounded hover:bg-opacity-90 transition-colors"
       >
         Close

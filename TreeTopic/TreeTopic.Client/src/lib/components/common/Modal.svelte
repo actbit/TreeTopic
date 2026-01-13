@@ -50,8 +50,8 @@
 <dialog
   bind:this={dialogElement}
   class="modal"
-  on:close={handleClose}
-  on:click={handleBackdropClick}
+  onclose={handleClose}
+  onclick={handleBackdropClick}
 >
   <div class="modal-content modal-{size}">
     {#if title || closeButton}
@@ -62,7 +62,7 @@
 
         {#if closeButton}
           <button
-            on:click={handleClose}
+            onclick={handleClose}
             class="modal-close"
             aria-label="Close modal"
           >

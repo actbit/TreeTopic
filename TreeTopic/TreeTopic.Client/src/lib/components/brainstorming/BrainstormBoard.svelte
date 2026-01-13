@@ -221,13 +221,13 @@
         placeholder="Type an idea..."
         rows="3"
         bind:value={newIdeaText}
-        on:keydown={handleIdeaKeyDown}
+        onkeydown={handleIdeaKeyDown}
         disabled={isCreating || !resolvedBoardId}
       ></textarea>
       <div class="sidebar-actions">
         <button
           class="sidebar-btn"
-          on:click={handleCreateIdea}
+          onclick={handleCreateIdea}
           disabled={!trimmedIdea || isCreating || !resolvedBoardId}
         >
           {isCreating ? 'Adding...' : 'Add idea'}
@@ -273,8 +273,8 @@
 
   <main
     bind:this={boardContainer}
-    on:dragover={handleDragOver}
-    on:drop={handleDrop}
+    ondragover={handleDragOver}
+    ondrop={handleDrop}
     class="brainstorm-canvas {draggedIdea ? 'dragging' : ''}"
     role="region"
     aria-label="Brainstorm board"
@@ -293,7 +293,7 @@
             data-idea-id={idea.id}
             class="idea-wrapper {draggedIdea === idea.id ? 'is-dragging' : ''}"
             style="left: {idea.positionLeft}px; top: {idea.positionTop}px;"
-            on:dragstart={(e) => handleDragStart(idea.id, e)}
+            ondragstart={(e) => handleDragStart(idea.id, e)}
             role="none"
           >
             <IdeaCard
@@ -335,7 +335,7 @@
     overflow-y: auto;
   }
 
-  .sidebar-section + .sidebar-section {
+  :global(.sidebar-section + .sidebar-section) {
     margin-top: 18px;
   }
 

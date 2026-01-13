@@ -50,7 +50,7 @@ public class BrainIdeaDto : BaseDto
 
     public MaskedGuid TopicId { get; set; }
 
-    public MaskedGuid? ApplicationUserId { get; set; }
+    public MaskedGuid? RoomUserId { get; set; }
 
     public string? UserName { get; set; }
 
@@ -87,7 +87,7 @@ public class BrainIdeaVoteDto : BaseDto
 {
     public MaskedGuid BrainIdeaId { get; set; }
 
-    public MaskedGuid? ApplicationUserId { get; set; }
+    public MaskedGuid? RoomUserId { get; set; }
 
     public string? UserName { get; set; }
 

@@ -131,7 +131,7 @@ public class TenantController : ControllerBase
     /// テナント情報を取得
     /// </summary>
     [HttpGet("{identifier}")]
-    [Authorize(Roles = "Admin")]
+    [Authorize]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -166,7 +166,7 @@ public class TenantController : ControllerBase
     /// すべてのテナントを取得
     /// </summary>
     [HttpGet]
-    [Authorize(Roles = "Admin")]
+    [Authorize]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -197,7 +197,7 @@ public class TenantController : ControllerBase
     /// テナントを削除
     /// </summary>
     [HttpDelete("{tenantId}")]
-    [Authorize(Roles = "Admin")]
+    [Authorize]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]

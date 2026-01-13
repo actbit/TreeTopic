@@ -325,7 +325,10 @@
         role="tab"
         aria-selected={kind === 'document'}
         class="tab {kind === 'document' ? 'active' : ''}"
-        on:click|stopPropagation={() => (kind = 'document')}
+        onclick={(e) => {
+          e.stopPropagation();
+          kind = 'document';
+        }}
       >
         Document
       </button>
@@ -334,7 +337,10 @@
         role="tab"
         aria-selected={kind === 'image'}
         class="tab {kind === 'image' ? 'active' : ''}"
-        on:click|stopPropagation={() => (kind = 'image')}
+        onclick={(e) => {
+          e.stopPropagation();
+          kind = 'image';
+        }}
       >
         Image
       </button>
@@ -343,25 +349,28 @@
         role="tab"
         aria-selected={kind === 'brainstorm'}
         class="tab {kind === 'brainstorm' ? 'active' : ''}"
-        on:click|stopPropagation={() => (kind = 'brainstorm')}
+        onclick={(e) => {
+          e.stopPropagation();
+          kind = 'brainstorm';
+        }}
       >
         Brainstorm
       </button>
     </div>
 
     <div class="share-scope">
-      <label class="text-small text-light">Scope</label>
+      <div class="text-small text-light">Scope</div>
       <div class="share-scope-buttons">
         <button
           type="button"
           class="pill {scope === 'topic' ? 'active' : ''}"
           disabled={!$selectedTopic}
-          on:click={() => (scope = 'topic')}
+          onclick={() => (scope = 'topic')}
           title={!$selectedTopic ? 'Select a topic to share to a topic' : 'Share to current topic'}
         >
           Current topic
         </button>
-        <button type="button" class="pill {scope === 'room' ? 'active' : ''}" on:click={() => (scope = 'room')}>
+        <button type="button" class="pill {scope === 'room' ? 'active' : ''}" onclick={() => (scope = 'room')}>
           Room
         </button>
       </div>
@@ -372,14 +381,14 @@
     {#if kind === 'brainstorm'}
       <div class="spacing-sm">
         <div class="flex items-center justify-between">
-          <label class="text-small text-light">Board</label>
+          <label for="share-board-select" class="text-small text-light">Board</label>
           <div class="flex items-center gap-2">
             <Button
               type="button"
               variant="secondary"
               size="small"
               disabled={isLoading || brainstormBoardsLoading}
-              on:click={loadBrainstormBoards}
+              onclick={loadBrainstormBoards}
             >
               Refresh
             </Button>
@@ -391,10 +400,10 @@
         {:else if brainstormBoardsError}
           <div class="text-small text-light">
             {brainstormBoardsError}
-            <button type="button" class="action-link" on:click={loadBrainstormBoards}>Retry</button>
+            <button type="button" class="action-link" onclick={loadBrainstormBoards}>Retry</button>
           </div>
         {:else}
-          <select class="select" bind:value={brainstormSelectedBoardId} disabled={isLoading}>
+          <select id="share-board-select" class="select" bind:value={brainstormSelectedBoardId} disabled={isLoading}>
             <option value="">Select a board</option>
             {#each brainstormBoards as b (b.id)}
               <option value={b.id}>{b.title}</option>
@@ -411,7 +420,7 @@
 
             {#if !$selectedTopic}
               <div class="spacing-sm">
-                <label class="text-small text-light">Topic</label>
+                <label for="share-topic-select" class="text-small text-light">Topic</label>
                 {#if roomTopicsLoading}
                   <div class="text-small text-light">Loading topics...</div>
                 {:else if roomTopicsError}
@@ -424,16 +433,17 @@
                       variant="secondary"
                       size="small"
                       disabled={isLoading || isCreatingBoard}
-                      on:click={() => ui.openModal({ id: 'topic-create', title: 'Create Topic', type: 'custom' })}
+                      onclick={() => ui.openModal({ id: 'topic-create', title: 'Create Topic', type: 'custom' })}
                     >
                       Create topic
                     </Button>
                   {/if}
                   <select
+                    id="share-topic-select"
                     class="select"
                     bind:value={boardTopicId}
                     disabled={isLoading || isCreatingBoard || roomTopicsLoading}
-                    on:change={() => {
+                    onchange={() => {
                       brainstormBoardsLastLoadKey = '';
                       void loadBrainstormBoards();
                     }}
@@ -469,7 +479,7 @@
                 size="small"
                 loading={isCreatingBoard}
                 disabled={isLoading || isCreatingBoard}
-                on:click={createBoard}
+                onclick={createBoard}
               >
                 Create board
               </Button>
@@ -479,7 +489,7 @@
                   variant="secondary"
                   size="small"
                   disabled={isLoading || isCreatingBoard}
-                  on:click={() => {
+                  onclick={() => {
                   if (brainstormSelectedBoardId && brainstormSelectedBoardId !== 'undefined' && brainstormSelectedBoardId !== 'null') {
                     window.open(`/${api.getCurrentTenant()}/brainstorm/${brainstormSelectedBoardId}`, '_blank');
                   }
@@ -495,12 +505,13 @@
       </div>
     {:else}
       <div class="spacing-sm">
-        <label class="text-small text-light">Target</label>
+        <label for="share-target-select" class="text-small text-light">Target</label>
         <select
+          id="share-target-select"
           class="select"
           bind:value={fileTarget}
           disabled={isLoading}
-          on:change={() => {
+          onchange={() => {
             if (fileTarget === 'new') {
               existingShareId = '';
               updateExistingShare = true;
@@ -513,8 +524,8 @@
 
         {#if fileTarget === 'existing'}
           <div class="spacing-sm padding-top-sm">
-            <label class="text-small text-light">Existing share</label>
-            <select class="select" bind:value={existingShareId} disabled={isLoading}>
+            <label for="share-existing-select" class="text-small text-light">Existing share</label>
+            <select id="share-existing-select" class="select" bind:value={existingShareId} disabled={isLoading}>
               <option value="">Select...</option>
               {#each $shareItems.filter((x) => x.kind === kind) as item (item.id)}
                 <option value={item.id}>{item.title || item.fileName || item.id}</option>
@@ -535,7 +546,7 @@
       <input
         type="file"
         bind:this={fileInput}
-        on:change={handleFileSelect}
+        onchange={handleFileSelect}
         accept={kind === 'image' ? 'image/*' : undefined}
         disabled={isLoading}
       />
@@ -551,11 +562,11 @@
         size="base"
         loading={isLoading}
         disabled={isLoading || !$currentRoom}
-        on:click={handleUpload}
+        onclick={handleUpload}
       >
         Share
       </Button>
-      <Button type="button" variant="secondary" size="base" disabled={isLoading} on:click={handleClose}>Cancel</Button>
+      <Button type="button" variant="secondary" size="base" disabled={isLoading} onclick={handleClose}>Cancel</Button>
     </div>
   </div>
 </Modal>

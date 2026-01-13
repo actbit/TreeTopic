@@ -21,8 +21,13 @@
   let { items, x, y, onClose }: Props = $props();
 
   let menuElement: HTMLDivElement | undefined = $state();
-  let adjustedX = $state(x);
-  let adjustedY = $state(y);
+  let adjustedX = $state(0);
+  let adjustedY = $state(0);
+
+  $effect(() => {
+    adjustedX = x;
+    adjustedY = y;
+  });
 
   function handleAction(action: () => void) {
     action();
@@ -76,7 +81,7 @@
     {:else}
       <button
         type="button"
-        on:click={() => handleAction(item.action)}
+        onclick={() => handleAction(item.action)}
         disabled={item.isDisabled}
         class="context-menu-item {item.isDangerous ? 'context-menu-item-danger' : ''}"
       >

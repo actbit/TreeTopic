@@ -81,7 +81,7 @@
       <div class="space-y-1 p-2">
         {#each documentGroups as { key, fileName, size, count }}
           <button
-            on:click={() => (selectedDoc = selectedDoc === key ? null : key)}
+            onclick={() => (selectedDoc = selectedDoc === key ? null : key)}
             class="w-full flex flex-col items-start gap-2 p-3 rounded transition-colors {selectedDoc === key
               ? 'bg-primary bg-opacity-10 border-l-4 border-primary'
               : 'hover:bg-white'}"

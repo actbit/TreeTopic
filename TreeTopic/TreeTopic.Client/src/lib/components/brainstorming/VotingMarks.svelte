@@ -20,7 +20,7 @@
   <div class="panel-body spacing-sm">
     {#each marks as mark}
       <button
-        on:click={() => onVote?.(mark.type)}
+        onclick={() => onVote?.(mark.type)}
         class="list-item clickable hoverable"
         style="display: flex; align-items: center; gap: var(--spacing-md); text-align: left;"
       >

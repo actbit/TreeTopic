@@ -26,6 +26,8 @@ public class MessageManagementService : BaseService, IMessageManagementService
     private readonly IMessageRepository _messageRepository;
     private readonly ITopicRepository _topicRepository;
     private readonly IFileRepository _fileRepository;
+    private readonly IRoomUserRepository _roomUserRepository;
+    private readonly IconService _iconService;
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly IWebHostEnvironment _webHostEnvironment;
     private readonly IMultiTenantContextAccessor<ApplicationTenantInfo> _tenantAccessor;
@@ -34,6 +36,8 @@ public class MessageManagementService : BaseService, IMessageManagementService
         IMessageRepository messageRepository,
         ITopicRepository topicRepository,
         IFileRepository fileRepository,
+        IRoomUserRepository roomUserRepository,
+        IconService iconService,
         UserManager<ApplicationUser> userManager,
         IWebHostEnvironment webHostEnvironment,
         IMultiTenantContextAccessor<ApplicationTenantInfo> tenantAccessor,
@@ -42,6 +46,8 @@ public class MessageManagementService : BaseService, IMessageManagementService
         _messageRepository = messageRepository;
         _topicRepository = topicRepository;
         _fileRepository = fileRepository;
+        _roomUserRepository = roomUserRepository;
+        _iconService = iconService;
         _userManager = userManager;
         _webHostEnvironment = webHostEnvironment;
         _tenantAccessor = tenantAccessor;
@@ -60,8 +66,8 @@ public class MessageManagementService : BaseService, IMessageManagementService
 
     private string GetUploadsRootPath()
     {
-        var webRoot = _webHostEnvironment.WebRootPath ?? _webHostEnvironment.ContentRootPath;
-        return Path.Combine(webRoot, "uploads", GetTenantUploadsFolderName());
+        var contentRoot = _webHostEnvironment.ContentRootPath;
+        return Path.Combine(contentRoot, "uploads", GetTenantUploadsFolderName());
     }
 
     private string GetMessageUploadsPath(Guid userId, Guid messageId)
@@ -86,7 +92,8 @@ public class MessageManagementService : BaseService, IMessageManagementService
         return await ExecuteAsync(async () =>
         {
             var messages = await _messageRepository.Query()
-                .Include(m => m.ApplicationUser)
+                .Include(m => m.RoomUser)
+                .ThenInclude(ru => ru.ApplicationUser)
                 .Include(m => m.Files)
                 .ToListAsync(cancellationToken);
 
@@ -101,7 +108,8 @@ public class MessageManagementService : BaseService, IMessageManagementService
         {
             var messages = await _messageRepository.Query()
                 .Where(m => m.TopicId == topicId)
-                .Include(m => m.ApplicationUser)
+                .Include(m => m.RoomUser)
+                .ThenInclude(ru => ru.ApplicationUser)
                 .Include(m => m.Files)
                 .ToListAsync(cancellationToken);
 
@@ -116,7 +124,8 @@ public class MessageManagementService : BaseService, IMessageManagementService
         {
             var message = await _messageRepository.Query()
                 .Where(m => m.Id == messageId)
-                .Include(m => m.ApplicationUser)
+                .Include(m => m.RoomUser)
+                .ThenInclude(ru => ru.ApplicationUser)
                 .Include(m => m.Files)
                 .FirstOrDefaultAsync(cancellationToken);
 
@@ -149,10 +158,14 @@ public class MessageManagementService : BaseService, IMessageManagementService
                     return Result<MessageDto>.BadRequest("Reply message must be in the same topic");
             }
 
+            var roomUser = await ResolveRoomUserAsync(topic.RoomId, userId, cancellationToken);
+            if (roomUser == null)
+                return Result<MessageDto>.BadRequest("Room user not found");
+
             var message = new Message
             {
                 TopicId = request.TopicId,
-                ApplicationUserId = userId,
+                RoomUserId = roomUser.Id,
                 Header = request.Header,
                 Body = request.Body,
                 ReplyId = request.ReplyId.HasValue && request.ReplyId != Guid.Empty
@@ -163,13 +176,12 @@ public class MessageManagementService : BaseService, IMessageManagementService
             await _messageRepository.AddAsync(message, cancellationToken);
             await _messageRepository.SaveChangesAsync(cancellationToken);
 
+            message.RoomUser = roomUser;
+
             if (request.Files != null && request.Files.Count > 0)
             {
                 await ProcessUploadedFilesAsync(message, request.Files, cancellationToken);
             }
-
-            var user = await _userManager.FindByIdAsync(userId.ToString());
-            message.ApplicationUser = user;
 
             // Ensure files are available on response DTO.
             message.Files = await _fileRepository.Query()
@@ -203,7 +215,14 @@ public class MessageManagementService : BaseService, IMessageManagementService
             _messageRepository.Update(message);
             await _messageRepository.SaveChangesAsync(cancellationToken);
 
-            var dto = MapToDto(message);
+            var updated = await _messageRepository.Query()
+                .Where(m => m.Id == messageId)
+                .Include(m => m.RoomUser)
+                .ThenInclude(ru => ru.ApplicationUser)
+                .Include(m => m.Files)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            var dto = MapToDto(updated ?? message);
             return Result<MessageDto>.Success(dto);
         }, nameof(UpdateMessageAsync));
     }
@@ -231,7 +250,8 @@ public class MessageManagementService : BaseService, IMessageManagementService
     {
         try
         {
-            var uploadPath = GetMessageUploadsPath(message.ApplicationUserId, message.Id);
+            var applicationUserId = message.RoomUser?.ApplicationUserId ?? Guid.Empty;
+            var uploadPath = GetMessageUploadsPath(applicationUserId, message.Id);
             Directory.CreateDirectory(uploadPath);
 
             foreach (var file in files)
@@ -270,14 +290,41 @@ public class MessageManagementService : BaseService, IMessageManagementService
         }
     }
 
+    private async Task<RoomUser?> ResolveRoomUserAsync(Guid roomId, Guid applicationUserId, CancellationToken cancellationToken)
+    {
+        var existing = await _roomUserRepository.GetByRoomAndUserAsync(roomId, applicationUserId, cancellationToken);
+        if (existing != null)
+            return existing;
+
+        var user = await _userManager.FindByIdAsync(applicationUserId.ToString());
+        if (user == null)
+            return null;
+
+        var roomUser = new RoomUser
+        {
+            ApplicationUserId = applicationUserId,
+            RoomId = roomId,
+            Name = RoomUserNameHelper.DefaultUserToken,
+            UseMainName = true,
+            UseMainIcon = true
+        };
+
+        await _roomUserRepository.AddAsync(roomUser, cancellationToken);
+        await _roomUserRepository.SaveChangesAsync(cancellationToken);
+        roomUser.ApplicationUser = user;
+
+        return roomUser;
+    }
+
     private MessageDto MapToDto(Message message)
     {
         return new MessageDto
         {
             Id = message.Id,
             TopicId = message.TopicId,
-            ApplicationUserId = message.ApplicationUserId,
-            UserName = message.ApplicationUser?.UserName,
+            RoomUserId = message.RoomUserId,
+            UserName = RoomUserNameHelper.ResolveDisplayName(message.RoomUser),
+            UserAvatar = _iconService.GetRoomUserIconUrl(message.RoomUser),
             Header = message.Header,
             Body = message.Body,
             ReplyId = message.ReplyId != Guid.Empty ? message.ReplyId : null,
@@ -285,7 +332,8 @@ public class MessageManagementService : BaseService, IMessageManagementService
             UpdatedAt = message.UpdatedAt,
             Files = message.Files?.Select(f =>
             {
-                var newPath = Path.Combine(GetMessageUploadsPath(message.ApplicationUserId, message.Id), f.SaveFileName);
+                var applicationUserId = message.RoomUser?.ApplicationUserId ?? Guid.Empty;
+                var newPath = Path.Combine(GetMessageUploadsPath(applicationUserId, message.Id), f.SaveFileName);
                 var legacyPath = Path.Combine(GetUploadsRootPath(), f.SaveFileName);
                 long size = 0;
                 try
@@ -313,7 +361,7 @@ public class MessageManagementService : BaseService, IMessageManagementService
                     UpdatedAt = f.UpdatedAt,
                     Size = size,
                     Url = System.IO.File.Exists(newPath)
-                        ? BuildMessageUploadUrl(message.ApplicationUserId, message.Id, f.SaveFileName)
+                        ? BuildMessageUploadUrl(applicationUserId, message.Id, f.SaveFileName)
                         : BuildLegacyUploadUrl(f.SaveFileName)
                 };
             }).ToList()

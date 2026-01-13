@@ -14,6 +14,7 @@ public class BrainstormManagementService : BaseService, IBrainstormManagementSer
     private readonly IBrainIdeaRepository _ideaRepository;
     private readonly IBrainIdeaVoteRepository _voteRepository;
     private readonly ITopicRepository _topicRepository;
+    private readonly IRoomUserRepository _roomUserRepository;
     private readonly IMultiTenantContextAccessor<ApplicationTenantInfo> _tenantAccessor;
 
     public BrainstormManagementService(
@@ -21,6 +22,7 @@ public class BrainstormManagementService : BaseService, IBrainstormManagementSer
         IBrainIdeaRepository ideaRepository,
         IBrainIdeaVoteRepository voteRepository,
         ITopicRepository topicRepository,
+        IRoomUserRepository roomUserRepository,
         IMultiTenantContextAccessor<ApplicationTenantInfo> tenantAccessor,
         ILogger<BrainstormManagementService> logger) : base(logger)
     {
@@ -28,6 +30,7 @@ public class BrainstormManagementService : BaseService, IBrainstormManagementSer
         _ideaRepository = ideaRepository;
         _voteRepository = voteRepository;
         _topicRepository = topicRepository;
+        _roomUserRepository = roomUserRepository;
         _tenantAccessor = tenantAccessor;
     }
 
@@ -41,6 +44,12 @@ public class BrainstormManagementService : BaseService, IBrainstormManagementSer
             var boards = await _boardRepository.Query()
                 .Include(b => b.Topic)
                 .Include(b => b.BrainIdeas)
+                .ThenInclude(i => i.RoomUser)
+                .ThenInclude(ru => ru.ApplicationUser)
+                .Include(b => b.BrainIdeas)
+                .ThenInclude(i => i.Votes)
+                .ThenInclude(v => v.RoomUser)
+                .ThenInclude(ru => ru.ApplicationUser)
                 .ToListAsync(cancellationToken);
 
             var dtos = boards.Select(MapBoardToDto).ToList();
@@ -56,6 +65,12 @@ public class BrainstormManagementService : BaseService, IBrainstormManagementSer
                 .Where(b => b.TopicId == topicId)
                 .Include(b => b.Topic)
                 .Include(b => b.BrainIdeas)
+                .ThenInclude(i => i.RoomUser)
+                .ThenInclude(ru => ru.ApplicationUser)
+                .Include(b => b.BrainIdeas)
+                .ThenInclude(i => i.Votes)
+                .ThenInclude(v => v.RoomUser)
+                .ThenInclude(ru => ru.ApplicationUser)
                 .ToListAsync(cancellationToken);
 
             var dtos = boards.Select(MapBoardToDto).ToList();
@@ -71,8 +86,12 @@ public class BrainstormManagementService : BaseService, IBrainstormManagementSer
                 .Where(b => b.Id == boardId)
                 .Include(b => b.Topic)
                 .Include(b => b.BrainIdeas)
+                .ThenInclude(i => i.RoomUser)
+                .ThenInclude(ru => ru.ApplicationUser)
+                .Include(b => b.BrainIdeas)
                 .ThenInclude(i => i.Votes)
-                .ThenInclude(v => v.ApplicationUser)
+                .ThenInclude(v => v.RoomUser)
+                .ThenInclude(ru => ru.ApplicationUser)
                 .FirstOrDefaultAsync(cancellationToken);
 
             if (board == null)
@@ -146,9 +165,11 @@ public class BrainstormManagementService : BaseService, IBrainstormManagementSer
         {
             var ideas = await _ideaRepository.Query()
                 .Where(i => i.BrainBoardId == boardId)
-                .Include(i => i.ApplicationUser)
+                .Include(i => i.RoomUser)
+                .ThenInclude(ru => ru.ApplicationUser)
                 .Include(i => i.Votes)
-                .ThenInclude(v => v.ApplicationUser)
+                .ThenInclude(v => v.RoomUser)
+                .ThenInclude(ru => ru.ApplicationUser)
                 .ToListAsync(cancellationToken);
 
             var dtos = ideas.Select(MapIdeaToDto).ToList();
@@ -162,9 +183,11 @@ public class BrainstormManagementService : BaseService, IBrainstormManagementSer
         {
             var idea = await _ideaRepository.Query()
                 .Where(i => i.Id == ideaId)
-                .Include(i => i.ApplicationUser)
+                .Include(i => i.RoomUser)
+                .ThenInclude(ru => ru.ApplicationUser)
                 .Include(i => i.Votes)
-                .ThenInclude(v => v.ApplicationUser)
+                .ThenInclude(v => v.RoomUser)
+                .ThenInclude(ru => ru.ApplicationUser)
                 .FirstOrDefaultAsync(cancellationToken);
 
             if (idea == null)
@@ -186,11 +209,15 @@ public class BrainstormManagementService : BaseService, IBrainstormManagementSer
             var positionTop = request.PositionTop ?? 24;
             var positionLeft = request.PositionLeft ?? 24;
 
+            var roomUser = await ResolveRoomUserByTopicAsync(board.TopicId, userId, cancellationToken);
+            if (roomUser == null)
+                return Result<BrainIdeaDto>.BadRequest("Room user not found");
+
             var idea = new BrainIdea
             {
                 BrainBoardId = board.Id,
                 TopicId = board.TopicId,
-                ApplicationUserId = userId,
+                RoomUserId = roomUser.Id,
                 Idea = request.Idea,
                 PositionTop = positionTop,
                 PositionLeft = positionLeft
@@ -198,6 +225,8 @@ public class BrainstormManagementService : BaseService, IBrainstormManagementSer
 
             await _ideaRepository.AddAsync(idea, cancellationToken);
             await _ideaRepository.SaveChangesAsync(cancellationToken);
+
+            idea.RoomUser = roomUser;
 
             var dto = MapIdeaToDto(idea);
             return Result<BrainIdeaDto>.Success(dto, 201);
@@ -244,14 +273,18 @@ public class BrainstormManagementService : BaseService, IBrainstormManagementSer
             if (idea == null)
                 return Result<BrainIdeaVoteDto>.NotFound("Idea not found");
 
+            var roomUser = await ResolveRoomUserByTopicAsync(idea.TopicId, userId, cancellationToken);
+            if (roomUser == null)
+                return Result<BrainIdeaVoteDto>.BadRequest("Room user not found");
+
             // Check if user already voted with this vote type
-            var existingVote = await _voteRepository.GetVoteAsync(ideaId, userId, request.VoteType, cancellationToken);
+            var existingVote = await _voteRepository.GetVoteAsync(ideaId, roomUser.Id, request.VoteType, cancellationToken);
             if (existingVote != null)
                 return Result<BrainIdeaVoteDto>.BadRequest("Already voted with this type");
 
             // Remove previous votes of other types from this user for this idea
             var previousVotes = await _voteRepository.Query()
-                .Where(v => v.BrainIdeaId == ideaId && v.ApplicationUserId == userId)
+                .Where(v => v.BrainIdeaId == ideaId && v.RoomUserId == roomUser.Id)
                 .ToListAsync(cancellationToken);
 
             foreach (var vote in previousVotes)
@@ -262,12 +295,14 @@ public class BrainstormManagementService : BaseService, IBrainstormManagementSer
             var newVote = new BrainIdeaVote
             {
                 BrainIdeaId = ideaId,
-                ApplicationUserId = userId,
+                RoomUserId = roomUser.Id,
                 VoteType = request.VoteType,
                 Value = request.Value
             };
 
             await _voteRepository.AddAsync(newVote, cancellationToken);
+
+            newVote.RoomUser = roomUser;
 
             var dto = MapVoteToDto(newVote);
             return Result<BrainIdeaVoteDto>.Success(dto, 201);
@@ -281,9 +316,19 @@ public class BrainstormManagementService : BaseService, IBrainstormManagementSer
             var vote = await _voteRepository.GetByIdAsync(voteId, cancellationToken);
             if (vote == null)
                 return Result.NotFound("Vote not found");
+            if (vote.BrainIdeaId != ideaId)
+                return Result.BadRequest("Vote does not belong to idea");
+
+            var idea = await _ideaRepository.GetByIdAsync(ideaId, cancellationToken);
+            if (idea == null)
+                return Result.NotFound("Idea not found");
+
+            var roomUser = await ResolveRoomUserByTopicAsync(idea.TopicId, userId, cancellationToken);
+            if (roomUser == null)
+                return Result.Unauthorized("Room user not found");
 
             // Verify ownership
-            if (vote.ApplicationUserId != userId)
+            if (vote.RoomUserId != roomUser.Id)
                 return Result.Unauthorized("You can only remove your own votes");
 
             await _voteRepository.DeleteAsync(vote, cancellationToken);
@@ -299,6 +344,31 @@ public class BrainstormManagementService : BaseService, IBrainstormManagementSer
             var dtos = votes.Select(MapVoteToDto).ToList();
             return Result<List<BrainIdeaVoteDto>>.Success(dtos);
         }, nameof(GetVotesByIdeaAsync));
+    }
+
+    private async Task<RoomUser?> ResolveRoomUserByTopicAsync(Guid topicId, Guid applicationUserId, CancellationToken cancellationToken)
+    {
+        var topic = await _topicRepository.GetByIdAsync(topicId, cancellationToken);
+        if (topic == null)
+            return null;
+
+        var existing = await _roomUserRepository.GetByRoomAndUserAsync(topic.RoomId, applicationUserId, cancellationToken);
+        if (existing != null)
+            return existing;
+
+        var roomUser = new RoomUser
+        {
+            ApplicationUserId = applicationUserId,
+            RoomId = topic.RoomId,
+            Name = RoomUserNameHelper.DefaultUserToken,
+            UseMainName = true,
+            UseMainIcon = true
+        };
+
+        await _roomUserRepository.AddAsync(roomUser, cancellationToken);
+        await _roomUserRepository.SaveChangesAsync(cancellationToken);
+
+        return await _roomUserRepository.GetByRoomAndUserAsync(topic.RoomId, applicationUserId, cancellationToken);
     }
 
     // Mapping methods
@@ -322,8 +392,8 @@ public class BrainstormManagementService : BaseService, IBrainstormManagementSer
             Id = idea.Id,
             BrainBoardId = idea.BrainBoardId,
             TopicId = idea.TopicId,
-            ApplicationUserId = idea.ApplicationUserId,
-            UserName = idea.ApplicationUser?.UserName,
+            RoomUserId = idea.RoomUserId,
+            UserName = RoomUserNameHelper.ResolveDisplayName(idea.RoomUser),
             Idea = idea.Idea,
             PositionTop = idea.PositionTop,
             PositionLeft = idea.PositionLeft,
@@ -337,8 +407,8 @@ public class BrainstormManagementService : BaseService, IBrainstormManagementSer
         {
             Id = vote.Id,
             BrainIdeaId = vote.BrainIdeaId,
-            ApplicationUserId = vote.ApplicationUserId,
-            UserName = vote.ApplicationUser?.UserName,
+            RoomUserId = vote.RoomUserId,
+            UserName = RoomUserNameHelper.ResolveDisplayName(vote.RoomUser),
             VoteType = vote.VoteType,
             Value = vote.Value
         };

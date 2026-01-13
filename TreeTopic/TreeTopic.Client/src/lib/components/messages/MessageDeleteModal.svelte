@@ -98,7 +98,7 @@
         variant="secondary"
         size="base"
         disabled={isLoading || !messageId}
-        on:click={copyMessageUrl}
+        onclick={copyMessageUrl}
       >
         Copy URL
       </Button>
@@ -108,7 +108,7 @@
         size="base"
         loading={isLoading}
         disabled={isLoading}
-        on:click={handleDelete}
+        onclick={handleDelete}
       >
         Delete
       </Button>
@@ -117,7 +117,7 @@
         variant="secondary"
         size="base"
         disabled={isLoading}
-        on:click={handleClose}
+        onclick={handleClose}
       >
         Cancel
       </Button>

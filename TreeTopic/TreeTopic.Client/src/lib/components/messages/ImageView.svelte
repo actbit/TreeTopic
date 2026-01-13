@@ -81,7 +81,7 @@
       <div class="grid grid-cols-2 gap-2 p-2">
         {#each imageGroups as { id, fileName, url }}
           <button
-            on:click={() => (selectedImage = selectedImage === id ? null : id)}
+            onclick={() => (selectedImage = selectedImage === id ? null : id)}
             class="aspect-square rounded border-2 overflow-hidden transition-all {selectedImage === id
               ? 'border-primary shadow-md'
               : 'border-border hover:border-primary'}"

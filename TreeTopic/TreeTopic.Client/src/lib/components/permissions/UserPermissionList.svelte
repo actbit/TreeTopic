@@ -101,7 +101,7 @@
             {#each Object.entries(permissionLabels) as [permission, { label, short }]}
               <button
                 type="button"
-                on:click={() => togglePermission(user.id, permission, user[permission])}
+                onclick={() => togglePermission(user.id, permission, user[permission])}
                 disabled={isLoading}
                 class="w-8 h-8 flex items-center justify-center rounded text-xs font-bold transition-all {user[permission]
                   ? 'bg-primary text-white'
@@ -114,7 +114,7 @@
 
             <button
               type="button"
-              on:click={() => removeUser(user.id)}
+              onclick={() => removeUser(user.id)}
               disabled={isLoading}
               class="px-2 py-1 text-xs text-danger hover:text-red-700 opacity-0 group-hover:opacity-100 transition-all disabled:opacity-50"
             >

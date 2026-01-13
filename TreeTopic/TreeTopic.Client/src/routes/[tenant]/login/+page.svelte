@@ -37,7 +37,7 @@
           Signing in to <strong>{tenant}</strong> workspace uses your organization's secure SSO.
         </p>
 
-        <button class="sso-button" on:click={handleOIDCLogin}>
+        <button class="sso-button" onclick={handleOIDCLogin}>
           Sign in with SSO
         </button>
       </div>

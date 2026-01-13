@@ -1,5 +1,6 @@
 <script lang="ts">
   import { brainstorm } from '$lib/stores/brainstorm';
+  import { auth } from '$lib/stores/auth';
   import BrainstormBoard from '$lib/components/brainstorming/BrainstormBoard.svelte';
   import LoadingSpinner from '$lib/components/common/LoadingSpinner.svelte';
   import Button from '$lib/components/common/Button.svelte';
@@ -74,6 +75,8 @@
       if (!tenant) {
         throw new Error('Tenant is required');
       }
+      api.configureApiClient(tenant);
+      await auth.fetchCurrentUser(tenant);
       const boardData = await api.get(`/${tenant}/api/Brainstorm/${resolvedBoardId}`);
       brainstorm.setCurrentBoard(boardData);
     } catch (err: unknown) {
@@ -99,7 +102,7 @@
   <!-- Header -->
   <header class="brainstorm-header">
     <div class="brainstorm-header__left">
-      <button on:click={goBack} class="brainstorm-back" title="Go back">
+      <button onclick={goBack} class="brainstorm-back" title="Go back">
         Back
       </button>
       <div>
@@ -109,10 +112,10 @@
     </div>
 
     <div class="brainstorm-header__actions">
-      <Button variant="secondary" size="small" on:click={loadBoard}>
+      <Button variant="secondary" size="small" onclick={loadBoard}>
         Refresh
       </Button>
-      <Button variant="secondary" size="small" on:click={goBack}>
+      <Button variant="secondary" size="small" onclick={goBack}>
         Close
       </Button>
     </div>
@@ -131,8 +134,8 @@
           <p class="text-text-light mb-5">{error}</p>
         </div>
         <div class="flex gap-3">
-          <Button variant="primary" on:click={loadBoard}>Retry</Button>
-          <Button variant="secondary" on:click={goBack}>Go Back</Button>
+          <Button variant="primary" onclick={loadBoard}>Retry</Button>
+          <Button variant="secondary" onclick={goBack}>Go Back</Button>
         </div>
       </div>
     {:else if $brainstorm.currentBoard}
@@ -140,7 +143,7 @@
     {:else}
       <div class="flex flex-col items-center justify-center h-full gap-4">
         <p class="text-text-light">Board not found</p>
-        <Button variant="secondary" on:click={goBack}>Go Back</Button>
+        <Button variant="secondary" onclick={goBack}>Go Back</Button>
       </div>
     {/if}
   </div>
