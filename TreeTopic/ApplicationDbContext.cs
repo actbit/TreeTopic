@@ -29,6 +29,8 @@ namespace TreeTopic
         public DbSet<BrainBoard> BrainBoards => Set<BrainBoard>();
         public DbSet<BrainIdea> BrainIdeas => Set<BrainIdea>();
         public DbSet<BrainIdeaVote> BrainIdeaVotes => Set<BrainIdeaVote>();
+        public DbSet<ShareItem> ShareItems => Set<ShareItem>();
+        public DbSet<ShareItemFile> ShareItemFiles => Set<ShareItemFile>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -58,6 +60,12 @@ namespace TreeTopic
                 .HasForeignKey(ru => ru.RoomId)
                 .OnDelete(DeleteBehavior.Cascade);
 
+            modelBuilder.Entity<Room>()
+                .HasMany<ShareItem>()
+                .WithOne(s => s.Room)
+                .HasForeignKey(s => s.RoomId)
+                .OnDelete(DeleteBehavior.Cascade);
+
             // Topic リレーション
             modelBuilder.Entity<Topic>()
                 .HasMany(t => t.ChildTopics)
@@ -77,11 +85,35 @@ namespace TreeTopic
                 .HasForeignKey(bi => bi.TopicId)
                 .OnDelete(DeleteBehavior.Cascade);
 
+            modelBuilder.Entity<Topic>()
+                .HasMany(t => t.BrainBoards)
+                .WithOne(bb => bb.Topic)
+                .HasForeignKey(bb => bb.TopicId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<Topic>()
+                .HasMany<ShareItem>()
+                .WithOne(s => s.Topic)
+                .HasForeignKey(s => s.TopicId)
+                .OnDelete(DeleteBehavior.SetNull);
+
             // BrainBoard リレーション
             modelBuilder.Entity<BrainBoard>()
                 .HasMany(bb => bb.BrainIdeas)
                 .WithOne(bi => bi.BrainBoard)
                 .HasForeignKey(bi => bi.BrainBoardId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<BrainBoard>()
+                .HasMany<ShareItem>()
+                .WithOne(s => s.BrainBoard)
+                .HasForeignKey(s => s.BrainBoardId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            modelBuilder.Entity<ShareItem>()
+                .HasMany<ShareItemFile>()
+                .WithOne(sif => sif.ShareItem)
+                .HasForeignKey(sif => sif.ShareItemId)
                 .OnDelete(DeleteBehavior.Cascade);
 
             // BrainIdea リレーション

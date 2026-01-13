@@ -1,9 +1,12 @@
 using System.Security.Claims;
-using System.Text.Json;
+using MaskedUUID.AspNetCore.Services;
 using MaskedUUID.AspNetCore.Types;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.StaticFiles;
+using Microsoft.EntityFrameworkCore;
+using TreeTopic.Models;
+using FileModel = TreeTopic.Models.File;
 
 namespace TreeTopic.Controllers;
 
@@ -12,16 +15,19 @@ namespace TreeTopic.Controllers;
 [Authorize]
 public class ShareController : ControllerBase
 {
+    private readonly ApplicationDbContext _db;
     private readonly IWebHostEnvironment _environment;
+    private readonly IMaskedUUIDService _maskedUuidService;
     private readonly FileExtensionContentTypeProvider _contentTypeProvider = new();
-    private readonly JsonSerializerOptions _jsonOptions = new(JsonSerializerDefaults.Web)
-    {
-        WriteIndented = true
-    };
 
-    public ShareController(IWebHostEnvironment environment)
+    public ShareController(
+        ApplicationDbContext db,
+        IWebHostEnvironment environment,
+        IMaskedUUIDService maskedUuidService)
     {
+        _db = db;
         _environment = environment;
+        _maskedUuidService = maskedUuidService;
     }
 
     private Guid CurrentUserId =>
@@ -36,59 +42,20 @@ public class ShareController : ControllerBase
     private string GetTenantIdentifier()
         => RouteData.Values["tenant"]?.ToString() ?? "default";
 
-    private string GetManifestDir(string tenant, string roomId)
-        => Path.Combine(_environment.ContentRootPath, ".share", tenant, roomId);
-
-    private string GetRoomShareDir(string tenant, string roomId)
+    private string GetShareItemFolder(string tenant, Guid shareItemId)
     {
         var webRoot = _environment.WebRootPath ?? Path.Combine(_environment.ContentRootPath, "wwwroot");
-        return Path.Combine(webRoot, "uploads", tenant, roomId, "share");
+        return Path.Combine(webRoot, "uploads", tenant, "share", shareItemId.ToString());
     }
 
-    private string GetManifestPath(string tenant, string roomId)
-        => Path.Combine(GetManifestDir(tenant, roomId), "share-manifest.json");
+    private string BuildShareFileUrl(string tenant, Guid shareItemId, string savedFileName)
+        => $"/uploads/{tenant}/share/{shareItemId}/{savedFileName}".Replace("\\", "/");
 
-    private sealed record ShareManifestItem(
-        string Id,
-        string RoomId,
-        string? TopicId,
-        string Kind,
-        string? BoardId,
-        string Title,
-        string FileName,
-        string SavedFileName,
-        string MimeType,
-        long Size,
-        string Url,
-        DateTime CreatedAt,
-        string CreatedBy,
-        string CreatedByName,
-        string? SourceId
-    );
-
-    private sealed record ShareItemDto(
-        string Id,
-        string RoomId,
-        string? TopicId,
-        string Kind,
-        string? BoardId,
-        string Title,
-        string FileName,
-        string MimeType,
-        long Size,
-        string Url,
-        DateTime CreatedAt,
-        string CreatedBy,
-        string CreatedByName,
-        string? SourceId
-    );
-
-    public sealed record CreateBrainstormShareRequest(
-        string RoomId,
-        string? TopicId,
-        string BoardId,
-        string? Title
-    );
+    private string BuildBrainstormUrl(string tenant, Guid boardId)
+    {
+        var masked = _maskedUuidService.EncodeSynchronous(boardId);
+        return $"/{tenant}/brainstorm/{masked}".Replace("\\", "/");
+    }
 
     private static string NormalizeKind(string? kind, string mimeType, string fileName)
     {
@@ -108,50 +75,62 @@ public class ShareController : ControllerBase
         return "document";
     }
 
-    private async Task<List<ShareManifestItem>> ReadManifestAsync(string tenant, string roomId, CancellationToken ct)
+    private sealed record ShareItemDto(
+        string Id,
+        string RoomId,
+        string? TopicId,
+        string Kind,
+        string? BoardId,
+        string Title,
+        string FileName,
+        string MimeType,
+        long Size,
+        string Url,
+        DateTime CreatedAt,
+        string CreatedBy,
+        string CreatedByName
+    );
+
+    public sealed record CreateBrainstormShareRequest(
+        MaskedGuid? TopicId,
+        MaskedGuid BoardId,
+        string? Title
+    );
+
+    private ShareItemDto ToDto(
+        ShareItem share,
+        string tenant,
+        (FileModel file, string url, long size)? currentFile)
     {
-        var path = GetManifestPath(tenant, roomId);
-        if (!System.IO.File.Exists(path))
-            return [];
+        var id = _maskedUuidService.EncodeSynchronous(share.Id);
+        var roomId = _maskedUuidService.EncodeSynchronous(share.RoomId);
+        var topicId = share.TopicId.HasValue ? _maskedUuidService.EncodeSynchronous(share.TopicId.Value) : null;
+        var boardId = share.BrainBoardId.HasValue ? _maskedUuidService.EncodeSynchronous(share.BrainBoardId.Value) : null;
 
-        await using var stream = System.IO.File.OpenRead(path);
-        var list = await JsonSerializer.DeserializeAsync<List<ShareManifestItem>>(stream, _jsonOptions, ct);
-        return list ?? [];
-    }
+        var fileName = currentFile?.file.FileName ?? string.Empty;
+        var mimeType = currentFile?.file.FileType ?? string.Empty;
+        var size = currentFile?.size ?? 0;
+        var url = currentFile?.url
+                  ?? (share.Kind == "brainstorm" && share.BrainBoardId.HasValue
+                      ? BuildBrainstormUrl(tenant, share.BrainBoardId.Value)
+                      : string.Empty);
 
-    private async Task WriteManifestAsync(string tenant, string roomId, List<ShareManifestItem> items, CancellationToken ct)
-    {
-        var dir = GetManifestDir(tenant, roomId);
-        Directory.CreateDirectory(dir);
-
-        var path = GetManifestPath(tenant, roomId);
-        await using var stream = System.IO.File.Create(path);
-        await JsonSerializer.SerializeAsync(stream, items, _jsonOptions, ct);
-    }
-
-    private ShareItemDto ToDto(ShareManifestItem item)
-        => new(
-            Id: item.Id,
-            RoomId: item.RoomId,
-            TopicId: item.TopicId,
-            Kind: item.Kind,
-            BoardId: item.BoardId,
-            Title: item.Title,
-            FileName: item.FileName,
-            MimeType: item.MimeType,
-            Size: item.Size,
-            Url: item.Url,
-            CreatedAt: item.CreatedAt,
-            CreatedBy: item.CreatedBy,
-            CreatedByName: item.CreatedByName,
-            SourceId: item.SourceId
+        return new ShareItemDto(
+            Id: id,
+            RoomId: roomId,
+            TopicId: topicId,
+            Kind: share.Kind,
+            BoardId: share.Kind == "brainstorm" ? boardId : null,
+            Title: share.Title,
+            FileName: fileName,
+            MimeType: mimeType,
+            Size: size,
+            Url: url,
+            CreatedAt: share.CreatedAt,
+            CreatedBy: _maskedUuidService.EncodeSynchronous(share.CreatedByUserId),
+            CreatedByName: share.CreatedByName
         );
-
-    private string BuildShareFileUrl(string tenant, string roomId, string savedFileName)
-        => $"/uploads/{tenant}/{roomId}/share/{savedFileName}".Replace("\\", "/");
-
-    private string BuildBrainstormUrl(string tenant, string boardId)
-        => $"/{tenant}/brainstorm/{boardId}".Replace("\\", "/");
+    }
 
     [HttpGet("room/{roomId}")]
     public async Task<IActionResult> GetByRoom(
@@ -161,24 +140,57 @@ public class ShareController : ControllerBase
         CancellationToken cancellationToken)
     {
         var tenant = GetTenantIdentifier();
-        var list = await ReadManifestAsync(tenant, roomId.ToString(), cancellationToken);
+        var roomGuid = (Guid)roomId;
+        var topicGuid = topicId.HasValue && (Guid)topicId.Value != Guid.Empty ? (Guid)topicId.Value : (Guid?)null;
+        var normalizedKind = string.IsNullOrWhiteSpace(kind) ? null : kind.Trim().ToLowerInvariant();
 
-        if (topicId.HasValue && (Guid)topicId.Value != Guid.Empty)
+        var shareQuery = _db.ShareItems.AsNoTracking().Where(s => s.RoomId == roomGuid);
+        if (topicGuid.HasValue)
+            shareQuery = shareQuery.Where(s => s.TopicId == topicGuid);
+        if (!string.IsNullOrWhiteSpace(normalizedKind))
+            shareQuery = shareQuery.Where(s => s.Kind == normalizedKind);
+
+        var shares = await shareQuery
+            .OrderByDescending(s => s.CreatedAt)
+            .ToListAsync(cancellationToken);
+
+        var shareIds = shares.Select(s => s.Id).ToList();
+
+        var currentLinks = await _db.ShareItemFiles.AsNoTracking()
+            .Where(x => shareIds.Contains(x.ShareItemId) && x.IsCurrent)
+            .ToListAsync(cancellationToken);
+
+        var fileIds = currentLinks.Select(x => x.FileId).Distinct().ToList();
+        var files = await _db.Files.AsNoTracking()
+            .Where(f => fileIds.Contains(f.Id))
+            .ToListAsync(cancellationToken);
+
+        var fileMap = files.ToDictionary(f => f.Id, f => f);
+        var linkMap = currentLinks.ToDictionary(l => l.ShareItemId, l => l);
+
+        var dtos = shares.Select(share =>
         {
-            var tid = topicId.Value.ToString();
-            list = list.Where(x => string.Equals(x.TopicId, tid, StringComparison.OrdinalIgnoreCase)).ToList();
-        }
+            if (linkMap.TryGetValue(share.Id, out var link) && fileMap.TryGetValue(link.FileId, out var file))
+            {
+                var dir = GetShareItemFolder(tenant, share.Id);
+                var path = Path.Combine(dir, file.SaveFileName);
+                long size = 0;
+                try
+                {
+                    if (System.IO.File.Exists(path))
+                        size = new FileInfo(path).Length;
+                }
+                catch
+                {
+                    size = 0;
+                }
 
-        if (!string.IsNullOrWhiteSpace(kind))
-        {
-            var k = kind.Trim().ToLowerInvariant();
-            list = list.Where(x => string.Equals(x.Kind, k, StringComparison.OrdinalIgnoreCase)).ToList();
-        }
+                var url = BuildShareFileUrl(tenant, share.Id, file.SaveFileName);
+                return ToDto(share, tenant, (file, url, size));
+            }
 
-        var dtos = list
-            .OrderByDescending(x => x.CreatedAt)
-            .Select(ToDto)
-            .ToList();
+            return ToDto(share, tenant, null);
+        }).ToList();
 
         return Ok(dtos);
     }
@@ -191,25 +203,18 @@ public class ShareController : ControllerBase
         [FromForm] MaskedGuid? topicId,
         [FromForm] string? kind,
         [FromForm] string? title,
-        [FromForm] string? sourceId,
+        [FromForm] MaskedGuid? shareId,
+        [FromForm] bool? updateShare,
         CancellationToken cancellationToken)
     {
         if (file is null || file.Length <= 0)
             return BadRequest(new { message = "File is required." });
 
         var tenant = GetTenantIdentifier();
-        var dir = GetRoomShareDir(tenant, roomId.ToString());
-        Directory.CreateDirectory(dir);
+        var roomGuid = (Guid)roomId;
+        var topicGuid = topicId.HasValue && (Guid)topicId.Value != Guid.Empty ? (Guid)topicId.Value : (Guid?)null;
 
         var originalFileName = Path.GetFileName(file.FileName);
-        var id = Guid.NewGuid();
-        var savedFileName = $"{id:N}_{originalFileName}";
-        var savePath = Path.Combine(dir, savedFileName);
-
-        await using (var stream = System.IO.File.Create(savePath))
-        {
-            await file.CopyToAsync(stream, cancellationToken);
-        }
 
         var mime = !string.IsNullOrWhiteSpace(file.ContentType)
             ? file.ContentType
@@ -221,33 +226,130 @@ public class ShareController : ControllerBase
         if (normalizedKind is not ("image" or "document"))
             normalizedKind = "document";
 
-        var createdAt = DateTime.UtcNow;
-        var topic = topicId.HasValue && (Guid)topicId.Value != Guid.Empty ? topicId.Value.ToString() : null;
-        var url = BuildShareFileUrl(tenant, roomId.ToString(), savedFileName);
+        var shouldUpdateShare = updateShare ?? true;
 
-        var item = new ShareManifestItem(
-            Id: id.ToString(),
-            RoomId: roomId.ToString(),
-            TopicId: topic,
-            Kind: normalizedKind,
-            BoardId: null,
-            Title: string.IsNullOrWhiteSpace(title) ? originalFileName : title.Trim(),
-            FileName: originalFileName,
-            SavedFileName: savedFileName,
-            MimeType: mime,
-            Size: file.Length,
-            Url: url,
-            CreatedAt: createdAt,
-            CreatedBy: CurrentUserId.ToString(),
-            CreatedByName: CurrentUserName,
-            SourceId: string.IsNullOrWhiteSpace(sourceId) ? null : sourceId.Trim()
-        );
+        ShareItem targetShare;
+        ShareItem? baseShare = null;
+        if (shareId.HasValue && (Guid)shareId.Value != Guid.Empty)
+        {
+            baseShare = await _db.ShareItems.FirstOrDefaultAsync(s => s.Id == (Guid)shareId.Value, cancellationToken);
+            if (baseShare == null)
+                return NotFound(new { message = "Share not found." });
 
-        var list = await ReadManifestAsync(tenant, roomId.ToString(), cancellationToken);
-        list.Add(item);
-        await WriteManifestAsync(tenant, roomId.ToString(), list, cancellationToken);
+            if (!string.Equals(baseShare.Kind, normalizedKind, StringComparison.OrdinalIgnoreCase))
+                return BadRequest(new { message = "Share kind mismatch." });
+        }
 
-        return Ok(ToDto(item));
+        if (baseShare != null && !shouldUpdateShare)
+        {
+            // Create a new share entry for the new version, copying metadata from the selected share.
+            targetShare = new ShareItem
+            {
+                RoomId = baseShare.RoomId,
+                TopicId = baseShare.TopicId,
+                Kind = baseShare.Kind,
+                Title = string.IsNullOrWhiteSpace(title) ? baseShare.Title : title.Trim(),
+                CreatedByUserId = CurrentUserId,
+                CreatedByName = CurrentUserName,
+                SourceMessageId = baseShare.SourceMessageId,
+                SourceFileId = baseShare.SourceFileId,
+                SourceShareItemId = baseShare.SourceShareItemId
+            };
+            _db.ShareItems.Add(targetShare);
+            await _db.SaveChangesAsync(cancellationToken);
+        }
+        else if (baseShare != null)
+        {
+            targetShare = baseShare;
+            if (!string.IsNullOrWhiteSpace(title))
+                targetShare.Title = title.Trim();
+            targetShare.UpdatedAt = DateTime.UtcNow;
+        }
+        else
+        {
+            targetShare = new ShareItem
+            {
+                RoomId = roomGuid,
+                TopicId = topicGuid,
+                Kind = normalizedKind,
+                Title = string.IsNullOrWhiteSpace(title) ? originalFileName : title.Trim(),
+                CreatedByUserId = CurrentUserId,
+                CreatedByName = CurrentUserName,
+            };
+            _db.ShareItems.Add(targetShare);
+            await _db.SaveChangesAsync(cancellationToken);
+        }
+
+        // Resolve current file for version chain (if any).
+        FileModel? currentFile = null;
+        if (baseShare != null)
+        {
+            var currentLink = await _db.ShareItemFiles
+                .Where(x => x.ShareItemId == baseShare.Id && x.IsCurrent)
+                .OrderByDescending(x => x.CreatedAt)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (currentLink != null)
+                currentFile = await _db.Files.FirstOrDefaultAsync(f => f.Id == currentLink.FileId, cancellationToken);
+        }
+
+        var fileId = Guid.CreateVersion7();
+        var savedFileName = $"{fileId:N}_{originalFileName}";
+
+        var shareDir = GetShareItemFolder(tenant, targetShare.Id);
+        Directory.CreateDirectory(shareDir);
+        var savePath = Path.Combine(shareDir, savedFileName);
+
+        await using (var stream = System.IO.File.Create(savePath))
+        {
+            await file.CopyToAsync(stream, cancellationToken);
+        }
+
+        var fileEntity = new FileModel
+        {
+            Id = fileId,
+            FileName = originalFileName,
+            SaveFileName = savedFileName,
+            FileType = mime,
+            MessageId = null,
+            SourceFileId = currentFile?.Id,
+            SourceFile = null,
+            IsLatast = true
+        };
+
+        if (currentFile != null)
+            currentFile.IsLatast = false;
+
+        _db.Files.Add(fileEntity);
+
+        if (shouldUpdateShare)
+        {
+            var existingCurrentLinks = await _db.ShareItemFiles
+                .Where(x => x.ShareItemId == targetShare.Id && x.IsCurrent)
+                .ToListAsync(cancellationToken);
+
+            foreach (var link in existingCurrentLinks)
+            {
+                link.IsCurrent = false;
+                link.UpdatedAt = DateTime.UtcNow;
+            }
+        }
+
+        var linkEntity = new ShareItemFile
+        {
+            ShareItemId = targetShare.Id,
+            FileId = fileEntity.Id,
+            ShareItem = null,
+            File = null,
+            IsCurrent = true
+        };
+        _db.ShareItemFiles.Add(linkEntity);
+
+        await _db.SaveChangesAsync(cancellationToken);
+
+        var url = BuildShareFileUrl(tenant, targetShare.Id, fileEntity.SaveFileName);
+        var dto = ToDto(targetShare, tenant, (fileEntity, url, file.Length));
+        return Ok(dto);
     }
 
     [HttpPost("room/{roomId}/brainstorm")]
@@ -256,76 +358,52 @@ public class ShareController : ControllerBase
         [FromBody] CreateBrainstormShareRequest request,
         CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(request.BoardId))
-            return BadRequest(new { message = "BoardId is required." });
-
-        var normalizedBoardId = request.BoardId.Trim();
-        if (string.Equals(normalizedBoardId, "undefined", StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(normalizedBoardId, "null", StringComparison.OrdinalIgnoreCase))
-        {
-            return BadRequest(new { message = "BoardId is invalid." });
-        }
-
         var tenant = GetTenantIdentifier();
-        var id = Guid.NewGuid();
-        var createdAt = DateTime.UtcNow;
 
-        var item = new ShareManifestItem(
-            Id: id.ToString(),
-            RoomId: roomId.ToString(),
-            TopicId: string.IsNullOrWhiteSpace(request.TopicId) ? null : request.TopicId.Trim(),
-            Kind: "brainstorm",
-            BoardId: normalizedBoardId,
-            Title: string.IsNullOrWhiteSpace(request.Title) ? "Brainstorm" : request.Title.Trim(),
-            FileName: string.Empty,
-            SavedFileName: string.Empty,
-            MimeType: string.Empty,
-            Size: 0,
-            Url: BuildBrainstormUrl(tenant, normalizedBoardId),
-            CreatedAt: createdAt,
-            CreatedBy: CurrentUserId.ToString(),
-            CreatedByName: CurrentUserName,
-            SourceId: null
-        );
+        var share = new ShareItem
+        {
+            RoomId = (Guid)roomId,
+            TopicId = request.TopicId.HasValue && (Guid)request.TopicId.Value != Guid.Empty ? (Guid)request.TopicId.Value : null,
+            Kind = "brainstorm",
+            BrainBoardId = (Guid)request.BoardId,
+            Title = string.IsNullOrWhiteSpace(request.Title) ? "Brainstorm" : request.Title.Trim(),
+            CreatedByUserId = CurrentUserId,
+            CreatedByName = CurrentUserName
+        };
 
-        var list = await ReadManifestAsync(tenant, roomId.ToString(), cancellationToken);
-        list.Add(item);
-        await WriteManifestAsync(tenant, roomId.ToString(), list, cancellationToken);
+        _db.ShareItems.Add(share);
+        await _db.SaveChangesAsync(cancellationToken);
 
-        return Ok(ToDto(item));
+        return Ok(ToDto(share, tenant, null));
     }
 
     [HttpDelete("room/{roomId}/{shareId}")]
     public async Task<IActionResult> DeleteShare(
         [FromRoute] MaskedGuid roomId,
-        [FromRoute] string shareId,
+        [FromRoute] MaskedGuid shareId,
         CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(shareId))
-            return BadRequest(new { message = "ShareId is required." });
-
-        var tenant = GetTenantIdentifier();
-        var list = await ReadManifestAsync(tenant, roomId.ToString(), cancellationToken);
-        var idx = list.FindIndex(x => string.Equals(x.Id, shareId, StringComparison.OrdinalIgnoreCase));
-        if (idx < 0)
+        var shareGuid = (Guid)shareId;
+        var share = await _db.ShareItems.FirstOrDefaultAsync(s => s.Id == shareGuid, cancellationToken);
+        if (share == null)
             return NotFound(new { message = "Share not found." });
 
-        var item = list[idx];
-        list.RemoveAt(idx);
-        await WriteManifestAsync(tenant, roomId.ToString(), list, cancellationToken);
+        if (share.RoomId != (Guid)roomId)
+            return NotFound(new { message = "Share not found." });
 
-        if (!string.IsNullOrWhiteSpace(item.SavedFileName))
+        _db.ShareItems.Remove(share);
+        await _db.SaveChangesAsync(cancellationToken);
+
+        try
         {
-            try
-            {
-                var primaryPath = Path.Combine(GetRoomShareDir(tenant, roomId.ToString()), item.SavedFileName);
-                if (System.IO.File.Exists(primaryPath))
-                    System.IO.File.Delete(primaryPath);
-            }
-            catch
-            {
-                // ignore
-            }
+            var tenant = GetTenantIdentifier();
+            var dir = GetShareItemFolder(tenant, shareGuid);
+            if (Directory.Exists(dir))
+                Directory.Delete(dir, recursive: true);
+        }
+        catch
+        {
+            // ignore
         }
 
         return NoContent();

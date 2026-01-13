@@ -117,9 +117,6 @@ export {
   editingIdeaId,
   getBoardById,
   currentBoardIdeas,
-  getBoardsByRoom,
-  activeBoards,
-  archivedBoards,
   getBoardIdeasCount,
 } from './brainstorm';
-export type { BrainstormBoard, Idea, VoteMark, BrainstormState } from './brainstorm';
+export type { BrainstormBoard, BrainIdea, BrainIdeaVote, BrainstormState } from './brainstorm';

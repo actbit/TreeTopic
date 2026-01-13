@@ -93,18 +93,6 @@ public class BrainstormManagementService : BaseService, IBrainstormManagementSer
             if (topic == null)
                 return Result<BrainstormBoardDto>.NotFound("Topic not found");
 
-            // Enforce "one board per topic" (DB unique index on TopicId).
-            // If a board already exists, return it instead of failing with a unique constraint violation.
-            var existing = await _boardRepository.Query()
-                .Include(b => b.Topic)
-                .Include(b => b.BrainIdeas)
-                .FirstOrDefaultAsync(b => b.TopicId == topicId, cancellationToken);
-            if (existing != null)
-            {
-                var existingDto = MapBoardToDto(existing);
-                return Result<BrainstormBoardDto>.Success(existingDto, 200);
-            }
-
             var board = new BrainBoard
             {
                 TopicId = topicId,
@@ -185,6 +173,35 @@ public class BrainstormManagementService : BaseService, IBrainstormManagementSer
             var dto = MapIdeaToDto(idea);
             return Result<BrainIdeaDto>.Success(dto);
         }, nameof(GetIdeaByIdAsync));
+    }
+
+    public async Task<Result<BrainIdeaDto>> CreateIdeaAsync(Guid boardId, CreateBrainIdeaRequest request, Guid userId, CancellationToken cancellationToken = default)
+    {
+        return await ExecuteAsync(async () =>
+        {
+            var board = await _boardRepository.GetByIdAsync(boardId, cancellationToken);
+            if (board == null)
+                return Result<BrainIdeaDto>.NotFound("Board not found");
+
+            var positionTop = request.PositionTop ?? 24;
+            var positionLeft = request.PositionLeft ?? 24;
+
+            var idea = new BrainIdea
+            {
+                BrainBoardId = board.Id,
+                TopicId = board.TopicId,
+                ApplicationUserId = userId,
+                Idea = request.Idea,
+                PositionTop = positionTop,
+                PositionLeft = positionLeft
+            };
+
+            await _ideaRepository.AddAsync(idea, cancellationToken);
+            await _ideaRepository.SaveChangesAsync(cancellationToken);
+
+            var dto = MapIdeaToDto(idea);
+            return Result<BrainIdeaDto>.Success(dto, 201);
+        }, nameof(CreateIdeaAsync));
     }
 
     public async Task<Result<BrainIdeaDto>> UpdateIdeaPositionAsync(Guid ideaId, UpdateBrainIdeaPositionRequest request, CancellationToken cancellationToken = default)

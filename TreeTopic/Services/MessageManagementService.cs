@@ -64,7 +64,18 @@ public class MessageManagementService : BaseService, IMessageManagementService
         return Path.Combine(webRoot, "uploads", GetTenantUploadsFolderName());
     }
 
-    private string BuildUploadUrl(string savedFileName)
+    private string GetMessageUploadsPath(Guid userId, Guid messageId)
+    {
+        return Path.Combine(GetUploadsRootPath(), "messages", userId.ToString(), messageId.ToString());
+    }
+
+    private string BuildMessageUploadUrl(Guid userId, Guid messageId, string savedFileName)
+    {
+        var folder = GetTenantUploadsFolderName();
+        return $"/uploads/{folder}/messages/{userId}/{messageId}/{savedFileName}".Replace("\\", "/");
+    }
+
+    private string BuildLegacyUploadUrl(string savedFileName)
     {
         var folder = GetTenantUploadsFolderName();
         return $"/uploads/{folder}/{savedFileName}".Replace("\\", "/");
@@ -220,12 +231,8 @@ public class MessageManagementService : BaseService, IMessageManagementService
     {
         try
         {
-            var uploadPath = GetUploadsRootPath();
-
-            if (!Directory.Exists(uploadPath))
-            {
-                Directory.CreateDirectory(uploadPath);
-            }
+            var uploadPath = GetMessageUploadsPath(message.ApplicationUserId, message.Id);
+            Directory.CreateDirectory(uploadPath);
 
             foreach (var file in files)
             {
@@ -265,8 +272,6 @@ public class MessageManagementService : BaseService, IMessageManagementService
 
     private MessageDto MapToDto(Message message)
     {
-        var uploadsRoot = GetUploadsRootPath();
-
         return new MessageDto
         {
             Id = message.Id,
@@ -280,12 +285,15 @@ public class MessageManagementService : BaseService, IMessageManagementService
             UpdatedAt = message.UpdatedAt,
             Files = message.Files?.Select(f =>
             {
-                var path = Path.Combine(uploadsRoot, f.SaveFileName);
+                var newPath = Path.Combine(GetMessageUploadsPath(message.ApplicationUserId, message.Id), f.SaveFileName);
+                var legacyPath = Path.Combine(GetUploadsRootPath(), f.SaveFileName);
                 long size = 0;
                 try
                 {
-                    if (System.IO.File.Exists(path))
-                        size = new FileInfo(path).Length;
+                    if (System.IO.File.Exists(newPath))
+                        size = new FileInfo(newPath).Length;
+                    else if (System.IO.File.Exists(legacyPath))
+                        size = new FileInfo(legacyPath).Length;
                 }
                 catch
                 {
@@ -304,7 +312,9 @@ public class MessageManagementService : BaseService, IMessageManagementService
                     CreatedAt = f.CreatedAt,
                     UpdatedAt = f.UpdatedAt,
                     Size = size,
-                    Url = BuildUploadUrl(f.SaveFileName)
+                    Url = System.IO.File.Exists(newPath)
+                        ? BuildMessageUploadUrl(message.ApplicationUserId, message.Id, f.SaveFileName)
+                        : BuildLegacyUploadUrl(f.SaveFileName)
                 };
             }).ToList()
         };

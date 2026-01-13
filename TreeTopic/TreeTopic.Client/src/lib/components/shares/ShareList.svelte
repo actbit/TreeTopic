@@ -115,6 +115,15 @@
     }
   }
 
+  function buildBrainstormLink(url: string | null | undefined, boardId: string | null | undefined) {
+    if (url) return url;
+    if (!boardId || boardId === 'undefined' || boardId === 'null') {
+      ui.addNotification({ type: 'error', message: 'Brainstorm board ID is missing' });
+      return '';
+    }
+    return `/${api.getCurrentTenant()}/brainstorm/${boardId}`;
+  }
+
   function openMenuForShare(s: any, e: MouseEvent) {
     e.preventDefault();
     e.stopPropagation();
@@ -139,7 +148,7 @@
         id: 'copy',
         label: 'Copy link',
         icon: '?',
-        action: () => copyLink(s.url || `/${api.getCurrentTenant()}/brainstorm/${s.boardId}`),
+        action: () => copyLink(buildBrainstormLink(s.url, s.boardId)),
       });
       items.push({ id: 'div', label: '', divider: true, action: () => {} });
       items.push({ id: 'delete', label: 'Delete', icon: '??', isDangerous: true, action: () => deleteShare(s.id) });
@@ -475,4 +484,3 @@
     white-space: nowrap;
   }
 </style>
-

@@ -63,6 +63,17 @@ public class BrainIdeaDto : BaseDto
     public List<BrainIdeaVoteDto>? Votes { get; set; }
 }
 
+public class CreateBrainIdeaRequest
+{
+    [Required]
+    [StringLength(1000)]
+    public string Idea { get; set; } = string.Empty;
+
+    public double? PositionTop { get; set; }
+
+    public double? PositionLeft { get; set; }
+}
+
 public class UpdateBrainIdeaPositionRequest
 {
     [Required]

@@ -17,7 +17,6 @@ export interface ShareItem {
   createdAt: Date;
   createdBy: string;
   createdByName: string;
-  sourceId?: string | null;
 }
 
 export interface SharesState {
@@ -45,7 +44,6 @@ function normalizeShare(raw: any): ShareItem {
     createdAt: createdAt ? new Date(createdAt) : new Date(),
     createdBy: raw?.createdBy ?? raw?.CreatedBy ?? '',
     createdByName: raw?.createdByName ?? raw?.CreatedByName ?? '',
-    sourceId: raw?.sourceId ?? raw?.SourceId ?? null,
   };
 }
 
@@ -103,4 +101,3 @@ export async function loadShares(params: { tenant: string; roomId: string; topic
 export function denormalizeShareForAdd(raw: any): ShareItem {
   return normalizeShare(raw);
 }
-

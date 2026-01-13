@@ -4,7 +4,6 @@
   import Input from '../common/Input.svelte';
   import ErrorMessage from '../common/ErrorMessage.svelte';
   import { ui, activeModals } from '$lib/stores/ui';
-  import { currentRoom } from '$lib/stores/rooms';
   import { selectedTopic } from '$lib/stores/topics';
   import { api } from '$lib/api/client';
   import { isRequired } from '$lib/utils/validation';
@@ -31,8 +30,8 @@
       return;
     }
 
-    if (!$currentRoom) {
-      error = 'Please select a room first';
+    if (!$selectedTopic?.id) {
+      error = 'Please select a topic first';
       return;
     }
 
@@ -41,8 +40,7 @@
     try {
       const tenant = api.getCurrentTenant();
       await api.post(`/${tenant}/api/brainstorm`, {
-        roomId: $currentRoom.id,
-        topicId: $selectedTopic?.id,
+        topicId: $selectedTopic.id,
         title: title.trim(),
         description: description.trim(),
       });

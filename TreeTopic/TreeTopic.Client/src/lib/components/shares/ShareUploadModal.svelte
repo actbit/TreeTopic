@@ -6,7 +6,7 @@
   import { ui, activeModals } from '$lib/stores/ui';
   import { currentRoom } from '$lib/stores/rooms';
   import { selectedTopic } from '$lib/stores/topics';
-  import { shares, denormalizeShareForAdd, loadShares } from '$lib/stores/shares';
+  import { shares, shareItems, denormalizeShareForAdd, loadShares } from '$lib/stores/shares';
   import { api } from '$lib/api/client';
   import { get } from 'svelte/store';
 
@@ -21,6 +21,18 @@
   let isLoading = $state(false);
   let error = $state<string | null>(null);
   let scope = $state<'room' | 'topic'>('topic');
+
+  let fileTarget = $state<'new' | 'existing'>('new');
+  let existingShareId = $state('');
+  let updateExistingShare = $state(true);
+
+  let boardTopicId = $state('');
+  let roomTopics = $state<Array<{ id: string; title: string }>>([]);
+  let roomTopicsLoading = $state(false);
+  let roomTopicsError = $state<string | null>(null);
+  let roomTopicsLoadToken = $state(0);
+  let roomTopicsLastLoadKey = $state('');
+
   let brainstormBoards = $state<Array<{ id: string; title: string; topicId: string }>>([]);
   let brainstormSelectedBoardId = $state('');
   let brainstormBoardsLoading = $state(false);
@@ -39,6 +51,15 @@
       isLoading = false;
       file = null;
       title = '';
+      fileTarget = 'new';
+      existingShareId = '';
+      updateExistingShare = true;
+      boardTopicId = $selectedTopic?.id ?? '';
+      roomTopics = [];
+      roomTopicsLoading = false;
+      roomTopicsError = null;
+      roomTopicsLoadToken = 0;
+      roomTopicsLastLoadKey = '';
       brainstormBoards = [];
       brainstormSelectedBoardId = '';
       brainstormBoardsLoading = false;
@@ -65,12 +86,25 @@
     if (kind !== 'brainstorm') return;
 
     const tenant = api.getCurrentTenant();
-    const topicId = $selectedTopic?.id ?? '';
+    const topicId = $selectedTopic?.id ?? boardTopicId ?? '';
     const key = `${tenant}:${topicId}`;
     if (key === brainstormBoardsLastLoadKey) return;
     brainstormBoardsLastLoadKey = key;
 
     void loadBrainstormBoards();
+  });
+
+  $effect(() => {
+    if (!isOpen) return;
+    if (kind !== 'brainstorm') return;
+    if (!$currentRoom) return;
+
+    const tenant = api.getCurrentTenant();
+    const key = `${tenant}:${$currentRoom.id}`;
+    if (key === roomTopicsLastLoadKey) return;
+    roomTopicsLastLoadKey = key;
+
+    void loadRoomTopics();
   });
 
   function handleClose() {
@@ -89,7 +123,7 @@
 
     try {
       const tenant = api.getCurrentTenant();
-      const topicId = $selectedTopic?.id ?? null;
+      const topicId = $selectedTopic?.id ?? boardTopicId ?? null;
 
       const raw = topicId
         ? await api.get<any[]>(`/${tenant}/api/Brainstorm/topic/${topicId}`)
@@ -119,6 +153,40 @@
     }
   }
 
+  async function loadRoomTopics() {
+    const token = ++roomTopicsLoadToken;
+    roomTopicsError = null;
+    roomTopicsLoading = true;
+
+    try {
+      const tenant = api.getCurrentTenant();
+      const raw = await api.get<any[]>(`/${tenant}/api/Topic/room/${$currentRoom.id}`);
+      const list = Array.isArray(raw) ? raw : [];
+
+      const normalized = list
+        .map((t) => ({
+          id: t?.id ?? t?.Id ?? '',
+          title: t?.title ?? t?.Title ?? '(untitled)',
+        }))
+        .filter((t) => t.id);
+
+      if (token !== roomTopicsLoadToken) return;
+
+      roomTopics = normalized;
+      if (!$selectedTopic?.id && !boardTopicId && roomTopics.length > 0) {
+        boardTopicId = roomTopics[0].id;
+        brainstormBoardsLastLoadKey = '';
+        void loadBrainstormBoards();
+      }
+    } catch (err: unknown) {
+      if (token !== roomTopicsLoadToken) return;
+      roomTopicsError = err instanceof Error ? err.message : 'Failed to load topics';
+    } finally {
+      if (token !== roomTopicsLoadToken) return;
+      roomTopicsLoading = false;
+    }
+  }
+
   async function createBoard() {
     newBoardError = null;
 
@@ -127,7 +195,12 @@
       return;
     }
 
-    if (!$selectedTopic?.id) {
+    if (!$selectedTopic?.id && !boardTopicId) {
+      await loadRoomTopics();
+    }
+
+    const topicIdForBoard = $selectedTopic?.id ?? boardTopicId;
+    if (!topicIdForBoard) {
       newBoardError = 'Please select a topic first (boards are created under a topic)';
       return;
     }
@@ -141,7 +214,7 @@
     try {
       const tenant = api.getCurrentTenant();
       const created = await api.post<any>(`/${tenant}/api/brainstorm`, {
-        topicId: $selectedTopic.id,
+        topicId: topicIdForBoard,
         title: newBoardTitle.trim(),
         description: newBoardDescription.trim(),
       });
@@ -213,11 +286,20 @@
         return;
       }
 
+      if (fileTarget === 'existing' && !existingShareId) {
+        error = 'Please select an existing share';
+        return;
+      }
+
       const form = new FormData();
       form.append('file', file);
       if (topicId) form.append('topicId', topicId);
       form.append('kind', kind);
       if (title.trim()) form.append('title', title.trim());
+      if (fileTarget === 'existing' && existingShareId) {
+        form.append('shareId', existingShareId);
+        form.append('updateShare', updateExistingShare ? 'true' : 'false');
+      }
 
       const created = await api.post<any>(`/${tenant}/api/Share/room/${$currentRoom.id}`, form);
       shares.addShare(denormalizeShareForAdd(created));
@@ -326,6 +408,45 @@
             {#if newBoardError}
               <ErrorMessage message={newBoardError} onDismiss={() => (newBoardError = null)} />
             {/if}
+
+            {#if !$selectedTopic}
+              <div class="spacing-sm">
+                <label class="text-small text-light">Topic</label>
+                {#if roomTopicsLoading}
+                  <div class="text-small text-light">Loading topics...</div>
+                {:else if roomTopicsError}
+                  <div class="text-small text-light">{roomTopicsError}</div>
+                {:else}
+                  {#if roomTopics.length === 0}
+                    <div class="text-small text-light">No topics in this room. Create a topic first.</div>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="small"
+                      disabled={isLoading || isCreatingBoard}
+                      on:click={() => ui.openModal({ id: 'topic-create', title: 'Create Topic', type: 'custom' })}
+                    >
+                      Create topic
+                    </Button>
+                  {/if}
+                  <select
+                    class="select"
+                    bind:value={boardTopicId}
+                    disabled={isLoading || isCreatingBoard || roomTopicsLoading}
+                    on:change={() => {
+                      brainstormBoardsLastLoadKey = '';
+                      void loadBrainstormBoards();
+                    }}
+                  >
+                    <option value="">Select a topic</option>
+                    {#each roomTopics as t (t.id)}
+                      <option value={t.id}>{t.title}</option>
+                    {/each}
+                  </select>
+                {/if}
+              </div>
+            {/if}
+
             <Input
               label="Board title"
               type="text"
@@ -359,9 +480,9 @@
                   size="small"
                   disabled={isLoading || isCreatingBoard}
                   on:click={() => {
-                    if (brainstormSelectedBoardId) {
-                      window.open(`/${api.getCurrentTenant()}/brainstorm/${brainstormSelectedBoardId}`, '_blank');
-                    }
+                  if (brainstormSelectedBoardId && brainstormSelectedBoardId !== 'undefined' && brainstormSelectedBoardId !== 'null') {
+                    window.open(`/${api.getCurrentTenant()}/brainstorm/${brainstormSelectedBoardId}`, '_blank');
+                  }
                   }}
                 >
                   Open
@@ -373,6 +494,44 @@
         </details>
       </div>
     {:else}
+      <div class="spacing-sm">
+        <label class="text-small text-light">Target</label>
+        <select
+          class="select"
+          bind:value={fileTarget}
+          disabled={isLoading}
+          on:change={() => {
+            if (fileTarget === 'new') {
+              existingShareId = '';
+              updateExistingShare = true;
+            }
+          }}
+        >
+          <option value="new">Create new shared item</option>
+          <option value="existing">Use an existing shared item</option>
+        </select>
+
+        {#if fileTarget === 'existing'}
+          <div class="spacing-sm padding-top-sm">
+            <label class="text-small text-light">Existing share</label>
+            <select class="select" bind:value={existingShareId} disabled={isLoading}>
+              <option value="">Select...</option>
+              {#each $shareItems.filter((x) => x.kind === kind) as item (item.id)}
+                <option value={item.id}>{item.title || item.fileName || item.id}</option>
+              {/each}
+            </select>
+
+            <label class="text-small text-light">
+              <input type="checkbox" bind:checked={updateExistingShare} disabled={isLoading} />
+              Update existing share to latest version
+            </label>
+            <div class="text-small text-light">
+              If unchecked, a new share entry is created for this upload (the old one stays as-is).
+            </div>
+          </div>
+        {/if}
+      </div>
+
       <input
         type="file"
         bind:this={fileInput}

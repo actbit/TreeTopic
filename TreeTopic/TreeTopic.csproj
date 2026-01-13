@@ -46,16 +46,7 @@
 	<ItemGroup>
 		<WwwrootFiles Include="wwwroot\**\*" />
 	</ItemGroup>
-	
-	  <ItemGroup>
-    <Content Update="wwwroot\**" CopyToPublishDirectory="Never" />
-    <Content Update="ClientApp\**" CopyToPublishDirectory="Never" />
-  </ItemGroup>
 
-  <Target Name="CopyPublish" AfterTargets="Publish">
-    <Message Text="## Copy Vite build output" Importance="high" />
-    <Exec Command="xcopy /f /s /e /y $(ProjectDir)wwwroot\* $(PublishDir)\wwwroot" />
-  </Target>
 	<ItemGroup>
 		<Content Update="wwwroot\**" CopyToPublishDirectory="Never" />
 		<Content Update="ClientApp\**" CopyToPublishDirectory="Never" />
