@@ -71,7 +71,7 @@
   <div class="panel-header">
     <h3 class="panel-title">Topics</h3>
     <button
-      on:click={openCreateTopicModal}
+      onclick={openCreateTopicModal}
       class="button clickable topic-create-button"
       title="Create topic"
     >
@@ -81,9 +81,11 @@
 
   <div
     class="panel-body overflow-y-auto overflow-x-auto topic-panel-body {isRootDragOver ? 'topic-root-drop' : ''}"
-    on:dragover={handleRootDragOver}
-    on:dragleave={handleRootDragLeave}
-    on:drop={handleRootDrop}
+    ondragover={handleRootDragOver}
+    ondragleave={handleRootDragLeave}
+    ondrop={handleRootDrop}
+    role="region"
+    aria-label="Topic tree"
   >
     <div class="list topic-tree-list">
       {#each $topicTree as node (node.id)}
@@ -94,7 +96,7 @@
         <div class="text-center text-light topic-tree-empty">
           <p>No topics yet</p>
           <button
-            on:click={openCreateTopicModal}
+            onclick={openCreateTopicModal}
             class="button button-primary button-small margin-top-sm"
           >
             Create First Topic
@@ -115,6 +117,7 @@
   .topic-panel-body {
     flex: 1;
     min-height: 0;
+    padding: var(--spacing-md) var(--spacing-md) var(--spacing-md) 0;
   }
 
   .topic-tree-list {

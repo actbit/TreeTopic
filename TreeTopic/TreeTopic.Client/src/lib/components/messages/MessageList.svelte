@@ -4,17 +4,35 @@
   import { messageList, messagesLoading } from '$lib/stores/messages';
   import { selectedTopic } from '$lib/stores/topics';
   import { onMount } from 'svelte';
+  import { page } from '$app/stores';
+  import { getMessageAnchorIdFromHash, scrollToMessageAnchor } from '$lib/utils/messageAnchor';
 
   let messagesContainer: HTMLDivElement | undefined = $state();
+  let didScrollToAnchor = $state(false);
+
+  let targetAnchorId = $derived.by(() => getMessageAnchorIdFromHash($page.url.hash));
   let topicMessages = $derived.by(() => {
     return $selectedTopic
       ? $messageList.filter((m) => m.topicId === $selectedTopic.id)
       : [];
   });
 
+  function tryScrollToTarget(behavior: ScrollBehavior = 'auto'): boolean {
+    if (!targetAnchorId) return false;
+    if (didScrollToAnchor) return true;
+    const ok = scrollToMessageAnchor(targetAnchorId, behavior);
+    if (ok) didScrollToAnchor = true;
+    return ok;
+  }
+
   onMount(() => {
     // Auto-scroll to bottom when new messages arrive
     const scrollToBottom = () => {
+      // If URL targets a message, don't force scroll-to-bottom (it fights deep links).
+      if (targetAnchorId) {
+        tryScrollToTarget('auto');
+        return;
+      }
       if (messagesContainer) {
         setTimeout(() => {
           messagesContainer?.scrollTo(0, messagesContainer.scrollHeight);
@@ -23,7 +41,7 @@
     };
 
     // Initial scroll
-    scrollToBottom();
+    if (!tryScrollToTarget('auto')) scrollToBottom();
 
     // Watch for changes
     const observer = new MutationObserver(scrollToBottom);
@@ -35,6 +53,16 @@
     }
 
     return () => observer.disconnect();
+  });
+
+  // If user navigates back/forward to a different hash, allow re-scrolling to the new target.
+  $effect(() => {
+    didScrollToAnchor = false;
+    if (!targetAnchorId) return;
+    if ($messagesLoading) return;
+    setTimeout(() => {
+      tryScrollToTarget('auto');
+    }, 0);
   });
 </script>
 

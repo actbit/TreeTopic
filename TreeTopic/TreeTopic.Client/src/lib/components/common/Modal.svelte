@@ -5,7 +5,7 @@
     isOpen?: boolean;
     title?: string;
     onClose?: () => void;
-    size?: 'small' | 'medium' | 'large';
+    size?: 'small' | 'medium' | 'large' | 'xlarge';
     closeButton?: boolean;
     children?: any;
   }
@@ -50,8 +50,8 @@
 <dialog
   bind:this={dialogElement}
   class="modal"
-  on:close={handleClose}
-  on:click={handleBackdropClick}
+  onclose={handleClose}
+  onclick={handleBackdropClick}
 >
   <div class="modal-content modal-{size}">
     {#if title || closeButton}
@@ -62,7 +62,7 @@
 
         {#if closeButton}
           <button
-            on:click={handleClose}
+            onclick={handleClose}
             class="modal-close"
             aria-label="Close modal"
           >
@@ -119,6 +119,10 @@
     max-width: 672px;
   }
 
+  .modal-xlarge {
+    max-width: 1200px;
+  }
+
   .modal-header {
     display: flex;
     align-items: center;
@@ -154,6 +158,11 @@
     padding: 16px 24px;
     max-height: calc(100vh - 200px);
     overflow-y: auto;
+  }
+
+  .modal-xlarge .modal-body {
+    max-height: calc(100vh - 180px);
+    padding: 0;
   }
 
   @keyframes modalSlideIn {

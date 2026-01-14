@@ -30,7 +30,7 @@
   {#if dismissable && onDismiss}
     <button
       type="button"
-      on:click={onDismiss}
+      onclick={onDismiss}
       class="error-message-dismiss"
       aria-label="Dismiss message"
     >

@@ -6,6 +6,7 @@ using System.Security.Claims;
 using TreeTopic.Common;
 using TreeTopic.Dtos;
 using TreeTopic.Services;
+using TreeTopic.Repositories;
 
 namespace TreeTopic.Controllers;
 
@@ -16,14 +17,17 @@ public class FileController : ControllerBase
 {
     private readonly IFileManagementService _fileManagementService;
     private readonly IWebHostEnvironment _environment;
+    private readonly IRoomUserRepository _roomUserRepository;
     private readonly FileExtensionContentTypeProvider _contentTypeProvider = new();
 
     public FileController(
         IFileManagementService fileManagementService,
-        IWebHostEnvironment environment)
+        IWebHostEnvironment environment,
+        IRoomUserRepository roomUserRepository)
     {
         _fileManagementService = fileManagementService;
         _environment = environment;
+        _roomUserRepository = roomUserRepository;
     }
 
     private Guid CurrentUserId =>
@@ -34,6 +38,15 @@ public class FileController : ControllerBase
         ?? User.FindFirst(ClaimTypes.Email)?.Value
         ?? User.Identity?.Name
         ?? "Unknown";
+
+    private async Task<string> GetRoomUserDisplayNameAsync(Guid roomId, CancellationToken cancellationToken)
+    {
+        var roomUser = await _roomUserRepository.GetByRoomAndUserAsync(roomId, CurrentUserId, cancellationToken);
+        if (roomUser == null)
+            return CurrentUserName;
+
+        return RoomUserNameHelper.ResolveDisplayName(roomUser);
+    }
 
     private static string GetFileType(string fileName, string contentType)
     {
@@ -100,7 +113,7 @@ public class FileController : ControllerBase
     public IActionResult GetByRoom([FromRoute] MaskedGuid roomId)
     {
         var tenant = RouteData.Values["tenant"]?.ToString() ?? "default";
-        var webRoot = _environment.WebRootPath ?? Path.Combine(_environment.ContentRootPath, "wwwroot");
+        var webRoot = _environment.ContentRootPath;
         var roomDir = Path.Combine(webRoot, "uploads", tenant, roomId.ToString());
 
         if (!Directory.Exists(roomDir))
@@ -161,7 +174,7 @@ public class FileController : ControllerBase
             return BadRequest(new { message = "File is required." });
 
         var tenant = RouteData.Values["tenant"]?.ToString() ?? "default";
-        var webRoot = _environment.WebRootPath ?? Path.Combine(_environment.ContentRootPath, "wwwroot");
+        var webRoot = _environment.ContentRootPath;
         var roomDir = Path.Combine(webRoot, "uploads", tenant, roomId.ToString());
         Directory.CreateDirectory(roomDir);
 
@@ -183,6 +196,7 @@ public class FileController : ControllerBase
 
         var url = $"/uploads/{tenant}/{roomId}/{savedFileName}".Replace("\\", "/");
 
+        var roomUserName = await GetRoomUserDisplayNameAsync((Guid)roomId, cancellationToken);
         var dto = new RoomMaterialDto(
             Id: id.ToString(),
             RoomId: roomId.ToString(),
@@ -195,7 +209,7 @@ public class FileController : ControllerBase
             FileType: GetFileType(originalFileName, mime),
             UploadedAt: DateTime.UtcNow,
             UploadedBy: CurrentUserId.ToString(),
-            UploadedByName: CurrentUserName,
+            UploadedByName: roomUserName,
             Versions: Array.Empty<object>(),
             IsArchived: false
         );

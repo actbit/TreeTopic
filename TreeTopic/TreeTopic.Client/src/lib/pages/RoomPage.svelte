@@ -4,6 +4,7 @@
   import { goto } from '$app/navigation';
   import { auth, isAuthenticated } from '$lib/stores/auth';
   import { currentRoom, setRooms, setCurrentRoom } from '$lib/stores/rooms';
+  import { rooms } from '$lib/stores/rooms';
   import {
     selectedTopic,
     setSelectedTopic,
@@ -20,6 +21,7 @@
   import RoomSelector from '$lib/components/rooms/RoomSelector.svelte';
   import RoomCreateModal from '$lib/components/rooms/RoomCreateModal.svelte';
   import RoomSettingsModal from '$lib/components/rooms/RoomSettingsModal.svelte';
+  import RoomUserJoinModal from '$lib/components/rooms/RoomUserJoinModal.svelte';
   import TopicTree from '$lib/components/topics/TopicTree.svelte';
   import TopicCreateModal from '$lib/components/topics/TopicCreateModal.svelte';
   import TopicEditModal from '$lib/components/topics/TopicEditModal.svelte';
@@ -29,8 +31,10 @@
   import MessageEditModal from '$lib/components/messages/MessageEditModal.svelte';
   import MessageDeleteModal from '$lib/components/messages/MessageDeleteModal.svelte';
   import ViewModeSelector from '$lib/components/messages/ViewModeSelector.svelte';
-  import MaterialList from '$lib/components/files/MaterialList.svelte';
+  import ShareList from '$lib/components/shares/ShareList.svelte';
   import FileUploadModal from '$lib/components/files/FileUploadModal.svelte';
+  import PdfViewerModal from '$lib/components/documents/PdfViewerModal.svelte';
+  import ImageEditorModal from '$lib/components/images/ImageEditorModal.svelte';
   import { ui } from '$lib/stores/ui';
   import { api, getCurrentTenant } from '$lib/api/client';
 
@@ -40,10 +44,11 @@
   let loadRequestId = $state(0);
   let loadedRoomFilesId = $state<string | null>(null);
   let filesLoadRequestId = $state(0);
-  let suppressUrlSync = $state(false);
   let lastAppliedUrlTopicId = $state<string | null>(null);
+  let checkedRoomUserId = $state<string | null>(null);
 
-  let urlTopicId = $derived.by(() => $page.url.searchParams.get('topicId'));
+  let urlTopicId = $derived.by(() => ($page.params as any)?.topicId ?? null);
+  let legacyQueryTopicId = $derived.by(() => $page.url.searchParams.get('topicId'));
 
   function normalizeRoom(raw: any) {
     const id = raw?.id ?? raw?.Id ?? '';
@@ -134,11 +139,7 @@
   async function selectTopicFromUrl(tenant: string) {
     if (!$currentRoom) return;
     if (!urlTopicId) {
-      if ($selectedTopic) {
-        suppressUrlSync = true;
-        setSelectedTopic(null);
-        Promise.resolve().then(() => (suppressUrlSync = false));
-      }
+      if ($selectedTopic) setSelectedTopic(null);
       return;
     }
 
@@ -146,20 +147,14 @@
 
     const existing = $topicList.find((t) => t.id === urlTopicId) ?? null;
     if (existing) {
-      if (existing.roomId === $currentRoom.id) {
-        suppressUrlSync = true;
-        setSelectedTopic(existing);
-        Promise.resolve().then(() => (suppressUrlSync = false));
-      }
+      if (existing.roomId === $currentRoom.id) setSelectedTopic(existing);
       return;
     }
 
     try {
       const loaded = await ensureTopicPathLoaded(tenant, urlTopicId);
       if (loaded && loaded.roomId === $currentRoom.id) {
-        suppressUrlSync = true;
         setSelectedTopic(loaded);
-        Promise.resolve().then(() => (suppressUrlSync = false));
       }
     } catch {
       // ignore
@@ -171,11 +166,56 @@
     const createdAt = raw?.createdAt ?? raw?.CreatedAt ?? null;
     const updatedAt = raw?.updatedAt ?? raw?.UpdatedAt ?? null;
 
+    function getAttachmentKind(fileName: string, mimeType: string): 'image' | 'pdf' | 'document' | 'other' {
+      if (mimeType?.startsWith('image/')) return 'image';
+      const ext = (fileName?.split('.').pop() ?? '').toLowerCase();
+      if (ext === 'pdf') return 'pdf';
+      const docExts = new Set(['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'md', 'rtf', 'csv']);
+      if (docExts.has(ext)) return 'document';
+      return 'other';
+    }
+
+    const rawFiles = raw?.files ?? raw?.Files ?? [];
+    const attachments =
+      Array.isArray(rawFiles)
+        ? rawFiles.map((f: any) => {
+            const fid = f?.id ?? f?.Id ?? '';
+            const fileName = f?.fileName ?? f?.FileName ?? '';
+            const mimeType = f?.fileType ?? f?.FileType ?? 'application/octet-stream';
+            const size = f?.size ?? f?.Size ?? 0;
+            const url = f?.url ?? f?.Url ?? '';
+            const uploadedAt = f?.createdAt ?? f?.CreatedAt ?? null;
+            return {
+              id: fid,
+              fileName,
+              mimeType,
+              size,
+              url,
+              fileType: getAttachmentKind(fileName, mimeType),
+              uploadedAt: uploadedAt ? new Date(uploadedAt) : new Date(),
+              uploadedBy:
+                f?.uploadedBy ??
+                f?.UploadedBy ??
+                raw?.roomUserId ??
+                raw?.RoomUserId ??
+                raw?.applicationUserId ??
+                raw?.ApplicationUserId ??
+                '',
+            };
+          })
+        : [];
+
     return {
       id,
       topicId: raw?.topicId ?? raw?.TopicId ?? '',
       userId:
-        raw?.applicationUserId ?? raw?.ApplicationUserId ?? raw?.userId ?? raw?.UserId ?? '',
+        raw?.roomUserId ??
+        raw?.RoomUserId ??
+        raw?.applicationUserId ??
+        raw?.ApplicationUserId ??
+        raw?.userId ??
+        raw?.UserId ??
+        '',
       userName: raw?.userName ?? raw?.UserName ?? '',
       userDisplayName:
         raw?.userDisplayName ?? raw?.UserDisplayName ?? raw?.userName ?? raw?.UserName ?? '',
@@ -185,7 +225,7 @@
       replyToId: raw?.replyToId ?? raw?.ReplyToId ?? raw?.replyId ?? raw?.ReplyId ?? undefined,
       createdAt: createdAt ? new Date(createdAt) : new Date(),
       updatedAt: updatedAt ? new Date(updatedAt) : undefined,
-      attachments: [],
+      attachments,
       isOwner: false,
       canEdit: true,
       canDelete: true,
@@ -248,7 +288,8 @@
 
       if (initialRoom && initialRoom.id !== roomId) {
         const search = $page.url.search;
-        goto(`/${tenant}/room/${initialRoom.id}${search}`, {
+        const maybeTopic = urlTopicId ? `/topic/${urlTopicId}` : '';
+        goto(`/${tenant}/room/${initialRoom.id}${maybeTopic}${search}`, {
           replaceState: true,
           keepFocus: true,
           noScroll: true,
@@ -265,32 +306,22 @@
     loadTenantData();
   });
 
-  // Reflect selected topic in the URL (path segment) so it can be bookmarked/shared.
+  // Backward compatibility: convert old `?topicId=...` to the new page URL.
   $effect(() => {
-    if (!$currentRoom) return;
-    if (suppressUrlSync) return;
     const tenant = $page.params.tenant ?? getCurrentTenant();
-    if (!tenant) return;
+    const roomId = $page.params.roomId;
+    if (!tenant || !roomId) return;
+    if (urlTopicId) return;
+    if (!legacyQueryTopicId) return;
 
-    const roomId = $currentRoom.id;
-    const desiredTopicId = $selectedTopic?.id ?? null;
-
-    const currentRoomId = $page.params.roomId;
-    if (currentRoomId !== roomId) return;
-
-    const currentTopicId = $page.url.searchParams.get('topicId');
-    if (currentTopicId === desiredTopicId) return;
-
-    const next = new URL($page.url);
-    if (desiredTopicId) next.searchParams.set('topicId', desiredTopicId);
-    else next.searchParams.delete('topicId');
-
-    goto(`${next.pathname}${next.search}${next.hash}`, { replaceState: true, keepFocus: true, noScroll: true });
+    goto(`/${tenant}/room/${roomId}/topic/${legacyQueryTopicId}`, {
+      replaceState: true,
+      keepFocus: true,
+      noScroll: true,
+    });
   });
 
   // If URL changes (back/forward) reflect it into selected topic.
-  // Important: avoid depending on selectedTopic changes here, otherwise selection can get cleared
-  // before the URL-sync effect sets the query param.
   $effect(() => {
     const tenant = $page.params.tenant ?? getCurrentTenant();
     if (!tenant) return;
@@ -356,6 +387,44 @@
         setFiles([]);
       });
   });
+
+  $effect(() => {
+    if (!$currentRoom) {
+      checkedRoomUserId = null;
+      return;
+    }
+
+    // Only fetch if room ID changed
+    if (checkedRoomUserId === $currentRoom.id) return;
+    checkedRoomUserId = $currentRoom.id;
+
+    const tenant = $page.params.tenant ?? getCurrentTenant();
+    if (!tenant) return;
+
+    api.get<any>(`/${tenant}/api/RoomUsers/room/${$currentRoom.id}/me`)
+      .then((roomUserData: any) => {
+        if (roomUserData) {
+          const roomUser = {
+            id: roomUserData.id ?? roomUserData.Id ?? '',
+            displayName: roomUserData.displayName ?? roomUserData.DisplayName ?? '',
+            iconUrl: roomUserData.iconUrl ?? roomUserData.IconUrl,
+            useMainIcon: roomUserData.useMainIcon ?? roomUserData.UseMainIcon ?? false,
+          };
+          rooms.setCurrentRoomUser(roomUser);
+        }
+      })
+      .catch((err: unknown) => {
+        console.error('Failed to fetch RoomUser:', err);
+        if (err instanceof api.ApiError && err.status === 404) {
+          ui.openModal({
+            id: 'room-user-join',
+            title: 'Set your name',
+            type: 'custom',
+            data: { roomId: $currentRoom.id },
+          });
+        }
+      });
+  });
 </script>
 
 <svelte:head>
@@ -370,12 +439,12 @@
     </div>
   </div>
 {:else if $isAuthenticated}
-  <AppLayout subPanelTitle="Materials">
-    <svelte:fragment slot="headerContent">
+  <AppLayout subPanelTitle="Shared">
+    {#snippet headerContent()}
       <RoomSelector />
-    </svelte:fragment>
+    {/snippet}
 
-    <svelte:fragment slot="sidebarContent">
+    {#snippet sidebarContent()}
       {#if $currentRoom}
         <div class="panel-header">
           <h3 class="panel-title">Top</h3>
@@ -387,12 +456,12 @@
           <p class="text-sm">Select a room to view topics</p>
         </div>
       {/if}
-    </svelte:fragment>
+    {/snippet}
 
-    <svelte:fragment slot="mainContent">
+    {#snippet mainContent()}
       {#if $currentRoom && $selectedTopic}
         <div class="flex flex-col h-full">
-          <div class="border-b border-border p-4 space-y-3">
+          <div class="border-b border-border room-topic-header">
             <div>
               <h2 class="text-lg font-semibold text-text">{$selectedTopic.title}</h2>
               {#if $selectedTopic.description}
@@ -419,26 +488,29 @@
             <h2 class="text-2xl font-bold text-text mb-2">Welcome to TreeTopic</h2>
             <p class="text-text-secondary">Select a room to get started</p>
             <div class="mt-4">
-              <button class="button button-primary" on:click={() => ui.openModal({ id: 'room-create', title: 'Create Room', type: 'custom' })}>
+              <button class="button button-primary" onclick={() => ui.openModal({ id: 'room-create', title: 'Create Room', type: 'custom' })}>
                 Create your first room
               </button>
             </div>
           </div>
         </div>
       {/if}
-    </svelte:fragment>
+    {/snippet}
 
-    <svelte:fragment slot="subPanelContent">
-      <MaterialList />
-    </svelte:fragment>
+    {#snippet subPanelContent()}
+      <ShareList />
+    {/snippet}
   </AppLayout>
 
   <RoomCreateModal />
   <RoomSettingsModal />
+  <RoomUserJoinModal />
   <TopicCreateModal />
   <TopicEditModal />
   <TopicDeleteModal />
   <FileUploadModal />
+  <PdfViewerModal />
+  <ImageEditorModal />
   <MessageEditModal />
   <MessageDeleteModal />
 {:else}
@@ -452,9 +524,10 @@
       {/if}
       <button
         class="button button-secondary"
-        on:click={() => {
+        onclick={() => {
           const tenant = $page.params.tenant ?? getCurrentTenant();
-          window.location.href = `/${tenant}/login`;
+          const returnUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+          window.location.href = `/${tenant}/auth/login?returnUrl=${encodeURIComponent(returnUrl)}`;
         }}
       >
         Go to login
@@ -462,3 +535,15 @@
     </div>
   </div>
 {/if}
+
+<style>
+  .room-topic-header {
+    padding: var(--spacing-sm) var(--spacing-md);
+  }
+
+  @media (max-width: 768px) {
+    .room-topic-header {
+      padding: var(--spacing-sm);
+    }
+  }
+</style>

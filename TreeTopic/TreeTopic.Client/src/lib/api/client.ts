@@ -80,7 +80,18 @@ function buildReturnUrl(tenant: string): string {
   return tenant ? `/${tenant}/` : '/';
 }
 
+function inferTenantFromPathname(pathname: string): string {
+  const parts = pathname.split('/').filter(Boolean);
+  return parts[0] ?? '';
+}
+
+let isRedirectingToLogin = false;
+
 function redirectToTenantOidc(tenant: string): void {
+  if (!tenant) return;
+  if (isRedirectingToLogin) return;
+  isRedirectingToLogin = true;
+
   const returnUrl = buildReturnUrl(tenant);
   const encodedReturnUrl = encodeURIComponent(returnUrl);
   const loginUrl = `/${tenant}/auth/login?returnUrl=${encodedReturnUrl}`;
@@ -117,7 +128,9 @@ async function handleResponse<T>(response: Response): Promise<T> {
     if (response.status === 401) {
       auth.clear();
       // Redirect to login page for current tenant
-      const tenant = apiClientConfig.tenant || '';
+      const tenant =
+        apiClientConfig.tenant ||
+        (typeof window !== 'undefined' ? inferTenantFromPathname(window.location.pathname) : '');
       let path = '';
 
       if (response.url) {
@@ -128,12 +141,11 @@ async function handleResponse<T>(response: Response): Promise<T> {
         }
       }
 
-      const isAuthStatusCheck = path.endsWith('/auth/me') || path.endsWith('/auth/check');
       const currentPath = typeof window !== 'undefined' ? window.location.pathname : '';
       const isOnLoginPage = tenant &&
         (currentPath === `/${tenant}/login` || currentPath === `/${tenant}/auth/login`);
 
-      if (!isAuthStatusCheck && !isOnLoginPage) {
+      if (!isOnLoginPage) {
         if (tenant) {
           redirectToTenantOidc(tenant);
         } else {
@@ -372,6 +384,16 @@ export async function uploadFile(
         } catch {
           resolve(xhr.responseText);
         }
+      } else if (xhr.status === 401) {
+        auth.clear();
+        const tenant =
+          apiClientConfig.tenant ||
+          (typeof window !== 'undefined' ? inferTenantFromPathname(window.location.pathname) : '');
+        const currentPath = typeof window !== 'undefined' ? window.location.pathname : '';
+        const isOnLoginPage = tenant &&
+          (currentPath === `/${tenant}/login` || currentPath === `/${tenant}/auth/login`);
+        if (tenant && !isOnLoginPage) redirectToTenantOidc(tenant);
+        reject(new ApiError(xhr.status, xhr.statusText, 'Unauthorized'));
       } else {
         reject(
           new ApiError(

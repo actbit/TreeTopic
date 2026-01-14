@@ -1,31 +1,27 @@
 import { writable, derived } from 'svelte/store';
 
-/**
- * Vote mark type
- */
-export type VoteMark = 'circle' | 'square' | 'triangle' | 'cross';
+export interface BrainIdeaVote {
+  id: string;
+  brainIdeaId: string;
+  applicationUserId?: string;
+  userName?: string;
+  voteType: string;
+  value: number;
+}
 
 /**
- * Idea card information
+ * Brainstorm idea information
  */
-export interface Idea {
+export interface BrainIdea {
   id: string;
-  boardId: string;
-  text: string;
-  x: number;
-  y: number;
-  width?: number;
-  height?: number;
-  userId: string;
-  userName: string;
-  displayName: string;
-  isAnonymous: boolean;
-  linkedMessageId?: string;
-  color?: string;
-  votes: Record<VoteMark, number>;
-  userVotes: Record<VoteMark, boolean>;
-  createdAt: Date;
-  updatedAt?: Date;
+  brainBoardId: string;
+  topicId: string;
+  applicationUserId?: string;
+  userName?: string;
+  idea: string;
+  positionTop: number;
+  positionLeft: number;
+  votes?: BrainIdeaVote[];
 }
 
 /**
@@ -33,18 +29,11 @@ export interface Idea {
  */
 export interface BrainstormBoard {
   id: string;
-  roomId: string;
-  topicId?: string;
-  title: string;
-  description?: string;
-  backgroundImageUrl?: string;
-  backgroundPdfUrl?: string;
-  createdAt: Date;
-  updatedAt: Date;
-  createdBy: string;
-  isArchived: boolean;
-  allowAnonymous: boolean;
-  ideas: Idea[];
+  topicId: string;
+  name: string;
+  isSign: boolean;
+  ideaCount: number;
+  ideas: BrainIdea[];
 }
 
 /**
@@ -139,7 +128,7 @@ function createBrainstormStore() {
     /**
      * Add idea to board
      */
-    addIdea: (boardId: string, idea: Idea) => {
+    addIdea: (boardId: string, idea: BrainIdea) => {
       update((state) => ({
         ...state,
         boards: state.boards.map((b) =>
@@ -154,7 +143,7 @@ function createBrainstormStore() {
     /**
      * Update idea
      */
-    updateIdea: (boardId: string, ideaId: string, updates: Partial<Idea>) => {
+    updateIdea: (boardId: string, ideaId: string, updates: Partial<BrainIdea>) => {
       update((state) => ({
         ...state,
         boards: state.boards.map((b) =>
@@ -181,7 +170,7 @@ function createBrainstormStore() {
     /**
      * Move idea on board
      */
-    moveIdea: (boardId: string, ideaId: string, x: number, y: number) => {
+    moveIdea: (boardId: string, ideaId: string, positionLeft: number, positionTop: number) => {
       update((state) => ({
         ...state,
         boards: state.boards.map((b) =>
@@ -189,7 +178,7 @@ function createBrainstormStore() {
             ? {
                 ...b,
                 ideas: b.ideas.map((i) =>
-                  i.id === ideaId ? { ...i, x, y } : i
+                  i.id === ideaId ? { ...i, positionLeft, positionTop } : i
                 ),
               }
             : b
@@ -199,7 +188,7 @@ function createBrainstormStore() {
             ? {
                 ...state.currentBoard,
                 ideas: state.currentBoard.ideas.map((i) =>
-                  i.id === ideaId ? { ...i, x, y } : i
+                  i.id === ideaId ? { ...i, positionLeft, positionTop } : i
                 ),
               }
             : state.currentBoard,
@@ -224,84 +213,6 @@ function createBrainstormStore() {
             ? {
                 ...state.currentBoard,
                 ideas: state.currentBoard.ideas.filter((i) => i.id !== ideaId),
-              }
-            : state.currentBoard,
-      }));
-    },
-    /**
-     * Add vote to idea
-     */
-    addVote: (boardId: string, ideaId: string, voteMark: VoteMark) => {
-      update((state) => ({
-        ...state,
-        boards: state.boards.map((b) =>
-          b.id === boardId
-            ? {
-                ...b,
-                ideas: b.ideas.map((i) =>
-                  i.id === ideaId
-                    ? {
-                        ...i,
-                        votes: { ...i.votes, [voteMark]: i.votes[voteMark] + 1 },
-                        userVotes: { ...i.userVotes, [voteMark]: true },
-                      }
-                    : i
-                ),
-              }
-            : b
-        ),
-        currentBoard:
-          state.currentBoard?.id === boardId
-            ? {
-                ...state.currentBoard,
-                ideas: state.currentBoard.ideas.map((i) =>
-                  i.id === ideaId
-                    ? {
-                        ...i,
-                        votes: { ...i.votes, [voteMark]: i.votes[voteMark] + 1 },
-                        userVotes: { ...i.userVotes, [voteMark]: true },
-                      }
-                    : i
-                ),
-              }
-            : state.currentBoard,
-      }));
-    },
-    /**
-     * Remove vote from idea
-     */
-    removeVote: (boardId: string, ideaId: string, voteMark: VoteMark) => {
-      update((state) => ({
-        ...state,
-        boards: state.boards.map((b) =>
-          b.id === boardId
-            ? {
-                ...b,
-                ideas: b.ideas.map((i) =>
-                  i.id === ideaId
-                    ? {
-                        ...i,
-                        votes: { ...i.votes, [voteMark]: Math.max(0, i.votes[voteMark] - 1) },
-                        userVotes: { ...i.userVotes, [voteMark]: false },
-                      }
-                    : i
-                ),
-              }
-            : b
-        ),
-        currentBoard:
-          state.currentBoard?.id === boardId
-            ? {
-                ...state.currentBoard,
-                ideas: state.currentBoard.ideas.map((i) =>
-                  i.id === ideaId
-                    ? {
-                        ...i,
-                        votes: { ...i.votes, [voteMark]: Math.max(0, i.votes[voteMark] - 1) },
-                        userVotes: { ...i.userVotes, [voteMark]: false },
-                      }
-                    : i
-                ),
               }
             : state.currentBoard,
       }));
@@ -359,7 +270,7 @@ export const brainstorm = createBrainstormStore();
 /**
  * Helper functions for managing ideas globally
  */
-export function addIdea(idea: Idea) {
+export function addIdea(idea: BrainIdea) {
   if (brainstorm && typeof brainstorm === 'object' && 'subscribe' in brainstorm) {
     // Use store subscription to get current state and find board
     let currentBoardId: string | null = null;
@@ -386,7 +297,7 @@ export function deleteIdea(ideaId: string) {
   }
 }
 
-export function updateIdeaPosition(ideaId: string, x: number, y: number) {
+export function updateIdeaPosition(ideaId: string, positionLeft: number, positionTop: number) {
   if (brainstorm && typeof brainstorm === 'object' && 'subscribe' in brainstorm) {
     let currentBoardId: string | null = null;
     brainstorm.subscribe((state) => {
@@ -394,7 +305,7 @@ export function updateIdeaPosition(ideaId: string, x: number, y: number) {
     })();
 
     if (currentBoardId) {
-      brainstorm.moveIdea(currentBoardId, ideaId, x, y);
+      brainstorm.moveIdea(currentBoardId, ideaId, positionLeft, positionTop);
     }
   }
 }
@@ -431,28 +342,6 @@ export const getBoardById = (boardId: string) =>
  */
 export const currentBoardIdeas = derived(currentBoard, ($board) =>
   $board?.ideas ?? []
-);
-
-/**
- * Get boards by room
- */
-export const getBoardsByRoom = (roomId: string) =>
-  derived(boardList, ($boards) =>
-    $boards.filter((b) => b.roomId === roomId)
-  );
-
-/**
- * Get active boards (not archived)
- */
-export const activeBoards = derived(boardList, ($boards) =>
-  $boards.filter((b) => !b.isArchived)
-);
-
-/**
- * Get archived boards
- */
-export const archivedBoards = derived(boardList, ($boards) =>
-  $boards.filter((b) => b.isArchived)
 );
 
 /**

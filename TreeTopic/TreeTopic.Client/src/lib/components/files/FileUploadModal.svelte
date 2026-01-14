@@ -29,6 +29,11 @@
     selectedFiles = selectedFiles.filter((_, i) => i !== index);
   }
 
+  function handleSubmit(e: Event) {
+    e.preventDefault();
+    void handleUpload();
+  }
+
   async function handleUpload() {
     if (selectedFiles.length === 0) {
       error = 'Please select at least one file';
@@ -81,22 +86,22 @@
 </script>
 
 <Modal {isOpen} title="Upload Files" onClose={handleClose} size="medium">
-  <form on:submit|preventDefault={handleUpload} class="space-y-6">
+  <form onsubmit={handleSubmit} class="space-y-6">
     {#if error}
       <ErrorMessage message={error} onDismiss={() => (error = null)} />
     {/if}
 
     <div
       class="border-2 border-dashed border-border rounded-lg p-10 text-center bg-surface hover:border-primary hover:bg-opacity-50 transition-all cursor-pointer"
-      on:click={() => fileInput?.click()}
-      on:keydown={(e) => e.key === 'Enter' && fileInput?.click()}
+      onclick={() => fileInput?.click()}
+      onkeydown={(e) => e.key === 'Enter' && fileInput?.click()}
       role="button"
       tabindex="0"
     >
       <input
         type="file"
         bind:this={fileInput}
-        on:change={handleFileSelect}
+        onchange={handleFileSelect}
         multiple
         disabled={isLoading}
         class="hidden"
@@ -140,7 +145,7 @@
               {#if !isLoading}
                 <button
                   type="button"
-                  on:click={() => removeFile(index)}
+                  onclick={() => removeFile(index)}
                   class="flex-shrink-0 p-1 text-text-light hover:text-danger rounded transition-colors"
                   title="Remove file"
                 >
@@ -174,7 +179,7 @@
         size="base"
         fullWidth
         disabled={isLoading}
-        on:click={handleClose}
+        onclick={handleClose}
       >
         Cancel
       </Button>

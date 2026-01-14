@@ -1,23 +1,55 @@
 import type { PageLoad } from './$types';
-import { api } from '$lib/api/client';
 
-export const load: PageLoad = async ({ params }) => {
+export const load: PageLoad = async ({ params, fetch }) => {
+  const boardId = params.boardId;
+  const tenant = params.tenant;
+
+  if (!boardId || boardId === 'undefined' || boardId === 'null') {
+    return {
+      boardId: '',
+      tenant,
+      board: null,
+      loadError: 'Board ID is required',
+    };
+  }
+
+  if (!tenant) {
+    return {
+      boardId,
+      tenant: '',
+      board: null,
+      loadError: 'Tenant is required',
+    };
+  }
+
   try {
-    const boardId = params.boardId;
-
-    if (!boardId) {
-      throw new Error('Board ID is required');
+    const response = await fetch(`/${tenant}/api/Brainstorm/${boardId}`, {
+      credentials: 'include',
+    });
+    if (!response.ok) {
+      return {
+        boardId,
+        tenant,
+        board: null,
+        loadError: response.statusText || 'Failed to load brainstorm board',
+      };
     }
 
-    // Fetch board data
-    const board = await api.get(`/api/brainstorm/${boardId}`);
+    const board = await response.json();
 
     return {
       boardId,
+      tenant,
       board,
+      loadError: null,
     };
   } catch (error) {
     console.error('Failed to load brainstorm board:', error);
-    throw error;
+    return {
+      boardId,
+      tenant,
+      board: null,
+      loadError: 'Failed to load brainstorm board',
+    };
   }
 };

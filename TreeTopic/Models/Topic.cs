@@ -15,7 +15,7 @@ namespace TreeTopic.Models
         public Guid? ParentId { get; set; }
         public Topic? Parent { get; set; }
 
-        public BrainBoard? BrainBoard { get; set; }
+        public List<BrainBoard> BrainBoards { get; set; } = new List<BrainBoard>();
         public string Title { get; set; } = string.Empty;
         public string? Description { get; set; }
 

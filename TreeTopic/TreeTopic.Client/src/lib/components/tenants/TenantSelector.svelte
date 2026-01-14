@@ -28,7 +28,7 @@
 <div class="workspace-selector-wrapper">
   <div class="relative w-full">
     <button
-      on:click={() => (isOpen = !isOpen)}
+      onclick={() => (isOpen = !isOpen)}
       disabled={isLoading || tenants.length === 0}
       class="button button-primary w-full selector-button"
     >
@@ -49,7 +49,7 @@
         <div class="selector-list">
           {#each tenants as tenant (tenant.identifier)}
             <button
-              on:click={() => selectTenant(tenant)}
+              onclick={() => selectTenant(tenant)}
               disabled={isNavigating}
               class="selector-item {selectedTenant?.identifier === tenant.identifier ? 'selected' : ''}"
             >

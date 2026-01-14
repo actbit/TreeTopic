@@ -220,6 +220,9 @@ namespace TreeTopic.Migrations.Application_MySQL
                     b.Property<bool>("EmailConfirmed")
                         .HasColumnType("tinyint(1)");
 
+                    b.Property<string>("IconFileName")
+                        .HasColumnType("longtext");
+
                     b.Property<bool>("LockoutEnabled")
                         .HasColumnType("tinyint(1)");
 
@@ -307,8 +310,7 @@ namespace TreeTopic.Migrations.Application_MySQL
 
                     b.HasKey("Id");
 
-                    b.HasIndex("TopicId")
-                        .IsUnique();
+                    b.HasIndex("TopicId");
 
                     b.ToTable("BrainBoards");
                 });
@@ -317,9 +319,6 @@ namespace TreeTopic.Migrations.Application_MySQL
                 {
                     b.Property<byte[]>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("BINARY(16)");
-
-                    b.Property<byte[]>("ApplicationUserId")
                         .HasColumnType("BINARY(16)");
 
                     b.Property<byte[]>("BrainBoardId")
@@ -339,6 +338,9 @@ namespace TreeTopic.Migrations.Application_MySQL
                     b.Property<double>("PositionTop")
                         .HasColumnType("double");
 
+                    b.Property<byte[]>("RoomUserId")
+                        .HasColumnType("BINARY(16)");
+
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasColumnType("longtext");
@@ -352,9 +354,9 @@ namespace TreeTopic.Migrations.Application_MySQL
 
                     b.HasKey("Id");
 
-                    b.HasIndex("ApplicationUserId");
-
                     b.HasIndex("BrainBoardId");
+
+                    b.HasIndex("RoomUserId");
 
                     b.HasIndex("TopicId");
 
@@ -367,15 +369,15 @@ namespace TreeTopic.Migrations.Application_MySQL
                         .ValueGeneratedOnAdd()
                         .HasColumnType("BINARY(16)");
 
-                    b.Property<byte[]>("ApplicationUserId")
-                        .HasColumnType("BINARY(16)");
-
                     b.Property<byte[]>("BrainIdeaId")
                         .IsRequired()
                         .HasColumnType("BINARY(16)");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime(6)");
+
+                    b.Property<byte[]>("RoomUserId")
+                        .HasColumnType("BINARY(16)");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
@@ -393,9 +395,9 @@ namespace TreeTopic.Migrations.Application_MySQL
 
                     b.HasKey("Id");
 
-                    b.HasIndex("ApplicationUserId");
-
                     b.HasIndex("BrainIdeaId");
+
+                    b.HasIndex("RoomUserId");
 
                     b.ToTable("BrainIdeaVotes");
                 });
@@ -455,10 +457,6 @@ namespace TreeTopic.Migrations.Application_MySQL
                         .ValueGeneratedOnAdd()
                         .HasColumnType("BINARY(16)");
 
-                    b.Property<byte[]>("ApplicationUserId")
-                        .IsRequired()
-                        .HasColumnType("BINARY(16)");
-
                     b.Property<string>("Body")
                         .IsRequired()
                         .HasColumnType("longtext");
@@ -471,6 +469,10 @@ namespace TreeTopic.Migrations.Application_MySQL
                         .HasColumnType("longtext");
 
                     b.Property<byte[]>("ReplyId")
+                        .HasColumnType("BINARY(16)");
+
+                    b.Property<byte[]>("RoomUserId")
+                        .IsRequired()
                         .HasColumnType("BINARY(16)");
 
                     b.Property<string>("TenantId")
@@ -487,9 +489,9 @@ namespace TreeTopic.Migrations.Application_MySQL
 
                     b.HasKey("Id");
 
-                    b.HasIndex("ApplicationUserId");
-
                     b.HasIndex("ReplyId");
+
+                    b.HasIndex("RoomUserId");
 
                     b.HasIndex("TopicId");
 
@@ -612,7 +614,131 @@ namespace TreeTopic.Migrations.Application_MySQL
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime(6)");
 
+                    b.Property<string>("IconFileName")
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("Name")
+                        .HasColumnType("longtext");
+
                     b.Property<byte[]>("RoomId")
+                        .IsRequired()
+                        .HasColumnType("BINARY(16)");
+
+                    b.Property<string>("TenantId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<bool>("UseMainIcon")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<bool>("UseMainName")
+                        .HasColumnType("tinyint(1)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ApplicationUserId");
+
+                    b.HasIndex("RoomId");
+
+                    b.ToTable("RoomUsers");
+
+                    b.HasAnnotation("Finbuckle:MultiTenant", true);
+                });
+
+            modelBuilder.Entity("TreeTopic.Models.ShareItem", b =>
+                {
+                    b.Property<byte[]>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("BINARY(16)");
+
+                    b.Property<byte[]>("BrainBoardId")
+                        .HasColumnType("BINARY(16)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("CreatedByName")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<byte[]>("CreatedByRoomUserId")
+                        .IsRequired()
+                        .HasColumnType("BINARY(16)");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<byte[]>("RoomId")
+                        .IsRequired()
+                        .HasColumnType("BINARY(16)");
+
+                    b.Property<byte[]>("SourceFileId")
+                        .HasColumnType("BINARY(16)");
+
+                    b.Property<byte[]>("SourceMessageId")
+                        .HasColumnType("BINARY(16)");
+
+                    b.Property<byte[]>("SourceShareItemId")
+                        .HasColumnType("BINARY(16)");
+
+                    b.Property<string>("TenantId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<byte[]>("TopicId")
+                        .HasColumnType("BINARY(16)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BrainBoardId");
+
+                    b.HasIndex("CreatedByRoomUserId");
+
+                    b.HasIndex("RoomId");
+
+                    b.HasIndex("SourceFileId");
+
+                    b.HasIndex("SourceMessageId");
+
+                    b.HasIndex("SourceShareItemId");
+
+                    b.HasIndex("TopicId");
+
+                    b.ToTable("ShareItems");
+
+                    b.HasAnnotation("Finbuckle:MultiTenant", true);
+                });
+
+            modelBuilder.Entity("TreeTopic.Models.ShareItemFile", b =>
+                {
+                    b.Property<byte[]>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("BINARY(16)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<byte[]>("FileId")
+                        .IsRequired()
+                        .HasColumnType("BINARY(16)");
+
+                    b.Property<bool>("IsCurrent")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<byte[]>("ShareItemId")
                         .IsRequired()
                         .HasColumnType("BINARY(16)");
 
@@ -626,11 +752,11 @@ namespace TreeTopic.Migrations.Application_MySQL
 
                     b.HasKey("Id");
 
-                    b.HasIndex("ApplicationUserId");
+                    b.HasIndex("FileId");
 
-                    b.HasIndex("RoomId");
+                    b.HasIndex("ShareItemId");
 
-                    b.ToTable("RoomUsers");
+                    b.ToTable("ShareItemFiles");
 
                     b.HasAnnotation("Finbuckle:MultiTenant", true);
                 });
@@ -731,8 +857,8 @@ namespace TreeTopic.Migrations.Application_MySQL
             modelBuilder.Entity("TreeTopic.Models.BrainBoard", b =>
                 {
                     b.HasOne("TreeTopic.Models.Topic", "Topic")
-                        .WithOne("BrainBoard")
-                        .HasForeignKey("TreeTopic.Models.BrainBoard", "TopicId")
+                        .WithMany("BrainBoards")
+                        .HasForeignKey("TopicId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
@@ -741,16 +867,16 @@ namespace TreeTopic.Migrations.Application_MySQL
 
             modelBuilder.Entity("TreeTopic.Models.BrainIdea", b =>
                 {
-                    b.HasOne("TreeTopic.Models.ApplicationUser", "ApplicationUser")
-                        .WithMany("BrainIdeas")
-                        .HasForeignKey("ApplicationUserId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
                     b.HasOne("TreeTopic.Models.BrainBoard", "BrainBoard")
                         .WithMany("BrainIdeas")
                         .HasForeignKey("BrainBoardId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.HasOne("TreeTopic.Models.RoomUser", "RoomUser")
+                        .WithMany()
+                        .HasForeignKey("RoomUserId")
+                        .OnDelete(DeleteBehavior.SetNull);
 
                     b.HasOne("TreeTopic.Models.Topic", "Topic")
                         .WithMany("BrainIdeas")
@@ -758,29 +884,29 @@ namespace TreeTopic.Migrations.Application_MySQL
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.Navigation("ApplicationUser");
-
                     b.Navigation("BrainBoard");
+
+                    b.Navigation("RoomUser");
 
                     b.Navigation("Topic");
                 });
 
             modelBuilder.Entity("TreeTopic.Models.BrainIdeaVote", b =>
                 {
-                    b.HasOne("TreeTopic.Models.ApplicationUser", "ApplicationUser")
-                        .WithMany("BrainIdeaVotes")
-                        .HasForeignKey("ApplicationUserId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
                     b.HasOne("TreeTopic.Models.BrainIdea", "BrainIdea")
                         .WithMany("Votes")
                         .HasForeignKey("BrainIdeaId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.Navigation("ApplicationUser");
+                    b.HasOne("TreeTopic.Models.RoomUser", "RoomUser")
+                        .WithMany()
+                        .HasForeignKey("RoomUserId")
+                        .OnDelete(DeleteBehavior.SetNull);
 
                     b.Navigation("BrainIdea");
+
+                    b.Navigation("RoomUser");
                 });
 
             modelBuilder.Entity("TreeTopic.Models.File", b =>
@@ -802,16 +928,16 @@ namespace TreeTopic.Migrations.Application_MySQL
 
             modelBuilder.Entity("TreeTopic.Models.Message", b =>
                 {
-                    b.HasOne("TreeTopic.Models.ApplicationUser", "ApplicationUser")
-                        .WithMany("Messages")
-                        .HasForeignKey("ApplicationUserId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
                     b.HasOne("TreeTopic.Models.Message", "Reply")
                         .WithMany("Replies")
                         .HasForeignKey("ReplyId")
                         .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("TreeTopic.Models.RoomUser", "RoomUser")
+                        .WithMany()
+                        .HasForeignKey("RoomUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
 
                     b.HasOne("TreeTopic.Models.Topic", "Topic")
                         .WithMany("Messages")
@@ -819,9 +945,9 @@ namespace TreeTopic.Migrations.Application_MySQL
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.Navigation("ApplicationUser");
-
                     b.Navigation("Reply");
+
+                    b.Navigation("RoomUser");
 
                     b.Navigation("Topic");
                 });
@@ -878,6 +1004,79 @@ namespace TreeTopic.Migrations.Application_MySQL
                     b.Navigation("Room");
                 });
 
+            modelBuilder.Entity("TreeTopic.Models.ShareItem", b =>
+                {
+                    b.HasOne("TreeTopic.Models.BrainBoard", "BrainBoard")
+                        .WithMany()
+                        .HasForeignKey("BrainBoardId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("TreeTopic.Models.RoomUser", "CreatedByRoomUser")
+                        .WithMany()
+                        .HasForeignKey("CreatedByRoomUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("TreeTopic.Models.Room", "Room")
+                        .WithMany()
+                        .HasForeignKey("RoomId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("TreeTopic.Models.File", "SourceFile")
+                        .WithMany()
+                        .HasForeignKey("SourceFileId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("TreeTopic.Models.Message", "SourceMessage")
+                        .WithMany()
+                        .HasForeignKey("SourceMessageId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("TreeTopic.Models.ShareItem", "SourceShareItem")
+                        .WithMany()
+                        .HasForeignKey("SourceShareItemId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("TreeTopic.Models.Topic", "Topic")
+                        .WithMany()
+                        .HasForeignKey("TopicId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("BrainBoard");
+
+                    b.Navigation("CreatedByRoomUser");
+
+                    b.Navigation("Room");
+
+                    b.Navigation("SourceFile");
+
+                    b.Navigation("SourceMessage");
+
+                    b.Navigation("SourceShareItem");
+
+                    b.Navigation("Topic");
+                });
+
+            modelBuilder.Entity("TreeTopic.Models.ShareItemFile", b =>
+                {
+                    b.HasOne("TreeTopic.Models.File", "File")
+                        .WithMany()
+                        .HasForeignKey("FileId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("TreeTopic.Models.ShareItem", "ShareItem")
+                        .WithMany()
+                        .HasForeignKey("ShareItemId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("File");
+
+                    b.Navigation("ShareItem");
+                });
+
             modelBuilder.Entity("TreeTopic.Models.Topic", b =>
                 {
                     b.HasOne("TreeTopic.Models.Topic", "Parent")
@@ -903,12 +1102,6 @@ namespace TreeTopic.Migrations.Application_MySQL
 
             modelBuilder.Entity("TreeTopic.Models.ApplicationUser", b =>
                 {
-                    b.Navigation("BrainIdeaVotes");
-
-                    b.Navigation("BrainIdeas");
-
-                    b.Navigation("Messages");
-
                     b.Navigation("RoomUsers");
 
                     b.Navigation("Rooms");
@@ -950,7 +1143,7 @@ namespace TreeTopic.Migrations.Application_MySQL
 
             modelBuilder.Entity("TreeTopic.Models.Topic", b =>
                 {
-                    b.Navigation("BrainBoard");
+                    b.Navigation("BrainBoards");
 
                     b.Navigation("BrainIdeas");
 

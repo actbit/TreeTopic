@@ -10,6 +10,6 @@ public interface IBrainIdeaRepository : IBaseRepository<BrainIdea>
 {
     Task<List<BrainIdea>> GetByBrainBoardIdAsync(Guid brainBoardId, CancellationToken cancellationToken = default);
     Task<List<BrainIdea>> GetByTopicIdAsync(Guid topicId, CancellationToken cancellationToken = default);
-    Task<List<BrainIdea>> GetByUserIdAsync(Guid userId, CancellationToken cancellationToken = default);
+    Task<List<BrainIdea>> GetByUserIdAsync(Guid roomUserId, CancellationToken cancellationToken = default);
     Task<BrainIdea?> GetWithBoardAsync(Guid id, CancellationToken cancellationToken = default);
 }

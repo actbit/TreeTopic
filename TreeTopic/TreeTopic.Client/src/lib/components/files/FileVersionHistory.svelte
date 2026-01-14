@@ -66,7 +66,7 @@
             </a>
             <button
               type="button"
-              on:click={() => handleDownload(version.url, version.fileName)}
+              onclick={() => handleDownload(version.url, version.fileName)}
               class="px-3 py-2 text-sm text-text-light hover:text-primary rounded hover:bg-white transition-colors font-medium"
               title="Download"
             >

@@ -9,10 +9,10 @@ public class BrainIdeaVoteRepository : BaseRepository<BrainIdeaVote>, IBrainIdea
     {
     }
 
-    public async Task<BrainIdeaVote?> GetVoteAsync(Guid ideaId, Guid? userId, string voteType, CancellationToken cancellationToken = default)
+    public async Task<BrainIdeaVote?> GetVoteAsync(Guid ideaId, Guid? roomUserId, string voteType, CancellationToken cancellationToken = default)
     {
         return await Query()
-            .Where(v => v.BrainIdeaId == ideaId && v.ApplicationUserId == userId && v.VoteType == voteType)
+            .Where(v => v.BrainIdeaId == ideaId && v.RoomUserId == roomUserId && v.VoteType == voteType)
             .FirstOrDefaultAsync(cancellationToken);
     }
 
@@ -20,14 +20,15 @@ public class BrainIdeaVoteRepository : BaseRepository<BrainIdeaVote>, IBrainIdea
     {
         return await Query()
             .Where(v => v.BrainIdeaId == ideaId)
-            .Include(v => v.ApplicationUser)
+            .Include(v => v.RoomUser)
+            .ThenInclude(ru => ru.ApplicationUser)
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<List<BrainIdeaVote>> GetVotesByUserAsync(Guid userId, CancellationToken cancellationToken = default)
+    public async Task<List<BrainIdeaVote>> GetVotesByUserAsync(Guid roomUserId, CancellationToken cancellationToken = default)
     {
         return await Query()
-            .Where(v => v.ApplicationUserId == userId)
+            .Where(v => v.RoomUserId == roomUserId)
             .Include(v => v.BrainIdea)
             .ToListAsync(cancellationToken);
     }

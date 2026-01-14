@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { page } from '$app/stores';
   import type { PageData } from './$types';
 
   export let data: PageData;
@@ -6,7 +7,7 @@
   const { tenant } = data;
 
   function handleOIDCLogin() {
-    const returnUrl = `/${tenant}/`;
+    const returnUrl = $page.url.searchParams.get('returnUrl') ?? `/${tenant}/`;
     const encodedReturnUrl = encodeURIComponent(returnUrl);
     const loginUrl = `/${tenant}/auth/login?returnUrl=${encodedReturnUrl}`;
 
@@ -36,7 +37,7 @@
           Signing in to <strong>{tenant}</strong> workspace uses your organization's secure SSO.
         </p>
 
-        <button class="sso-button" on:click={handleOIDCLogin}>
+        <button class="sso-button" onclick={handleOIDCLogin}>
           Sign in with SSO
         </button>
       </div>

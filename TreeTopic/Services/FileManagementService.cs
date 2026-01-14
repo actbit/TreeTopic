@@ -164,7 +164,9 @@ public class FileManagementService : BaseService, IFileManagementService
             SourceFileId = file.SourceFileId != Guid.Empty ? file.SourceFileId : null,
             IsLatest = file.IsLatast,
             CreatedAt = file.CreatedAt,
-            UpdatedAt = file.UpdatedAt
+            UpdatedAt = file.UpdatedAt,
+            Size = 0,
+            Url = string.Empty
         };
     }
 }

@@ -16,6 +16,7 @@ public interface IBrainstormManagementService
     // Idea operations
     Task<Result<List<BrainIdeaDto>>> GetIdeasByBoardAsync(Guid boardId, CancellationToken cancellationToken = default);
     Task<Result<BrainIdeaDto>> GetIdeaByIdAsync(Guid ideaId, CancellationToken cancellationToken = default);
+    Task<Result<BrainIdeaDto>> CreateIdeaAsync(Guid boardId, CreateBrainIdeaRequest request, Guid userId, CancellationToken cancellationToken = default);
     Task<Result<BrainIdeaDto>> UpdateIdeaPositionAsync(Guid ideaId, UpdateBrainIdeaPositionRequest request, CancellationToken cancellationToken = default);
     Task<Result> DeleteIdeaAsync(Guid ideaId, CancellationToken cancellationToken = default);
 

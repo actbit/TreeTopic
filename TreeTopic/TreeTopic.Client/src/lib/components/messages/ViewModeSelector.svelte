@@ -29,7 +29,7 @@
 <div class="tabs">
   {#each viewModes as mode}
     <button
-      on:click={() => changeMode(mode.id)}
+      onclick={() => changeMode(mode.id)}
       class="tab {currentMode === mode.id ? 'tab-active' : ''}"
       title={mode.description}
     >

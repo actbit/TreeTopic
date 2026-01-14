@@ -5,19 +5,28 @@ using TreeTopic.Common;
 using TreeTopic.Dtos;
 using TreeTopic.Models;
 using TreeTopic.Services;
+using Microsoft.AspNetCore.Identity;
+using System.Security.Claims;
 
 namespace TreeTopic.Controllers;
 
 [ApiController]
 [Route("{tenant}/api/[controller]")]
-[Authorize(Roles = "Admin")]
+[Authorize]
 public class UsersController : ControllerBase
 {
     private readonly UserManagementService _userManagementService;
+    private readonly IconService _iconService;
+    private readonly UserManager<ApplicationUser> _userManager;
 
-    public UsersController(UserManagementService userManagementService)
+    public UsersController(
+        UserManagementService userManagementService,
+        IconService iconService,
+        UserManager<ApplicationUser> userManager)
     {
         _userManagementService = userManagementService;
+        _iconService = iconService;
+        _userManager = userManager;
     }
 
     [HttpGet]
@@ -79,7 +88,29 @@ public class UsersController : ControllerBase
         return Ok(dto);
     }
 
-    private static UserSummaryDto UserToDto(ApplicationUser user, IList<string> roles)
+    [HttpPost("me/icon")]
+    [Consumes("multipart/form-data")]
+    public async Task<IActionResult> UploadMyIcon([FromForm] IFormFile file, CancellationToken cancellationToken)
+    {
+        if (file is null || file.Length <= 0)
+            return BadRequest(new { message = "File is required." });
+
+        var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (string.IsNullOrWhiteSpace(userId) || !Guid.TryParse(userId, out var guid))
+            return Unauthorized();
+
+        var user = await _userManager.FindByIdAsync(guid.ToString());
+        if (user == null)
+            return NotFound();
+
+        var fileName = await _iconService.SaveUserIconAsync(user, file, cancellationToken);
+        user.IconFileName = fileName;
+        await _userManager.UpdateAsync(user);
+
+        return Ok(new { iconUrl = _iconService.GetUserIconUrl(user) });
+    }
+
+    private UserSummaryDto UserToDto(ApplicationUser user, IList<string> roles)
     {
         return new UserSummaryDto
         {
@@ -87,6 +118,7 @@ public class UsersController : ControllerBase
             UserName = user.UserName,
             Email = user.Email,
             DisplayName = user.DisplayName,
+            IconUrl = _iconService.GetUserIconUrl(user),
             Roles = roles
         };
     }

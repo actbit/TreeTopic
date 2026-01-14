@@ -12,9 +12,6 @@ var appDb = postgres.AddDatabase("SharedApp");
 var projectBuilder = builder.AddProject<TreeTopic>("treetopic")
     .WithReference(tenantDb)
     .WithReference(appDb)
-    .WithHttpsEndpoint(port: 7047, name: "https-external", isProxied: false)
-    .WithHttpEndpoint(port: 5266, name: "http-external", isProxied: false)
-    .WithEnvironment("Authentication__PublicBaseUrl", "https://localhost:7047")
     .WaitFor(postgres);
 
 if (builder.Environment.IsDevelopment())

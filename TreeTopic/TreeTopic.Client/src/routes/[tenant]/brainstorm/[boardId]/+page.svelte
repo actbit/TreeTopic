@@ -1,20 +1,61 @@
 <script lang="ts">
   import { brainstorm } from '$lib/stores/brainstorm';
-  import { onMount } from 'svelte';
+  import { auth } from '$lib/stores/auth';
   import BrainstormBoard from '$lib/components/brainstorming/BrainstormBoard.svelte';
   import LoadingSpinner from '$lib/components/common/LoadingSpinner.svelte';
   import Button from '$lib/components/common/Button.svelte';
   import { api } from '$lib/api/client';
+  import { page } from '$app/stores';
 
   interface PageData {
     boardId: string;
+    tenant?: string;
+    board?: unknown;
+    loadError?: string | null;
   }
 
   let data: PageData = $props();
   let isLoading = $state(true);
   let error = $state<string | null>(null);
+  let loadErrorFallback = $state<string | null>(data.loadError ?? null);
 
-  onMount(() => {
+  const isInvalidBoardId = (value?: string | null) =>
+    !value || value === 'undefined' || value === 'null';
+  const isRawGuid = (value?: string | null) =>
+    !!value && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+
+  const getBoardIdFromPath = () => {
+    if (typeof window === 'undefined') return '';
+    const segments = window.location.pathname.split('/').filter(Boolean);
+    const idx = segments.indexOf('brainstorm');
+    if (idx !== -1 && segments.length > idx + 1) {
+      return segments[idx + 1] || '';
+    }
+    return '';
+  };
+
+  let resolvedBoardId = $derived.by(() => data.boardId || $page.params.boardId || getBoardIdFromPath());
+
+  let lastHandledBoardId = '';
+
+  $effect(() => {
+    const boardId = resolvedBoardId;
+    if (!boardId) return;
+    if (boardId === lastHandledBoardId) return;
+    lastHandledBoardId = boardId;
+
+    if (isInvalidBoardId(boardId)) {
+      error = 'Board ID is required';
+      isLoading = false;
+      return;
+    }
+
+    if (data.board) {
+      brainstorm.setCurrentBoard(data.board);
+      isLoading = false;
+      return;
+    }
+
     loadBoard();
   });
 
@@ -23,11 +64,26 @@
       isLoading = true;
       error = null;
 
-      const boardData = await api.get(`/api/brainstorm/${data.boardId}`);
+      if (isInvalidBoardId(resolvedBoardId)) {
+        throw new Error('Board ID is required');
+      }
+
+      const tenant =
+        data.tenant ||
+        api.getCurrentTenant() ||
+        (typeof window !== 'undefined' ? window.location.pathname.split('/').filter(Boolean)[0] : '');
+      if (!tenant) {
+        throw new Error('Tenant is required');
+      }
+      api.configureApiClient(tenant);
+      await auth.fetchCurrentUser(tenant);
+      const boardData = await api.get(`/${tenant}/api/Brainstorm/${resolvedBoardId}`);
       brainstorm.setCurrentBoard(boardData);
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to load brainstorm board';
-      error = errorMessage;
+      error = loadErrorFallback && errorMessage === 'Failed to load brainstorm board'
+        ? loadErrorFallback
+        : errorMessage;
     } finally {
       isLoading = false;
     }
@@ -42,35 +98,31 @@
   <title>Brainstorm Board - TreeTopic</title>
 </svelte:head>
 
-<div class="flex flex-col h-screen bg-white">
+<div class="brainstorm-page">
   <!-- Header -->
-  <div class="border-b border-border p-6 flex items-center justify-between bg-white shadow-sm">
-    <div class="flex items-center gap-5">
-      <button
-        on:click={goBack}
-        class="px-4 py-2 text-text-light hover:text-primary rounded hover:bg-surface transition-colors font-medium"
-        title="Go back"
-      >
+  <header class="brainstorm-header">
+    <div class="brainstorm-header__left">
+      <button onclick={goBack} class="brainstorm-back" title="Go back">
         Back
       </button>
       <div>
-        <h1 class="text-2xl font-bold text-text">Brainstorm Board</h1>
-        <p class="text-sm text-text-light mt-1">Collaborative idea development</p>
+        <h1 class="brainstorm-title">Brainstorm Board</h1>
+        <p class="brainstorm-subtitle">Drag cards to organize. Click a card to edit.</p>
       </div>
     </div>
 
-    <div class="flex items-center gap-3">
-      <Button variant="secondary" size="small" on:click={loadBoard}>
+    <div class="brainstorm-header__actions">
+      <Button variant="secondary" size="small" onclick={loadBoard}>
         Refresh
       </Button>
-      <Button variant="secondary" size="small" on:click={goBack}>
+      <Button variant="secondary" size="small" onclick={goBack}>
         Close
       </Button>
     </div>
-  </div>
+  </header>
 
   <!-- Content -->
-  <div class="flex-1 overflow-hidden">
+  <div class="brainstorm-content">
     {#if isLoading}
       <div class="flex items-center justify-center h-full">
         <LoadingSpinner message="Loading brainstorm board..." />
@@ -82,16 +134,16 @@
           <p class="text-text-light mb-5">{error}</p>
         </div>
         <div class="flex gap-3">
-          <Button variant="primary" on:click={loadBoard}>Retry</Button>
-          <Button variant="secondary" on:click={goBack}>Go Back</Button>
+          <Button variant="primary" onclick={loadBoard}>Retry</Button>
+          <Button variant="secondary" onclick={goBack}>Go Back</Button>
         </div>
       </div>
     {:else if $brainstorm.currentBoard}
-      <BrainstormBoard boardId={data.boardId} />
+      <BrainstormBoard boardId={$brainstorm.currentBoard?.id ?? data.boardId} />
     {:else}
       <div class="flex flex-col items-center justify-center h-full gap-4">
         <p class="text-text-light">Board not found</p>
-        <Button variant="secondary" on:click={goBack}>Go Back</Button>
+        <Button variant="secondary" onclick={goBack}>Go Back</Button>
       </div>
     {/if}
   </div>
@@ -100,5 +152,77 @@
 <style>
   :global(body) {
     overflow: hidden;
+    background: #121212;
+    color: #e5e7eb;
+  }
+
+  .brainstorm-page {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    background: #121212;
+  }
+
+  .brainstorm-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 22px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    background: #151515;
+  }
+
+  .brainstorm-header__left {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .brainstorm-back {
+    padding: 6px 14px;
+    border-radius: 10px;
+    background: #2d5d9f;
+    color: #e5f0ff;
+    border: 1px solid rgba(96, 165, 250, 0.5);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .brainstorm-back:hover {
+    background: #3a6db3;
+  }
+
+  .brainstorm-title {
+    font-size: 20px;
+    font-weight: 700;
+    margin: 0;
+    color: #f8fafc;
+  }
+
+  .brainstorm-subtitle {
+    font-size: 12px;
+    margin: 4px 0 0;
+    color: #94a3b8;
+  }
+
+  .brainstorm-header__actions {
+    display: flex;
+    gap: 10px;
+  }
+
+  .brainstorm-content {
+    flex: 1;
+    overflow: hidden;
+  }
+
+  :global(.brainstorm-page .btn) {
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    color: #e2e8f0;
+  }
+
+  :global(.brainstorm-page .btn:hover:not(:disabled)) {
+    background: rgba(255, 255, 255, 0.12);
   }
 </style>

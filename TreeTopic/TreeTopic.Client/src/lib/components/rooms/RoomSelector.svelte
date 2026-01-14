@@ -54,7 +54,7 @@
 <div class="flex items-center justify-between room-selector-container">
   <div class="relative w-full">
     <button
-      on:click={() => (isOpen = !isOpen)}
+      onclick={() => (isOpen = !isOpen)}
       class="button button-primary w-full room-selector-button"
     >
       <span>{$currentRoom?.name ?? 'Select Room'}</span>
@@ -67,7 +67,7 @@
       <div class="card room-dropdown">
         <div class="panel-header sticky top-0">
           <Button
-            on:click={openCreateModal}
+            onclick={openCreateModal}
             variant="secondary"
             size="small"
             fullWidth
@@ -80,7 +80,15 @@
           {#each $roomList as room (room.id)}
             <div
               class="list-item clickable hoverable"
-              on:click={() => selectRoom(room.id)}
+              role="button"
+              tabindex="0"
+              onclick={() => selectRoom(room.id)}
+              onkeydown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  selectRoom(room.id);
+                }
+              }}
             >
               <div class="room-item-content">
                 <div class="text-bold">{room.name}</div>
@@ -97,7 +105,7 @@
 
               {#if room.canEdit}
                 <button
-                  on:click={(e) => openRoomSettings(room.id, e)}
+                  onclick={(e) => openRoomSettings(room.id, e)}
                   class="button clickable room-settings-button"
                   title="Room settings"
                 >

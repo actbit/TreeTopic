@@ -15,6 +15,14 @@ namespace TreeTopic.Models
         public Guid RoomId { get; set; }
         public Room Room { get; set; }
 
+        public string? Name { get; set; }
+
+        public bool UseMainName { get; set; }
+
+        public string? IconFileName { get; set; }
+
+        public bool UseMainIcon { get; set; }
+
         public List<RoomPermission> RoomPermission { get; set; } = new List<RoomPermission>();
     }
 }

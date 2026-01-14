@@ -4,9 +4,12 @@
   import { messageList, messagesLoading } from '$lib/stores/messages';
   import { selectedTopic } from '$lib/stores/topics';
   import { formatFileSize } from '$lib/utils/validation';
+  import { page } from '$app/stores';
+  import { getMessageAnchorIdFromHash, scrollToMessageAnchor } from '$lib/utils/messageAnchor';
 
   let messagesContainer: HTMLDivElement | undefined = $state();
   let selectedDoc = $state<string | null>(null);
+  let targetAnchorId = $derived.by(() => getMessageAnchorIdFromHash($page.url.hash));
 
   let topicMessages = $derived.by(() => {
     if (!$selectedTopic) return [];
@@ -53,6 +56,14 @@
       msg.attachments.some((a) => a.fileName === fileName)
     );
   });
+
+  $effect(() => {
+    if ($messagesLoading) return;
+    if (!targetAnchorId) return;
+    setTimeout(() => {
+      scrollToMessageAnchor(targetAnchorId, 'auto');
+    }, 0);
+  });
 </script>
 
 <div class="flex h-full bg-white">
@@ -70,7 +81,7 @@
       <div class="space-y-1 p-2">
         {#each documentGroups as { key, fileName, size, count }}
           <button
-            on:click={() => (selectedDoc = selectedDoc === key ? null : key)}
+            onclick={() => (selectedDoc = selectedDoc === key ? null : key)}
             class="w-full flex flex-col items-start gap-2 p-3 rounded transition-colors {selectedDoc === key
               ? 'bg-primary bg-opacity-10 border-l-4 border-primary'
               : 'hover:bg-white'}"

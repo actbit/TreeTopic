@@ -4,7 +4,6 @@
   import Input from '../common/Input.svelte';
   import ErrorMessage from '../common/ErrorMessage.svelte';
   import { ui, activeModals } from '$lib/stores/ui';
-  import { currentRoom } from '$lib/stores/rooms';
   import { selectedTopic } from '$lib/stores/topics';
   import { api } from '$lib/api/client';
   import { isRequired } from '$lib/utils/validation';
@@ -31,8 +30,8 @@
       return;
     }
 
-    if (!$currentRoom) {
-      error = 'Please select a room first';
+    if (!$selectedTopic?.id) {
+      error = 'Please select a topic first';
       return;
     }
 
@@ -41,8 +40,7 @@
     try {
       const tenant = api.getCurrentTenant();
       await api.post(`/${tenant}/api/brainstorm`, {
-        roomId: $currentRoom.id,
-        topicId: $selectedTopic?.id,
+        topicId: $selectedTopic.id,
         title: title.trim(),
         description: description.trim(),
       });
@@ -82,7 +80,7 @@
 </script>
 
 <Modal {isOpen} title="Create Brainstorm Board" onClose={handleClose} size="medium">
-  <form on:submit={handleCreate} class="space-y-6">
+  <form onsubmit={handleCreate} class="space-y-6">
     {#if error}
       <ErrorMessage message={error} onDismiss={() => (error = null)} />
     {/if}
@@ -98,22 +96,24 @@
     />
 
     <div class="flex flex-col gap-2">
-      <label class="text-sm font-semibold text-text">Description</label>
+      <label for="brain-create-description" class="text-sm font-semibold text-text">Description</label>
       <textarea
+        id="brain-create-description"
         bind:value={description}
         placeholder="What is this brainstorm about? (optional)"
         disabled={isLoading}
         rows="4"
         class="p-3"
-      />
+      ></textarea>
     </div>
 
     <div class="flex flex-col gap-3">
-      <label class="text-sm font-semibold text-text">Background Image (Optional)</label>
+      <label for="brain-create-background" class="text-sm font-semibold text-text">Background Image (Optional)</label>
       <input
+        id="brain-create-background"
         type="file"
         bind:this={fileInput}
-        on:change={handleFileSelect}
+        onchange={handleFileSelect}
         accept="image/*,.pdf"
         disabled={isLoading}
         class="hidden"
@@ -121,7 +121,7 @@
 
       <button
         type="button"
-        on:click={() => fileInput?.click()}
+        onclick={() => fileInput?.click()}
         disabled={isLoading}
         class="px-6 py-4 border-2 border-dashed border-border rounded-lg text-sm text-text-light hover:border-primary hover:text-primary hover:bg-primary hover:bg-opacity-5 transition-all disabled:opacity-60 disabled:cursor-not-allowed {backgroundFile ? 'border-primary text-primary bg-primary bg-opacity-5' : ''}"
       >
@@ -153,7 +153,7 @@
         size="base"
         fullWidth
         disabled={isLoading}
-        on:click={handleClose}
+        onclick={handleClose}
       >
         Cancel
       </Button>

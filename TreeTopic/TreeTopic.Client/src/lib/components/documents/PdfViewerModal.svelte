@@ -1,0 +1,290 @@
+<script lang="ts">
+  import { onMount } from 'svelte';
+  import Modal from '../common/Modal.svelte';
+  import Button from '../common/Button.svelte';
+  import { ui, activeModals } from '$lib/stores/ui';
+  import * as pdfjsLib from 'pdfjs-dist';
+
+  // Initialize PDF.js worker
+  pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
+    'pdfjs-dist/build/pdf.worker.min.mjs',
+    import.meta.url
+  ).toString();
+
+  const modalId = 'pdf-viewer';
+  let modal = $derived.by(() => $activeModals.find((m) => m.id === modalId) ?? null);
+  let isOpen = $derived.by(() => modal !== null);
+  let fileUrl = $derived.by(() => modal?.data?.fileUrl ?? null);
+  let fileName = $derived.by(() => modal?.data?.fileName ?? 'Document');
+
+  let canvasElement: HTMLCanvasElement | undefined = $state();
+  let pdfDocument: pdfjsLib.PDFDocumentProxy | null = $state(null);
+  let currentPage = $state(1);
+  let totalPages = $derived(pdfDocument?.numPages ?? 0);
+  let scale = $state(1.0);
+  let isLoading = $state(false);
+  let error = $state<string | null>(null);
+  let pageInput = $state('1');
+
+  $effect(() => {
+    if (isOpen && fileUrl) {
+      loadPdf(fileUrl);
+      pageInput = '1';
+      scale = 1.0;
+    }
+  });
+
+  $effect(() => {
+    if (pdfDocument && canvasElement) {
+      renderPage(currentPage);
+    }
+  });
+
+  async function loadPdf(url: string) {
+    try {
+      isLoading = true;
+      error = null;
+      const pdf = await pdfjsLib.getDocument(url).promise;
+      pdfDocument = pdf;
+      currentPage = 1;
+    } catch (err) {
+      error = err instanceof Error ? err.message : 'Failed to load PDF';
+    } finally {
+      isLoading = false;
+    }
+  }
+
+  async function renderPage(pageNum: number) {
+    if (!pdfDocument || !canvasElement) return;
+
+    try {
+      isLoading = true;
+      const page = await pdfDocument.getPage(pageNum);
+
+      const viewport = page.getViewport({ scale });
+      canvasElement.width = viewport.width;
+      canvasElement.height = viewport.height;
+
+      const context = canvasElement.getContext('2d');
+      if (!context) {
+        throw new Error('Failed to get canvas context');
+      }
+
+      await page.render({
+        canvasContext: context,
+        viewport: viewport,
+      }).promise;
+    } catch (err) {
+      error = err instanceof Error ? err.message : 'Failed to render page';
+    } finally {
+      isLoading = false;
+    }
+  }
+
+  function previousPage() {
+    if (currentPage > 1) {
+      currentPage--;
+      pageInput = currentPage.toString();
+    }
+  }
+
+  function nextPage() {
+    if (currentPage < totalPages) {
+      currentPage++;
+      pageInput = currentPage.toString();
+    }
+  }
+
+  function goToPage() {
+    const pageNum = parseInt(pageInput, 10);
+    if (pageNum >= 1 && pageNum <= totalPages) {
+      currentPage = pageNum;
+    } else {
+      pageInput = currentPage.toString();
+    }
+  }
+
+  function zoomIn() {
+    scale = Math.min(scale + 0.2, 3.0);
+  }
+
+  function zoomOut() {
+    scale = Math.max(scale - 0.2, 0.5);
+  }
+
+  function resetZoom() {
+    scale = 1.0;
+  }
+
+  function downloadPdf() {
+    if (fileUrl) {
+      const link = document.createElement('a');
+      link.href = fileUrl;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+  }
+
+  function handleClose() {
+    ui.closeModal(modalId);
+    pdfDocument = null;
+  }
+
+  function handleKeyDown(e: KeyboardEvent) {
+    if (!isOpen) return;
+
+    switch (e.key) {
+      case 'ArrowLeft':
+        previousPage();
+        break;
+      case 'ArrowRight':
+        nextPage();
+        break;
+      case '+':
+      case '=':
+        zoomIn();
+        break;
+      case '-':
+        zoomOut();
+        break;
+    }
+  }
+</script>
+
+<svelte:window on:keydown={handleKeyDown} />
+
+<Modal {isOpen} title={fileName} onClose={handleClose} size="xlarge" closeButton={!isLoading}>
+  <div class="flex flex-col h-full bg-white">
+    <!-- Toolbar -->
+    <div class="border-b border-border p-3 bg-surface flex items-center justify-between gap-3 flex-wrap">
+      <!-- Navigation controls -->
+      <div class="flex items-center gap-2">
+        <Button
+          variant="secondary"
+          size="sm"
+          onclick={previousPage}
+          disabled={isLoading || currentPage <= 1}
+        >
+          ← Previous
+        </Button>
+
+        <div class="flex items-center gap-1">
+          <input
+            type="number"
+            bind:value={pageInput}
+            onchange={goToPage}
+            min="1"
+            max={totalPages}
+            disabled={isLoading || totalPages === 0}
+            class="w-12 px-2 py-1 border border-border rounded text-center text-sm"
+          />
+          <span class="text-sm text-text-light">/ {totalPages}</span>
+        </div>
+
+        <Button
+          variant="secondary"
+          size="sm"
+          onclick={nextPage}
+          disabled={isLoading || currentPage >= totalPages}
+        >
+          Next →
+        </Button>
+      </div>
+
+      <!-- Zoom controls -->
+      <div class="flex items-center gap-2">
+        <Button
+          variant="secondary"
+          size="sm"
+          onclick={zoomOut}
+          disabled={isLoading || scale <= 0.5}
+        >
+          −
+        </Button>
+
+        <span class="text-sm text-text-light w-12 text-center">{Math.round(scale * 100)}%</span>
+
+        <Button
+          variant="secondary"
+          size="sm"
+          onclick={zoomIn}
+          disabled={isLoading || scale >= 3.0}
+        >
+          +
+        </Button>
+
+        <Button
+          variant="secondary"
+          size="sm"
+          onclick={resetZoom}
+          disabled={isLoading}
+        >
+          Reset
+        </Button>
+      </div>
+
+      <!-- Download button -->
+      <Button
+        variant="secondary"
+        size="sm"
+        onclick={downloadPdf}
+        disabled={isLoading || !fileUrl}
+      >
+        Download
+      </Button>
+    </div>
+
+    <!-- Error message -->
+    {#if error}
+      <div class="p-4 bg-error bg-opacity-10 border-b border-error text-error text-sm">
+        {error}
+      </div>
+    {/if}
+
+    <!-- Canvas area -->
+    <div class="flex-1 overflow-auto flex items-center justify-center bg-gray-100">
+      {#if isLoading}
+        <div class="text-center">
+          <div class="inline-block">
+            <div class="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+          </div>
+          <p class="mt-2 text-sm text-text-light">Loading page...</p>
+        </div>
+      {:else if pdfDocument}
+        <canvas
+          bind:this={canvasElement}
+          class="max-w-full max-h-full shadow-lg"
+        ></canvas>
+      {:else}
+        <div class="text-center text-text-light">
+          <p class="text-lg font-semibold mb-2">No PDF loaded</p>
+          <p class="text-sm">Upload a PDF file to view it here</p>
+        </div>
+      {/if}
+    </div>
+  </div>
+</Modal>
+
+<style>
+  input[type='number']::-webkit-outer-spin-button,
+  input[type='number']::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+
+  input[type='number'] {
+    -moz-appearance: textfield;
+  }
+
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  :global(.animate-spin) {
+    animation: spin 1s linear infinite;
+  }
+</style>

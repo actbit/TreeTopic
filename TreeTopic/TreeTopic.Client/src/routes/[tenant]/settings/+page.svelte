@@ -20,19 +20,19 @@
 
 {#if $isAuthenticated}
   <AppLayout>
-    <svelte:fragment slot="headerContent">
+    {#snippet headerContent()}
       <div class="flex items-center justify-between w-full">
         <RoomSelector navigateOnSelect={false} />
         <h1 class="text-xl font-bold text-text">Settings</h1>
         <div></div>
       </div>
-    </svelte:fragment>
+    {/snippet}
 
-    <svelte:fragment slot="sidebarContent">
+    {#snippet sidebarContent()}
       <div class="space-y-2 p-5">
         {#each tabs as tab}
           <button
-            on:click={() => (activeTab = tab.id)}
+            onclick={() => (activeTab = tab.id)}
             class="w-full flex items-center gap-3 px-5 py-3 rounded-lg transition-colors {activeTab ===
             tab.id
               ? 'bg-primary text-white'
@@ -42,9 +42,9 @@
           </button>
         {/each}
       </div>
-    </svelte:fragment>
+    {/snippet}
 
-    <svelte:fragment slot="mainContent">
+    {#snippet mainContent()}
       <div class="flex-1 overflow-y-auto p-8 bg-white">
         <div class="max-w-2xl">
             {#if activeTab === 'general'}
@@ -88,10 +88,29 @@
                 </div>
 
                 <div class="space-y-4">
+                  <div class="flex items-center gap-3">
+                    {#if $currentUser?.avatar}
+                      <img
+                        src={$currentUser.avatar}
+                        alt={$currentUser?.displayName || 'User'}
+                        class="w-8 h-8 rounded-full flex-shrink-0"
+                      />
+                    {:else}
+                      <div class="w-8 h-8 rounded-full bg-primary text-white flex items-center justify-center text-xs font-bold flex-shrink-0">
+                        {$currentUser?.displayName?.charAt(0) ?? 'U'}
+                      </div>
+                    {/if}
+                    <div>
+                      <p class="text-sm text-text-light">Profile name</p>
+                      <p class="text-base font-semibold text-text">{$currentUser?.displayName || ''}</p>
+                    </div>
+                  </div>
+
                   <div>
-                    <label class="block text-sm font-semibold text-text mb-2">Display Name</label>
+                    <label for="profile-display-name" class="block text-sm font-semibold text-text mb-2">Display Name</label>
                     <input
                       type="text"
+                      id="profile-display-name"
                       value={$currentUser?.displayName || ''}
                       placeholder="Your display name"
                       class="w-full px-4 py-2 border border-border rounded-lg focus:outline-none focus:border-primary"
@@ -99,9 +118,10 @@
                   </div>
 
                   <div>
-                    <label class="block text-sm font-semibold text-text mb-2">Email</label>
+                    <label for="profile-email" class="block text-sm font-semibold text-text mb-2">Email</label>
                     <input
                       type="email"
+                      id="profile-email"
                       value={$currentUser?.email || ''}
                       placeholder="Your email"
                       disabled
@@ -110,9 +130,10 @@
                   </div>
 
                   <div>
-                    <label class="block text-sm font-semibold text-text mb-2">Avatar URL</label>
+                    <label for="profile-avatar-url" class="block text-sm font-semibold text-text mb-2">Avatar URL</label>
                     <input
                       type="url"
+                      id="profile-avatar-url"
                       placeholder="https://example.com/avatar.jpg"
                       class="w-full px-4 py-2 border border-border rounded-lg focus:outline-none focus:border-primary"
                     />
@@ -199,6 +220,6 @@
             {/if}
           </div>
         </div>
-      </svelte:fragment>
+      {/snippet}
   </AppLayout>
 {/if}
