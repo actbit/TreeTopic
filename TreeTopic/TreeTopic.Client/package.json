@@ -28,6 +28,7 @@
 		"vite": "^7.2.6"
 	},
 	"dependencies": {
+		"@microsoft/signalr": "^8.0.0",
 		"fabric": "^7.1.0",
 		"pdfjs-dist": "^5.4.530"
 	}
