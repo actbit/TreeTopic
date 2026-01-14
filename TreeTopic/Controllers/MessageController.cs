@@ -45,8 +45,18 @@ public class MessageController : ControllerBase
     }
 
     [HttpPost]
+    public async Task<IActionResult> Create([FromBody] CreateMessageRequest request, CancellationToken cancellationToken)
+    {
+        if (!ModelState.IsValid)
+            return ValidationProblem(ModelState);
+
+        var result = await _messageManagementService.CreateMessageAsync(request, CurrentUserId, cancellationToken);
+        return result.ToApiResult();
+    }
+
+    [HttpPost("upload")]
     [Consumes("multipart/form-data")]
-    public async Task<IActionResult> Create([FromForm] CreateMessageRequest request, CancellationToken cancellationToken)
+    public async Task<IActionResult> CreateWithFiles([FromForm] CreateMessageRequest request, CancellationToken cancellationToken)
     {
         if (!ModelState.IsValid)
             return ValidationProblem(ModelState);

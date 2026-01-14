@@ -76,7 +76,7 @@
   <div class="dropdown-wrapper" bind:this={dropdownElement}>
     <button
       type="button"
-      on:click={toggleDropdown}
+      onclick={toggleDropdown}
       {disabled}
       class="dropdown-button {error ? 'dropdown-button-error' : ''}"
     >
@@ -89,7 +89,7 @@
         {#each items as item (item.value)}
           <button
             type="button"
-            on:click={() => selectItem(item)}
+            onclick={() => selectItem(item)}
             disabled={item.disabled}
             class="dropdown-menu-item {value === item.value ? 'dropdown-menu-item-selected' : ''}"
           >

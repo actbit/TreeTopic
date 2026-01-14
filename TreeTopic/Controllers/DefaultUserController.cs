@@ -5,6 +5,7 @@ using TreeTopic.Dtos;
 using TreeTopic.Models;
 using Finbuckle.MultiTenant;
 using Finbuckle.MultiTenant.Abstractions;
+using TreeTopic.Services;
 
 namespace TreeTopic.Controllers;
 
@@ -15,15 +16,18 @@ public class DefaultUserController : ControllerBase
 {
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly IMultiTenantContextAccessor<ApplicationTenantInfo> _tenantAccessor;
+    private readonly IconService _iconService;
     private readonly ILogger<DefaultUserController> _logger;
 
     public DefaultUserController(
         UserManager<ApplicationUser> userManager,
         IMultiTenantContextAccessor<ApplicationTenantInfo> tenantAccessor,
+        IconService iconService,
         ILogger<DefaultUserController> logger)
     {
         _userManager = userManager;
         _tenantAccessor = tenantAccessor;
+        _iconService = iconService;
         _logger = logger;
     }
 
@@ -69,6 +73,13 @@ public class DefaultUserController : ControllerBase
                 message = "Failed to create user",
                 errors = result.Errors.Select(e => e.Description)
             });
+        }
+
+        var iconFileName = await _iconService.EnsureDefaultUserIconAsync(user, CancellationToken.None);
+        if (!string.IsNullOrWhiteSpace(iconFileName))
+        {
+            user.IconFileName = iconFileName;
+            await _userManager.UpdateAsync(user);
         }
 
         _logger.LogInformation("Default Google user created: {Email}", user.Email);

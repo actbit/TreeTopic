@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { goto } from '$app/navigation';
+  import { page } from '$app/stores';
   import { topicList, addTopic, toggleTopicExpansion, setSelectedTopic, createTopicParentId, moveTopicParent, updateTopic } from '$lib/stores/topics';
   import { currentRoom } from '$lib/stores/rooms';
   import { ui } from '$lib/stores/ui';
@@ -8,6 +10,7 @@
   import ContextMenu from '../common/ContextMenu.svelte';
   import type { ContextMenuItem } from '../common/ContextMenu.svelte';
   import { clearDragData, getDragData, preventDragDefaults, setDragData } from '$lib/utils/dragdrop';
+  import TopicNode from './TopicNode.svelte';
 
   interface Props {
     node: TopicTreeNode;
@@ -131,10 +134,15 @@
   }
 
   function selectTopic() {
-    const topic = $topicList.find((t) => t.id === node.id);
-    if (topic) {
-      setSelectedTopic(topic);
-    }
+    if (!$currentRoom) return;
+
+    const tenant = ($page.params as any)?.tenant ?? getCurrentTenant();
+    if (!tenant) return;
+
+    // If already selected, keep selection (don't toggle off).
+    if (selectedTopicId === node.id) return;
+
+    goto(`/${tenant}/room/${$currentRoom.id}/topic/${node.id}`, { keepFocus: true, noScroll: true });
   }
 
   function handleContextMenu(e: MouseEvent) {
@@ -244,20 +252,29 @@
 <div class="topic-item" style="--topic-level: {level}">
   <div
     class="topic-header {selectedTopicId === node.id ? 'topic-header-active' : ''} {isDragOver ? 'topic-header-drop' : ''} {isDraggingSelf ? 'topic-header-dragging' : ''}"
-    on:click={selectTopic}
-    on:contextmenu={handleContextMenu}
+    onclick={selectTopic}
+    oncontextmenu={handleContextMenu}
     draggable={true}
-    on:dragstart={handleDragStart}
-    on:dragend={handleDragEnd}
-    on:dragover={handleDragOver}
-    on:dragleave={handleDragLeave}
-    on:drop={handleDrop}
+    ondragstart={handleDragStart}
+    ondragend={handleDragEnd}
+    ondragover={handleDragOver}
+    ondragleave={handleDragLeave}
+    ondrop={handleDrop}
+    onkeydown={(e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        selectTopic();
+      }
+    }}
     role="button"
     tabindex="0"
   >
     {#if node.hasChildren}
       <button
-        on:click|stopPropagation={toggleExpand}
+        onclick={(e) => {
+          e.stopPropagation();
+          toggleExpand();
+        }}
         class="topic-toggle-button"
         title={node.isExpanded ? 'Collapse' : 'Expand'}
         aria-expanded={node.isExpanded}
@@ -281,7 +298,10 @@
     {/if}
 
     <button
-      on:click|stopPropagation={openCreateChildTopicModal}
+      onclick={(e) => {
+        e.stopPropagation();
+        openCreateChildTopicModal();
+      }}
       class="button clickable topic-add-button"
       title="Add child topic"
     >
@@ -289,7 +309,10 @@
     </button>
 
     <button
-      on:click|stopPropagation={handleContextMenu}
+      onclick={(e) => {
+        e.stopPropagation();
+        handleContextMenu(e as unknown as MouseEvent);
+      }}
       class="button clickable topic-options-button"
       title="Options"
     >
@@ -300,7 +323,7 @@
   {#if node.isExpanded && node.children.length > 0}
     <div class="topic-children">
       {#each node.children as childNode (childNode.id)}
-        <svelte:self node={childNode} level={level + 1} selectedTopicId={selectedTopicId} />
+        <TopicNode node={childNode} level={level + 1} selectedTopicId={selectedTopicId} />
       {/each}
     </div>
   {/if}

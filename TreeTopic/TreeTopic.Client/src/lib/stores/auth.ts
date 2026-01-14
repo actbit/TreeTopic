@@ -9,6 +9,7 @@ export interface User {
   userName: string;
   email: string;
   displayName: string;
+  iconUrl?: string;
   avatar?: string;
   roles: string[];
 }
@@ -33,6 +34,8 @@ interface AuthCheckResponse {
 interface AuthMeResponse {
   userId: string;
   userName: string;
+  displayName?: string;
+  iconUrl?: string;
   email: string;
   roles?: string[];
 }
@@ -69,7 +72,8 @@ function createAuthStore() {
           id: userData.userId,
             userName: userData.userName,
             email: userData.email,
-            displayName: userData.userName,
+            displayName: userData.displayName ?? userData.userName,
+            iconUrl: userData.iconUrl,
             roles: userData.roles || [],
           },
           isAuthenticated: true,

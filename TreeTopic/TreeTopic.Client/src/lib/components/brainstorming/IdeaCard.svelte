@@ -1,60 +1,40 @@
 <script lang="ts">
-  import { ui } from '$lib/stores/ui';
-  import type { Idea } from '$lib/types/ui';
+  import type { BrainIdea } from '$lib/stores/brainstorm';
 
   interface Props {
-    idea: Idea;
+    idea: BrainIdea;
     isDragging?: boolean;
+    currentUserId?: string | null;
+    isVoting?: boolean;
+    onVote?: (voteType: string) => void;
     onDragStart?: (e: DragEvent) => void;
     onDragEnd?: (e: DragEvent) => void;
     onDelete?: () => void;
-    onEdit?: () => void;
   }
 
-  let { idea, isDragging = false, onDragStart, onDragEnd, onDelete, onEdit }: Props = $props();
-
-  let isHovered = $state(false);
-  let isEditing = $state(false);
-  let editedText = $state(idea.text);
-
-  function handleEdit() {
-    isEditing = true;
-    editedText = idea.text;
-  }
-
-  function handleSave() {
-    if (editedText.trim()) {
-      idea.text = editedText.trim();
-      isEditing = false;
-    }
-  }
-
-  function handleCancel() {
-    isEditing = false;
-    editedText = idea.text;
-  }
-
-  function toggleVoteMark(type: 'circle' | 'square' | 'triangle' | 'cross') {
-    const existingMark = idea.marks.find((m) => m.type === type);
-    if (existingMark) {
-      idea.marks = idea.marks.filter((m) => m !== existingMark);
-    } else {
-      idea.marks = [...idea.marks, { type, userId: 'current-user' }];
-    }
-  }
+  let {
+    idea,
+    isDragging = false,
+    currentUserId = null,
+    isVoting = false,
+    onVote,
+    onDragStart,
+    onDragEnd,
+    onDelete,
+  }: Props = $props();
 
   function getMarkIcon(type: string): string {
     switch (type) {
       case 'circle':
-        return '●';
+        return '○';
       case 'square':
-        return '■';
+        return '□';
       case 'triangle':
-        return '▲';
+        return '△';
       case 'cross':
-        return '×';
+        return '✕';
       default:
-        return '●';
+        return '○';
     }
   }
 
@@ -68,13 +48,6 @@
     return labels[type] || type;
   }
 
-  function handleKeyDown(e: KeyboardEvent) {
-    if (e.key === 'Enter' || e.key === ' ') {
-      e.preventDefault();
-      handleEdit();
-    }
-  }
-
   const voteCounts = $derived.by(() => {
     const counts: Record<string, number> = {
       circle: 0,
@@ -83,106 +56,211 @@
       cross: 0,
     };
 
-    idea.marks.forEach((mark) => {
-      counts[mark.type]++;
+    (idea.votes ?? []).forEach((vote) => {
+      const key = (vote.voteType || '').toLowerCase();
+      if (!key) return;
+      if (!counts[key]) counts[key] = 0;
+      counts[key] += vote.value ?? 1;
     });
 
     return counts;
   });
+
+  const currentUserVote = $derived.by(() => {
+    if (!currentUserId) return null;
+    return (idea.votes ?? []).find((vote) => vote.roomUserId === currentUserId) ?? null;
+  });
+
+  const currentUserVoteType = $derived.by(() => currentUserVote?.voteType?.toLowerCase() ?? null);
+
+  function handleVoteClick(type: string) {
+    if (!onVote || isVoting || !currentUserId) return;
+    onVote(type);
+  }
 </script>
 
 <article
-  class="card hoverable draggable-card {isDragging ? 'dragging' : ''}"
+  class="idea-card {isDragging ? 'dragging' : ''}"
   draggable={true}
-  on:dragstart={onDragStart}
-  on:dragend={onDragEnd}
-  on:mouseenter={() => (isHovered = true)}
-  on:mouseleave={() => (isHovered = false)}
+  ondragstart={onDragStart}
+  ondragend={onDragEnd}
   role="region"
-  aria-label="Idea card: {idea.text.substring(0, 50)}"
-  tabindex="0"
-  on:keydown={handleKeyDown}
+  aria-label="Idea card: {idea.idea.substring(0, 50)}"
 >
-  {#if isEditing}
-    <div class="spacing-sm">
-      <textarea
-        value={editedText}
-        on:input={(e) => (editedText = (e.target as HTMLTextAreaElement).value)}
-        class="form-input w-full text-small"
-        rows="2"
-        style="resize: none;"
-        autofocus
-      />
-      <div class="flex spacing-sm">
-        <button
-          on:click={handleSave}
-          class="button button-primary button-small"
-          style="flex: 1;"
-        >
-          Save
-        </button>
-        <button
-          on:click={handleCancel}
-          class="button button-secondary button-small"
-          style="flex: 1;"
-        >
-          Cancel
-        </button>
-      </div>
+  {#if idea.userName}
+    <div class="idea-card__header">
+      <span class="idea-card__badge">{idea.userName}</span>
     </div>
-  {:else}
-    <div class="spacing-sm">
-      <p class="text-small" style="white-space: pre-wrap; word-break: break-word;">{idea.text}</p>
+  {/if}
 
-      {#if idea.userName && !idea.isAnonymous}
-        <p class="text-small text-light">By {idea.userName}</p>
-      {/if}
+  <p class="idea-card__text" style="white-space: pre-wrap; word-break: break-word;">
+    {idea.idea}
+  </p>
 
-      <div class="flex flex-wrap spacing-xs">
-        {#each ['circle', 'square', 'triangle', 'cross'] as voteType}
-          <button
-            on:click={() => toggleVoteMark(voteType)}
-            class="badge clickable {voteCounts[voteType] > 0 ? 'badge-primary' : 'badge-secondary'}"
-            title={`${getMarkLabel(voteType)} - ${voteCounts[voteType]} votes`}
-            aria-label={`${getMarkLabel(voteType)} vote: ${voteCounts[voteType]}`}
-            aria-pressed={voteCounts[voteType] > 0}
-          >
-            {getMarkIcon(voteType)} {voteCounts[voteType] > 0 ? voteCounts[voteType] : ''}
-          </button>
-        {/each}
-      </div>
+  <div class="idea-card__votes">
+    {#each ['circle', 'square', 'triangle', 'cross'] as voteType}
+      <button
+        class="vote-pill vote-{voteType} {voteCounts[voteType] > 0 ? 'active' : ''} {currentUserVoteType === voteType ? 'selected' : ''}"
+        title={`${getMarkLabel(voteType)} - ${voteCounts[voteType]} votes`}
+        aria-label={`${getMarkLabel(voteType)} vote: ${voteCounts[voteType]}`}
+        aria-pressed={currentUserVoteType === voteType}
+        disabled={isVoting || !currentUserId || !onVote}
+        onclick={() => handleVoteClick(voteType)}
+        type="button"
+      >
+        <span class="vote-icon">{getMarkIcon(voteType)}</span>
+        {#if voteCounts[voteType] > 0}
+          <span class="vote-count">{voteCounts[voteType]}</span>
+        {/if}
+      </button>
+    {/each}
+  </div>
 
-      {#if isHovered && !isEditing}
-        <div class="divider margin-top-sm margin-bottom-sm"></div>
-        <div class="flex spacing-xs">
-          <button
-            on:click={handleEdit}
-            class="button button-primary button-small"
-            style="flex: 1;"
-          >
-            Edit
-          </button>
-          <button
-            on:click={onDelete}
-            class="button button-danger button-small"
-            style="flex: 1;"
-          >
-            Delete
-          </button>
-        </div>
-      {/if}
+  {#if onDelete}
+    <div class="idea-card__actions">
+      <button onclick={onDelete} class="idea-card__delete">Delete</button>
     </div>
   {/if}
 </article>
 
 <style>
-  .draggable-card {
+  .idea-card {
     touch-action: none;
-    cursor: move;
-    border: 2px solid var(--color-primary);
+    cursor: grab;
+    border-radius: 14px;
+    background: linear-gradient(180deg, #1f1f1f 0%, #181818 100%);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.4);
+    padding: 12px 14px 14px;
+    color: #e2e8f0;
+    display: grid;
+    gap: 10px;
   }
 
-  .draggable-card.dragging {
-    opacity: 0.5;
+  .idea-card:focus-visible {
+    outline: 2px solid rgba(96, 165, 250, 0.8);
+    outline-offset: 2px;
+  }
+
+  .idea-card.dragging {
+    opacity: 0.6;
+    cursor: grabbing;
+  }
+
+  .idea-card__header {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: #94a3b8;
+  }
+
+  .idea-card__badge {
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    font-size: 11px;
+    color: #e2e8f0;
+    letter-spacing: 0.02em;
+  }
+
+  .idea-card__text {
+    font-size: 13px;
+    line-height: 1.5;
+    margin: 0;
+  }
+
+  .idea-card__votes {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .vote-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(15, 23, 42, 0.35);
+    color: #cbd5e1;
+    transition: all 0.2s ease;
+    cursor: pointer;
+  }
+
+  .vote-pill.active {
+    background: rgba(255, 255, 255, 0.08);
+    color: #f8fafc;
+    box-shadow: 0 6px 14px rgba(0, 0, 0, 0.3);
+  }
+
+  .vote-pill.selected {
+    border-color: rgba(96, 165, 250, 0.7);
+    box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.2);
+  }
+
+  .vote-pill:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  .vote-pill.vote-circle {
+    border-color: rgba(56, 189, 248, 0.6);
+    color: #7dd3fc;
+  }
+
+  .vote-pill.vote-square {
+    border-color: rgba(167, 139, 250, 0.6);
+    color: #c4b5fd;
+  }
+
+  .vote-pill.vote-triangle {
+    border-color: rgba(245, 158, 11, 0.65);
+    color: #fbbf24;
+  }
+
+  .vote-pill.vote-cross {
+    border-color: rgba(248, 113, 113, 0.7);
+    color: #fca5a5;
+  }
+
+  .vote-icon {
+    font-size: 12px;
+  }
+
+  .vote-count {
+    font-weight: 600;
+  }
+
+  .idea-card__actions {
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    padding-top: 8px;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+  }
+
+  .idea-card:hover .idea-card__actions {
+    opacity: 1;
+  }
+
+  .idea-card__delete {
+    width: 100%;
+    padding: 6px 12px;
+    border-radius: 10px;
+    background: rgba(239, 68, 68, 0.2);
+    border: 1px solid rgba(239, 68, 68, 0.35);
+    color: #fecaca;
+    font-size: 12px;
+    cursor: pointer;
+  }
+
+  .idea-card__delete:hover {
+    background: rgba(239, 68, 68, 0.35);
   }
 </style>

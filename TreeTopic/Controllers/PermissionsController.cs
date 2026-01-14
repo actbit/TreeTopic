@@ -10,7 +10,7 @@ namespace TreeTopic.Controllers;
 
 [ApiController]
 [Route("{tenant}/api/[controller]")]
-[Authorize(Roles = "Admin")]
+[Authorize]
 public class PermissionsController : ControllerBase
 {
     private readonly PermissionManagementService _permissionManagementService;

@@ -121,11 +121,11 @@
           ? 'border-l-4 border-primary pl-3 bg-primary bg-opacity-5'
           : ''}"
         draggable={true}
-        on:dragstart={(e) => handleDragStart(message.id, e)}
-        on:dragover={(e) => handleDragOver(message.id, e)}
-        on:drop={(e) => handleDrop(message.id, e)}
-        on:dragend={handleDragEnd}
-        on:dragleave={() => (dragOverMessageId = null)}
+        ondragstart={(e) => handleDragStart(message.id, e)}
+        ondragover={(e) => handleDragOver(message.id, e)}
+        ondrop={(e) => handleDrop(message.id, e)}
+        ondragend={handleDragEnd}
+        ondragleave={() => (dragOverMessageId = null)}
         role="button"
         tabindex="0"
       >

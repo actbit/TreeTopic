@@ -9,7 +9,7 @@
 </script>
 
 <aside
-  class={`app-sidebar overflow-y-auto flex flex-col bg-surface ${$responsiveLayout ? 'sidebar-mobile' : 'sidebar-desktop'} ${$sidebarCollapsed ? 'sidebar-collapsed' : 'sidebar-expanded'}`}
+  class={`app-sidebar overflow-y-auto flex flex-col bg-surface ${$responsiveLayout ? 'sidebar-mobile' : 'sidebar-desktop'} ${$sidebarCollapsed ? 'sidebar-collapsed' : 'sidebar-expanded'} ${$responsiveLayout && !$sidebarCollapsed ? 'mobile-visible' : ''}`}
   aria-hidden={$responsiveLayout && $sidebarCollapsed}
 >
   <nav class="sidebar-nav">

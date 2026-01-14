@@ -70,7 +70,7 @@
 </script>
 
 <Modal {isOpen} title="Create Room" onClose={handleClose} size="medium">
-  <form on:submit={handleCreate} class="spacing-md">
+  <form onsubmit={handleCreate} class="spacing-md">
     {#if error}
       <ErrorMessage message={error} onDismiss={() => (error = null)} />
     {/if}
@@ -86,14 +86,15 @@
     />
 
     <div class="form-group">
-      <label class="form-label">Description</label>
+      <label for="room-description" class="form-label">Description</label>
       <textarea
+        id="room-description"
         bind:value={description}
         placeholder="Enter room description (optional)"
         disabled={isLoading}
         class="form-input"
         style="resize: vertical; min-height: 80px;"
-      />
+      ></textarea>
     </div>
 
     <div class="flex items-center form-checkbox-group">
@@ -126,7 +127,7 @@
         size="base"
         fullWidth
         disabled={isLoading}
-        on:click={handleClose}
+        onclick={handleClose}
       >
         Cancel
       </Button>

@@ -88,7 +88,7 @@
 </script>
 
 <Modal {isOpen} title="Room Settings" onClose={handleClose} size="medium">
-  <form on:submit={handleSave} class="space-y-6">
+  <form onsubmit={handleSave} class="space-y-6">
     {#if error}
       <ErrorMessage message={error} onDismiss={() => (error = null)} />
     {/if}
@@ -104,12 +104,13 @@
     />
 
     <div class="flex flex-col gap-1">
-      <label class="text-sm font-semibold text-text">Description</label>
+      <label for="room-settings-description" class="text-sm font-semibold text-text">Description</label>
       <textarea
+        id="room-settings-description"
         bind:value={description}
         placeholder="Enter room description (optional)"
         disabled={isLoading || isDeleting}
-      />
+      ></textarea>
     </div>
 
     {#if $currentRoom?.memberCount}
@@ -142,7 +143,7 @@
         size="base"
         fullWidth
         disabled={isLoading || isDeleting}
-        on:click={handleClose}
+        onclick={handleClose}
       >
         Cancel
       </Button>
@@ -157,7 +158,7 @@
           fullWidth
           loading={isDeleting}
           disabled={isLoading || isDeleting}
-          on:click={handleDelete}
+          onclick={handleDelete}
         >
           {#if isDeleting}
             Deleting...

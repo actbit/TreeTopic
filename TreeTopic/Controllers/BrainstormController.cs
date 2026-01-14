@@ -5,6 +5,7 @@ using TreeTopic.Dtos;
 using TreeTopic.Services;
 using System.Security.Claims;
 using MaskedUUID.AspNetCore.Types;
+using MaskedUUID.AspNetCore.Services;
 
 namespace TreeTopic.Controllers;
 
@@ -14,11 +15,14 @@ namespace TreeTopic.Controllers;
 public class BrainstormController : ControllerBase
 {
     private readonly IBrainstormManagementService _brainstormManagementService;
+    private readonly IMaskedUUIDService _maskedUuidService;
 
     public BrainstormController(
-        IBrainstormManagementService brainstormManagementService)
+        IBrainstormManagementService brainstormManagementService,
+        IMaskedUUIDService maskedUuidService)
     {
         _brainstormManagementService = brainstormManagementService;
+        _maskedUuidService = maskedUuidService;
     }
 
     private Guid CurrentUserId => Guid.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? Guid.Empty.ToString());
@@ -43,6 +47,13 @@ public class BrainstormController : ControllerBase
     {
         var result = await _brainstormManagementService.GetBoardByIdAsync((Guid)boardId, cancellationToken);
         return result.ToApiResult();
+    }
+
+    [HttpGet("encode/{rawId:guid}")]
+    public IActionResult EncodeBoardId([FromRoute] Guid rawId)
+    {
+        var masked = _maskedUuidService.EncodeSynchronous(rawId);
+        return Ok(new { maskedId = masked });
     }
 
     [HttpPost]
@@ -84,6 +95,16 @@ public class BrainstormController : ControllerBase
     public async Task<IActionResult> GetIdeaById([FromRoute] MaskedGuid ideaId, CancellationToken cancellationToken)
     {
         var result = await _brainstormManagementService.GetIdeaByIdAsync((Guid)ideaId, cancellationToken);
+        return result.ToApiResult();
+    }
+
+    [HttpPost("{boardId}/ideas")]
+    public async Task<IActionResult> CreateIdea([FromRoute] MaskedGuid boardId, [FromBody] CreateBrainIdeaRequest request, CancellationToken cancellationToken)
+    {
+        if (!ModelState.IsValid)
+            return ValidationProblem(ModelState);
+
+        var result = await _brainstormManagementService.CreateIdeaAsync((Guid)boardId, request, CurrentUserId, cancellationToken);
         return result.ToApiResult();
     }
 

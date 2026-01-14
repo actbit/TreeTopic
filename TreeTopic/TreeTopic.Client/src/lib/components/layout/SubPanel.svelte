@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { subpanelCollapsed } from '$lib/stores/ui';
+  import { subpanelCollapsed, responsiveLayout } from '$lib/stores/ui';
 
   interface Props {
     title?: string;
@@ -10,7 +10,8 @@
 </script>
 
 <aside
-  class="app-subpanel flex flex-col bg-surface {$subpanelCollapsed ? 'subpanel-collapsed' : 'subpanel-expanded'}"
+  class="app-subpanel flex flex-col bg-surface {$responsiveLayout ? 'subpanel-mobile' : 'subpanel-desktop'} {$subpanelCollapsed ? 'subpanel-collapsed' : 'subpanel-expanded'}"
+  aria-hidden={$responsiveLayout && $subpanelCollapsed}
 >
   {#if title}
     <div class="panel-header">
@@ -28,14 +29,36 @@
 <style>
   .app-subpanel {
     border-left: 1px solid var(--color-border);
-    transition: width var(--transition-normal);
+    transition: width var(--transition-normal), transform var(--transition-normal);
   }
 
-  .subpanel-collapsed {
+  .subpanel-desktop.subpanel-collapsed {
     width: 0;
   }
 
-  .subpanel-expanded {
+  .subpanel-desktop.subpanel-expanded {
     width: 320px;
+  }
+
+  .subpanel-mobile {
+    position: fixed;
+    top: 60px;
+    right: 0;
+    bottom: 0;
+    width: 80vw;
+    max-width: 360px;
+    transform: translateX(100%);
+    z-index: 30;
+    display: flex;
+    box-shadow: var(--shadow-2xl);
+    border-left: 1px solid var(--color-border);
+  }
+
+  .subpanel-mobile.subpanel-expanded {
+    transform: translateX(0);
+  }
+
+  .subpanel-mobile.subpanel-collapsed {
+    transform: translateX(100%);
   }
 </style>

@@ -36,12 +36,23 @@ export interface Room {
 }
 
 /**
+ * Current user's RoomUser information
+ */
+export interface CurrentRoomUser {
+  id: string;
+  displayName: string;
+  iconUrl?: string;
+  useMainIcon: boolean;
+}
+
+/**
  * Rooms store state
  */
 export interface RoomsState {
   rooms: Room[];
   currentRoom: Room | null;
   selectedRoomId: string | null;
+  currentRoomUser: CurrentRoomUser | null;
   isLoading: boolean;
   error: string | null;
   lastUpdated: number | null;
@@ -55,6 +66,7 @@ function createRoomsStore() {
     rooms: [],
     currentRoom: null,
     selectedRoomId: null,
+    currentRoomUser: null,
     isLoading: false,
     error: null,
     lastUpdated: null,
@@ -81,7 +93,17 @@ function createRoomsStore() {
         ...state,
         currentRoom: room,
         selectedRoomId: room?.id ?? null,
+        currentRoomUser: null,
         error: null,
+      }));
+    },
+    /**
+     * Set current room user
+     */
+    setCurrentRoomUser: (roomUser: CurrentRoomUser | null) => {
+      update((state) => ({
+        ...state,
+        currentRoomUser: roomUser,
       }));
     },
     /**
@@ -187,6 +209,7 @@ function createRoomsStore() {
         rooms: [],
         currentRoom: null,
         selectedRoomId: null,
+        currentRoomUser: null,
         isLoading: false,
         error: null,
         lastUpdated: null,
@@ -203,6 +226,7 @@ export const rooms = createRoomsStore();
 export const roomList = derived(rooms, ($rooms) => $rooms.rooms);
 export const currentRoom = derived(rooms, ($rooms) => $rooms.currentRoom);
 export const selectedRoomId = derived(rooms, ($rooms) => $rooms.selectedRoomId);
+export const currentRoomUser = derived(rooms, ($rooms) => $rooms.currentRoomUser);
 export const roomsLoading = derived(rooms, ($rooms) => $rooms.isLoading);
 export const roomsError = derived(rooms, ($rooms) => $rooms.error);
 

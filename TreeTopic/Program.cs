@@ -26,6 +26,7 @@ using Microsoft.AspNetCore.DataProtection;
 using System.IO;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.Extensions.FileProviders;
 namespace TreeTopic;
 
 public class Program
@@ -647,6 +648,7 @@ public class Program
         builder.Services.AddScoped<IBrainBoardRepository, BrainBoardRepository>();
         builder.Services.AddScoped<IBrainIdeaRepository, BrainIdeaRepository>();
         builder.Services.AddScoped<IBrainIdeaVoteRepository, BrainIdeaVoteRepository>();
+        builder.Services.AddScoped<IconService>();
 
         builder.Services.AddOpenApi(options => options.AddMaskedGuidSchemaTransformer());
 
@@ -842,6 +844,13 @@ public class Program
 
         // Serve static files (SPA) after API routes
         app.UseDefaultFiles();
+        var uploadsRoot = Path.Combine(app.Environment.ContentRootPath, "uploads");
+        Directory.CreateDirectory(uploadsRoot);
+        app.UseStaticFiles(new StaticFileOptions
+        {
+            FileProvider = new PhysicalFileProvider(uploadsRoot),
+            RequestPath = "/uploads"
+        });
         app.UseStaticFiles();
 
         app.MapFallback(async context =>

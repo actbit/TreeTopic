@@ -3,9 +3,12 @@
   import LoadingSpinner from '../common/LoadingSpinner.svelte';
   import { messageList, messagesLoading } from '$lib/stores/messages';
   import { selectedTopic } from '$lib/stores/topics';
+  import { page } from '$app/stores';
+  import { getMessageAnchorIdFromHash, scrollToMessageAnchor } from '$lib/utils/messageAnchor';
 
   let messagesContainer: HTMLDivElement | undefined = $state();
   let selectedImage = $state<string | null>(null);
+  let targetAnchorId = $derived.by(() => getMessageAnchorIdFromHash($page.url.hash));
 
   let topicMessages = $derived.by(() => {
     if (!$selectedTopic) return [];
@@ -53,6 +56,14 @@
       msg.attachments.some((a) => a.id === selectedImage && a.fileType === 'image')
     );
   });
+
+  $effect(() => {
+    if ($messagesLoading) return;
+    if (!targetAnchorId) return;
+    setTimeout(() => {
+      scrollToMessageAnchor(targetAnchorId, 'auto');
+    }, 0);
+  });
 </script>
 
 <div class="flex h-full bg-white">
@@ -70,7 +81,7 @@
       <div class="grid grid-cols-2 gap-2 p-2">
         {#each imageGroups as { id, fileName, url }}
           <button
-            on:click={() => (selectedImage = selectedImage === id ? null : id)}
+            onclick={() => (selectedImage = selectedImage === id ? null : id)}
             class="aspect-square rounded border-2 overflow-hidden transition-all {selectedImage === id
               ? 'border-primary shadow-md'
               : 'border-border hover:border-primary'}"

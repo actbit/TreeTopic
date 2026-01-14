@@ -25,6 +25,8 @@
 		<PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="9.0.4" />
 		<PackageReference Include="NSwag.AspNetCore" Version="14.6.3" />
 		<PackageReference Include="Pomelo.EntityFrameworkCore.MySql" Version="9.0.0" />
+		<PackageReference Include="SkiaSharp" Version="2.88.8" />
+		<PackageReference Include="SkiaSharp.NativeAssets.Linux" Version="2.88.8" />
 		<PackageReference Include="UUIDv47Sharp" Version="0.1.1" />
 	</ItemGroup>
 
@@ -46,16 +48,7 @@
 	<ItemGroup>
 		<WwwrootFiles Include="wwwroot\**\*" />
 	</ItemGroup>
-	
-	  <ItemGroup>
-    <Content Update="wwwroot\**" CopyToPublishDirectory="Never" />
-    <Content Update="ClientApp\**" CopyToPublishDirectory="Never" />
-  </ItemGroup>
 
-  <Target Name="CopyPublish" AfterTargets="Publish">
-    <Message Text="## Copy Vite build output" Importance="high" />
-    <Exec Command="xcopy /f /s /e /y $(ProjectDir)wwwroot\* $(PublishDir)\wwwroot" />
-  </Target>
 	<ItemGroup>
 		<Content Update="wwwroot\**" CopyToPublishDirectory="Never" />
 		<Content Update="ClientApp\**" CopyToPublishDirectory="Never" />

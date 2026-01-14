@@ -8,9 +8,11 @@ public class MessageDto : BaseDto
 {
     public MaskedGuid TopicId { get; set; }
 
-    public MaskedGuid ApplicationUserId { get; set; }
+    public MaskedGuid RoomUserId { get; set; }
 
     public string? UserName { get; set; }
+
+    public string? UserAvatar { get; set; }
 
     public string Header { get; set; } = string.Empty;
 
@@ -28,9 +30,8 @@ public class CreateMessageRequest : BaseCreateRequest
     [Required]
     public MaskedGuid TopicId { get; set; }
 
-    [Required]
     [StringLength(500)]
-    public string Header { get; set; } = string.Empty;
+    public string? Header { get; set; }
 
     [Required]
     public string Body { get; set; } = string.Empty;

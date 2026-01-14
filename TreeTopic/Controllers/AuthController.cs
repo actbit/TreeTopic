@@ -8,6 +8,7 @@ using System.Security.Claims;
 using Finbuckle.MultiTenant;
 using TreeTopic.Models;
 using TreeTopic.Constants;
+using TreeTopic.Services;
 
 namespace TreeTopic.Controllers;
 
@@ -20,15 +21,18 @@ public class AuthController : ControllerBase
 {
     private readonly IMultiTenantContextAccessor<ApplicationTenantInfo> _tenantAccessor;
     private readonly UserManager<ApplicationUser> _userManager;
+    private readonly IconService _iconService;
     private readonly ILogger<AuthController> _logger;
 
     public AuthController(
         IMultiTenantContextAccessor<ApplicationTenantInfo> tenantAccessor,
         UserManager<ApplicationUser> userManager,
+        IconService iconService,
         ILogger<AuthController> logger)
     {
         _tenantAccessor = tenantAccessor;
         _userManager = userManager;
+        _iconService = iconService;
         _logger = logger;
     }
 
@@ -135,17 +139,23 @@ public class AuthController : ControllerBase
 
         // DB からユーザー情報を取得して DisplayName を取得
         string? userName = null;
+        string? displayName = null;
+        string? iconUrl = null;
         if (!string.IsNullOrEmpty(userId))
         {
             var list = _userManager.Users;
             var user = await _userManager.FindByIdAsync(userId);
-            userName = user?.DisplayName ?? user?.UserName;
+            userName = user?.UserName;
+            displayName = user?.DisplayName ?? user?.UserName;
+            iconUrl = _iconService.GetUserIconUrl(user);
         }
 
         return Ok(new
         {
             userId = maskedUserId,
             userName,
+            displayName,
+            iconUrl,
             email,
             roles,
             tenant,

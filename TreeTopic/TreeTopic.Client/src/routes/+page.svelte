@@ -83,7 +83,7 @@
           </label>
 
           <button
-            on:click={handleSelectTenant}
+            onclick={handleSelectTenant}
             disabled={!selectedTenant}
             class="continue-button"
           >

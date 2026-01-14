@@ -90,7 +90,7 @@
 </script>
 
 <Modal {isOpen} title="Edit Topic" onClose={handleClose} size="medium">
-  <form on:submit={handleSave} class="spacing-md">
+  <form onsubmit={handleSave} class="spacing-md">
     {#if error}
       <ErrorMessage message={error} onDismiss={() => (error = null)} />
     {/if}
@@ -106,8 +106,9 @@
     />
 
     <div class="form-group">
-      <label class="form-label">Description</label>
+      <label for="topic-edit-description" class="form-label">Description</label>
       <textarea
+        id="topic-edit-description"
         bind:value={description}
         placeholder="Enter topic description (optional)"
         disabled={isLoading}
@@ -133,7 +134,7 @@
         size="base"
         fullWidth
         disabled={isLoading}
-        on:click={handleClose}
+        onclick={handleClose}
       >
         Cancel
       </Button>

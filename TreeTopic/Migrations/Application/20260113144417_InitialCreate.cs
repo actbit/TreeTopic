@@ -33,6 +33,7 @@ namespace TreeTopic.Migrations.Application
                 {
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
                     DisplayName = table.Column<string>(type: "text", nullable: true),
+                    IconFileName = table.Column<string>(type: "text", nullable: true),
                     Sub = table.Column<string>(type: "text", nullable: true),
                     TenantId = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false),
                     UserName = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
@@ -217,6 +218,10 @@ namespace TreeTopic.Migrations.Application
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
                     ApplicationUserId = table.Column<Guid>(type: "uuid", nullable: false),
                     RoomId = table.Column<Guid>(type: "uuid", nullable: false),
+                    Name = table.Column<string>(type: "text", nullable: true),
+                    UseMainName = table.Column<bool>(type: "boolean", nullable: false),
+                    IconFileName = table.Column<string>(type: "text", nullable: true),
+                    UseMainIcon = table.Column<bool>(type: "boolean", nullable: false),
                     CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     UpdatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     TenantId = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false)
@@ -319,7 +324,7 @@ namespace TreeTopic.Migrations.Application
                 {
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
                     TopicId = table.Column<Guid>(type: "uuid", nullable: false),
-                    ApplicationUserId = table.Column<Guid>(type: "uuid", nullable: false),
+                    RoomUserId = table.Column<Guid>(type: "uuid", nullable: false),
                     Header = table.Column<string>(type: "text", nullable: false),
                     Body = table.Column<string>(type: "text", nullable: false),
                     ReplyId = table.Column<Guid>(type: "uuid", nullable: true),
@@ -331,17 +336,17 @@ namespace TreeTopic.Migrations.Application
                 {
                     table.PrimaryKey("PK_Messages", x => x.Id);
                     table.ForeignKey(
-                        name: "FK_Messages_AspNetUsers_ApplicationUserId",
-                        column: x => x.ApplicationUserId,
-                        principalTable: "AspNetUsers",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Restrict);
-                    table.ForeignKey(
                         name: "FK_Messages_Messages_ReplyId",
                         column: x => x.ReplyId,
                         principalTable: "Messages",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.SetNull);
+                    table.ForeignKey(
+                        name: "FK_Messages_RoomUsers_RoomUserId",
+                        column: x => x.RoomUserId,
+                        principalTable: "RoomUsers",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Restrict);
                     table.ForeignKey(
                         name: "FK_Messages_Topics_TopicId",
                         column: x => x.TopicId,
@@ -357,7 +362,7 @@ namespace TreeTopic.Migrations.Application
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
                     BrainBoardId = table.Column<Guid>(type: "uuid", nullable: false),
                     TopicId = table.Column<Guid>(type: "uuid", nullable: false),
-                    ApplicationUserId = table.Column<Guid>(type: "uuid", nullable: true),
+                    RoomUserId = table.Column<Guid>(type: "uuid", nullable: true),
                     Idea = table.Column<string>(type: "text", nullable: false),
                     PositionTop = table.Column<double>(type: "double precision", nullable: false),
                     PositionLeft = table.Column<double>(type: "double precision", nullable: false),
@@ -369,17 +374,17 @@ namespace TreeTopic.Migrations.Application
                 {
                     table.PrimaryKey("PK_BrainIdeas", x => x.Id);
                     table.ForeignKey(
-                        name: "FK_BrainIdeas_AspNetUsers_ApplicationUserId",
-                        column: x => x.ApplicationUserId,
-                        principalTable: "AspNetUsers",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.SetNull);
-                    table.ForeignKey(
                         name: "FK_BrainIdeas_BrainBoards_BrainBoardId",
                         column: x => x.BrainBoardId,
                         principalTable: "BrainBoards",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "FK_BrainIdeas_RoomUsers_RoomUserId",
+                        column: x => x.RoomUserId,
+                        principalTable: "RoomUsers",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.SetNull);
                     table.ForeignKey(
                         name: "FK_BrainIdeas_Topics_TopicId",
                         column: x => x.TopicId,
@@ -426,7 +431,7 @@ namespace TreeTopic.Migrations.Application
                 {
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
                     BrainIdeaId = table.Column<Guid>(type: "uuid", nullable: false),
-                    ApplicationUserId = table.Column<Guid>(type: "uuid", nullable: true),
+                    RoomUserId = table.Column<Guid>(type: "uuid", nullable: true),
                     VoteType = table.Column<string>(type: "text", nullable: false),
                     Value = table.Column<int>(type: "integer", nullable: false),
                     CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
@@ -437,15 +442,110 @@ namespace TreeTopic.Migrations.Application
                 {
                     table.PrimaryKey("PK_BrainIdeaVotes", x => x.Id);
                     table.ForeignKey(
-                        name: "FK_BrainIdeaVotes_AspNetUsers_ApplicationUserId",
-                        column: x => x.ApplicationUserId,
-                        principalTable: "AspNetUsers",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.SetNull);
-                    table.ForeignKey(
                         name: "FK_BrainIdeaVotes_BrainIdeas_BrainIdeaId",
                         column: x => x.BrainIdeaId,
                         principalTable: "BrainIdeas",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "FK_BrainIdeaVotes_RoomUsers_RoomUserId",
+                        column: x => x.RoomUserId,
+                        principalTable: "RoomUsers",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.SetNull);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "ShareItems",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    RoomId = table.Column<Guid>(type: "uuid", nullable: false),
+                    TopicId = table.Column<Guid>(type: "uuid", nullable: true),
+                    BrainBoardId = table.Column<Guid>(type: "uuid", nullable: true),
+                    Kind = table.Column<string>(type: "text", nullable: false),
+                    Title = table.Column<string>(type: "text", nullable: false),
+                    CreatedByRoomUserId = table.Column<Guid>(type: "uuid", nullable: false),
+                    CreatedByName = table.Column<string>(type: "text", nullable: false),
+                    SourceMessageId = table.Column<Guid>(type: "uuid", nullable: true),
+                    SourceFileId = table.Column<Guid>(type: "uuid", nullable: true),
+                    SourceShareItemId = table.Column<Guid>(type: "uuid", nullable: true),
+                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    UpdatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    TenantId = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_ShareItems", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_ShareItems_BrainBoards_BrainBoardId",
+                        column: x => x.BrainBoardId,
+                        principalTable: "BrainBoards",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.SetNull);
+                    table.ForeignKey(
+                        name: "FK_ShareItems_Files_SourceFileId",
+                        column: x => x.SourceFileId,
+                        principalTable: "Files",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.SetNull);
+                    table.ForeignKey(
+                        name: "FK_ShareItems_Messages_SourceMessageId",
+                        column: x => x.SourceMessageId,
+                        principalTable: "Messages",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.SetNull);
+                    table.ForeignKey(
+                        name: "FK_ShareItems_RoomUsers_CreatedByRoomUserId",
+                        column: x => x.CreatedByRoomUserId,
+                        principalTable: "RoomUsers",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Restrict);
+                    table.ForeignKey(
+                        name: "FK_ShareItems_Rooms_RoomId",
+                        column: x => x.RoomId,
+                        principalTable: "Rooms",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "FK_ShareItems_ShareItems_SourceShareItemId",
+                        column: x => x.SourceShareItemId,
+                        principalTable: "ShareItems",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.SetNull);
+                    table.ForeignKey(
+                        name: "FK_ShareItems_Topics_TopicId",
+                        column: x => x.TopicId,
+                        principalTable: "Topics",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.SetNull);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "ShareItemFiles",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    ShareItemId = table.Column<Guid>(type: "uuid", nullable: false),
+                    FileId = table.Column<Guid>(type: "uuid", nullable: false),
+                    IsCurrent = table.Column<bool>(type: "boolean", nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    UpdatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    TenantId = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_ShareItemFiles", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_ShareItemFiles_Files_FileId",
+                        column: x => x.FileId,
+                        principalTable: "Files",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "FK_ShareItemFiles_ShareItems_ShareItemId",
+                        column: x => x.ShareItemId,
+                        principalTable: "ShareItems",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
                 });
@@ -496,13 +596,7 @@ namespace TreeTopic.Migrations.Application
             migrationBuilder.CreateIndex(
                 name: "IX_BrainBoards_TopicId",
                 table: "BrainBoards",
-                column: "TopicId",
-                unique: true);
-
-            migrationBuilder.CreateIndex(
-                name: "IX_BrainIdeas_ApplicationUserId",
-                table: "BrainIdeas",
-                column: "ApplicationUserId");
+                column: "TopicId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_BrainIdeas_BrainBoardId",
@@ -510,19 +604,24 @@ namespace TreeTopic.Migrations.Application
                 column: "BrainBoardId");
 
             migrationBuilder.CreateIndex(
+                name: "IX_BrainIdeas_RoomUserId",
+                table: "BrainIdeas",
+                column: "RoomUserId");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_BrainIdeas_TopicId",
                 table: "BrainIdeas",
                 column: "TopicId");
 
             migrationBuilder.CreateIndex(
-                name: "IX_BrainIdeaVotes_ApplicationUserId",
-                table: "BrainIdeaVotes",
-                column: "ApplicationUserId");
-
-            migrationBuilder.CreateIndex(
                 name: "IX_BrainIdeaVotes_BrainIdeaId",
                 table: "BrainIdeaVotes",
                 column: "BrainIdeaId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_BrainIdeaVotes_RoomUserId",
+                table: "BrainIdeaVotes",
+                column: "RoomUserId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_Files_MessageId",
@@ -535,14 +634,14 @@ namespace TreeTopic.Migrations.Application
                 column: "SourceFileId");
 
             migrationBuilder.CreateIndex(
-                name: "IX_Messages_ApplicationUserId",
-                table: "Messages",
-                column: "ApplicationUserId");
-
-            migrationBuilder.CreateIndex(
                 name: "IX_Messages_ReplyId",
                 table: "Messages",
                 column: "ReplyId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Messages_RoomUserId",
+                table: "Messages",
+                column: "RoomUserId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_Messages_TopicId",
@@ -573,6 +672,51 @@ namespace TreeTopic.Migrations.Application
                 name: "IX_RoomUsers_RoomId",
                 table: "RoomUsers",
                 column: "RoomId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_ShareItemFiles_FileId",
+                table: "ShareItemFiles",
+                column: "FileId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_ShareItemFiles_ShareItemId",
+                table: "ShareItemFiles",
+                column: "ShareItemId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_ShareItems_BrainBoardId",
+                table: "ShareItems",
+                column: "BrainBoardId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_ShareItems_CreatedByRoomUserId",
+                table: "ShareItems",
+                column: "CreatedByRoomUserId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_ShareItems_RoomId",
+                table: "ShareItems",
+                column: "RoomId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_ShareItems_SourceFileId",
+                table: "ShareItems",
+                column: "SourceFileId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_ShareItems_SourceMessageId",
+                table: "ShareItems",
+                column: "SourceMessageId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_ShareItems_SourceShareItemId",
+                table: "ShareItems",
+                column: "SourceShareItemId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_ShareItems_TopicId",
+                table: "ShareItems",
+                column: "TopicId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_Topics_ParentId",
@@ -607,28 +751,34 @@ namespace TreeTopic.Migrations.Application
                 name: "BrainIdeaVotes");
 
             migrationBuilder.DropTable(
-                name: "Files");
-
-            migrationBuilder.DropTable(
                 name: "Permissions");
 
             migrationBuilder.DropTable(
                 name: "RoomPermissions");
 
             migrationBuilder.DropTable(
-                name: "BrainIdeas");
+                name: "ShareItemFiles");
 
             migrationBuilder.DropTable(
-                name: "Messages");
+                name: "BrainIdeas");
 
             migrationBuilder.DropTable(
                 name: "AspNetRoles");
 
             migrationBuilder.DropTable(
-                name: "RoomUsers");
+                name: "ShareItems");
 
             migrationBuilder.DropTable(
                 name: "BrainBoards");
+
+            migrationBuilder.DropTable(
+                name: "Files");
+
+            migrationBuilder.DropTable(
+                name: "Messages");
+
+            migrationBuilder.DropTable(
+                name: "RoomUsers");
 
             migrationBuilder.DropTable(
                 name: "Topics");

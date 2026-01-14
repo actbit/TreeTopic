@@ -191,7 +191,7 @@
 
     {#if topic && topic.hasChildren}
       <div class="form-group">
-        <label class="form-label">When this topic has children:</label>
+        <div class="form-label">When this topic has children:</div>
         <div class="spacing-sm">
           <label class="flex items-center spacing-sm clickable" style="gap: 8px;">
             <input
@@ -199,7 +199,7 @@
               name="deleteMode"
               value="cascade"
               checked={deleteMode === 'cascade'}
-              on:change={() => (deleteMode = 'cascade')}
+              onchange={() => (deleteMode = 'cascade')}
               disabled={isLoading}
             />
             <span class="text-small">Delete this topic and all child topics</span>
@@ -210,7 +210,7 @@
               name="deleteMode"
               value="reparent"
               checked={deleteMode === 'reparent'}
-              on:change={() => (deleteMode = 'reparent')}
+              onchange={() => (deleteMode = 'reparent')}
               disabled={isLoading}
             />
             <span class="text-small">Keep child topics and attach them to the parent</span>
@@ -227,7 +227,7 @@
         fullWidth
         loading={isLoading}
         disabled={isLoading}
-        on:click={handleDelete}
+        onclick={handleDelete}
       >
         Delete
       </Button>
@@ -237,7 +237,7 @@
         size="base"
         fullWidth
         disabled={isLoading}
-        on:click={handleClose}
+        onclick={handleClose}
       >
         Cancel
       </Button>

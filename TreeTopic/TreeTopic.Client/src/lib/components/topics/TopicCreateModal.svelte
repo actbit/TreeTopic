@@ -105,7 +105,7 @@
 </script>
 
 <Modal {isOpen} title="Create Topic" onClose={handleClose} size="medium">
-  <form on:submit={handleCreate} class="spacing-md">
+  <form onsubmit={handleCreate} class="spacing-md">
     {#if error}
       <ErrorMessage message={error} onDismiss={() => (error = null)} />
     {/if}
@@ -121,14 +121,15 @@
     />
 
     <div class="form-group">
-      <label class="form-label">Description</label>
+      <label for="topic-description" class="form-label">Description</label>
       <textarea
+        id="topic-description"
         bind:value={description}
         placeholder="Enter topic description (optional)"
         disabled={isLoading}
         class="form-input"
         style="resize: vertical; min-height: 80px;"
-      />
+      ></textarea>
     </div>
 
     <div class="flex spacing-md padding-top-md">
@@ -148,7 +149,7 @@
         size="base"
         fullWidth
         disabled={isLoading}
-        on:click={handleClose}
+        onclick={handleClose}
       >
         Cancel
       </Button>

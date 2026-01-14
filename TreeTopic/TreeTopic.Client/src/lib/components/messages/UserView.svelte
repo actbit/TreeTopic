@@ -3,9 +3,12 @@
   import LoadingSpinner from '../common/LoadingSpinner.svelte';
   import { messageList, messagesLoading } from '$lib/stores/messages';
   import { selectedTopic } from '$lib/stores/topics';
+  import { page } from '$app/stores';
+  import { getMessageAnchorIdFromHash, scrollToMessageAnchor } from '$lib/utils/messageAnchor';
 
   let messagesContainer: HTMLDivElement | undefined = $state();
   let selectedUser = $state<string | null>(null);
+  let targetAnchorId = $derived.by(() => getMessageAnchorIdFromHash($page.url.hash));
 
   let topicMessages = $derived.by(() => {
     if (!$selectedTopic) return [];
@@ -38,6 +41,14 @@
     if (!selectedUser) return topicMessages;
     return topicMessages.filter((msg) => (msg.userDisplayName || msg.userName) === selectedUser);
   });
+
+  $effect(() => {
+    if ($messagesLoading) return;
+    if (!targetAnchorId) return;
+    setTimeout(() => {
+      scrollToMessageAnchor(targetAnchorId, 'auto');
+    }, 0);
+  });
 </script>
 
 <div class="flex h-full bg-white">
@@ -50,7 +61,7 @@
     <div class="space-y-1 p-2">
       {#each messagesByUser as { user, count, avatar }}
         <button
-          on:click={() => (selectedUser = selectedUser === user ? null : user)}
+          onclick={() => (selectedUser = selectedUser === user ? null : user)}
           class="w-full flex items-center gap-3 p-3 rounded transition-colors {selectedUser === user
             ? 'bg-primary bg-opacity-10 border-l-4 border-primary'
             : 'hover:bg-white'}"
@@ -59,11 +70,11 @@
             <img
               src={avatar}
               alt={user}
-              class="w-8 h-8 rounded-full flex-shrink-0"
+              class="avatar avatar-sm bg-primary"
             />
           {:else}
             <div
-              class="w-8 h-8 rounded-full bg-primary text-white flex items-center justify-center text-xs font-bold flex-shrink-0"
+              class="avatar avatar-sm bg-primary text-white"
             >
               {user?.charAt(0) ?? 'U'}
             </div>

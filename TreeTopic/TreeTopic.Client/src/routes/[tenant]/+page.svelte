@@ -88,7 +88,7 @@
     <div class="panel w-full max-w-lg room-select-panel">
       <div class="panel-header">
         <h1 class="panel-title">Select a room</h1>
-        <button class="button button-secondary button-small" on:click={openCreateModal}>
+        <button class="button button-secondary button-small" onclick={openCreateModal}>
           New Room
         </button>
       </div>
@@ -102,7 +102,7 @@
           <div class="text-center text-light">
             <p class="text-large text-bold margin-bottom-sm">No rooms yet</p>
             <p class="text-small margin-bottom-md">Create your first room to get started</p>
-            <button class="button button-primary" on:click={openCreateModal}>
+            <button class="button button-primary" onclick={openCreateModal}>
               Create Room
             </button>
           </div>
@@ -111,7 +111,7 @@
             {#each $roomList as room (room.id)}
               <button
                 class="list-item clickable hoverable w-full text-left"
-                on:click={() => enterRoom(room.id)}
+                onclick={() => enterRoom(room.id)}
               >
                 <div class="flex items-center justify-between">
                   <div class="min-w-0">
@@ -144,9 +144,10 @@
       {/if}
       <button
         class="button button-secondary"
-        on:click={() => {
+        onclick={() => {
           const tenant = $page.params.tenant ?? getCurrentTenant();
-          window.location.href = `/${tenant}/login`;
+          const returnUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+          window.location.href = `/${tenant}/auth/login?returnUrl=${encodeURIComponent(returnUrl)}`;
         }}
       >
         Go to login
