@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using TreeTopic.Data;
@@ -11,9 +12,11 @@ using TreeTopic.Data;
 namespace TreeTopic.Migrations.Application
 {
     [DbContext(typeof(ApplicationDbContextPostgreSQL))]
-    partial class ApplicationDbContextPostgreSQLModelSnapshot : ModelSnapshot
+    [Migration("20260114095142_MakeMessageHeaderNullable")]
+    partial class MakeMessageHeaderNullable
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

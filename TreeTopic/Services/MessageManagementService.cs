@@ -166,7 +166,7 @@ public class MessageManagementService : BaseService, IMessageManagementService
             {
                 TopicId = request.TopicId,
                 RoomUserId = roomUser.Id,
-                Header = request.Header,
+                Header = request.Header ?? string.Empty,
                 Body = request.Body,
                 ReplyId = request.ReplyId.HasValue && request.ReplyId != Guid.Empty
                     ? request.ReplyId

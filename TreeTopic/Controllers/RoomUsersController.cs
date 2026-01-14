@@ -1,6 +1,7 @@
 ﻿using Finbuckle.MultiTenant;
 using Finbuckle.MultiTenant.Abstractions;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using MaskedUUID.AspNetCore.Types;
 using System.Linq;
@@ -22,15 +23,18 @@ public class RoomUsersController : ControllerBase
     private readonly IRoomUserRepository _roomUserRepository;
     private readonly IMultiTenantContextAccessor<ApplicationTenantInfo> _tenantAccessor;
     private readonly IconService _iconService;
+    private readonly UserManager<ApplicationUser> _userManager;
 
     public RoomUsersController(
         IRoomUserRepository roomUserRepository,
         IMultiTenantContextAccessor<ApplicationTenantInfo> tenantAccessor,
-        IconService iconService)
+        IconService iconService,
+        UserManager<ApplicationUser> userManager)
     {
         _roomUserRepository = roomUserRepository;
         _tenantAccessor = tenantAccessor;
         _iconService = iconService;
+        _userManager = userManager;
     }
 
     private string? CurrentTenantId => _tenantAccessor.MultiTenantContext?.TenantInfo?.Id;
@@ -50,6 +54,16 @@ public class RoomUsersController : ControllerBase
         var entity = await _roomUserRepository.GetByRoomAndUserAsync((Guid)roomId, CurrentUserId, cancellationToken);
         if (entity == null)
             return NotFound();
+
+        // Ensure ApplicationUser has an icon if using main icon
+        if (entity.UseMainIcon && entity.ApplicationUser != null)
+        {
+            var iconFileName = await EnsureApplicationUserIconAsync(entity.ApplicationUser, cancellationToken);
+            if (iconFileName != null)
+            {
+                entity.ApplicationUser.IconFileName = iconFileName;
+            }
+        }
 
         return Ok(MapToDto(entity));
     }
@@ -83,6 +97,17 @@ public class RoomUsersController : ControllerBase
             }
             _roomUserRepository.Update(existing);
             await _roomUserRepository.SaveChangesAsync(cancellationToken);
+
+            // Ensure ApplicationUser has icon if using main icon
+            if (existing.UseMainIcon && existing.ApplicationUser != null)
+            {
+                var iconFileName = await EnsureApplicationUserIconAsync(existing.ApplicationUser, cancellationToken);
+                if (iconFileName != null)
+                {
+                    existing.ApplicationUser.IconFileName = iconFileName;
+                }
+            }
+
             return Ok(MapToDto(existing));
         }
 
@@ -104,6 +129,18 @@ public class RoomUsersController : ControllerBase
 
         await _roomUserRepository.AddAsync(toCreate, cancellationToken);
         await _roomUserRepository.SaveChangesAsync(cancellationToken);
+
+        // Ensure ApplicationUser has icon
+        var user = await _userManager.FindByIdAsync(CurrentUserId.ToString());
+        if (toCreate.UseMainIcon && user != null)
+        {
+            var iconFileName = await EnsureApplicationUserIconAsync(user, cancellationToken);
+            if (iconFileName != null)
+            {
+                toCreate.ApplicationUser = user;
+                toCreate.ApplicationUser.IconFileName = iconFileName;
+            }
+        }
 
         return Ok(MapToDto(toCreate));
     }
@@ -210,6 +247,27 @@ public class RoomUsersController : ControllerBase
         _roomUserRepository.Delete(entity);
         await _roomUserRepository.SaveChangesAsync();
         return NoContent();
+    }
+
+    private async Task<string?> EnsureApplicationUserIconAsync(ApplicationUser user, CancellationToken cancellationToken)
+    {
+        // If user already has an icon file, nothing to do
+        if (!string.IsNullOrWhiteSpace(user.IconFileName))
+            return user.IconFileName;
+
+        // Generate default icon for user if they don't have one
+        var displayName = user.DisplayName ?? user.UserName ?? user.Email ?? "User";
+        var generatedFileName = await _iconService.EnsureDefaultUserIconAsync(user, cancellationToken);
+
+        // Update the user's icon filename
+        if (generatedFileName != null)
+        {
+            user.IconFileName = generatedFileName;
+            await _userManager.UpdateAsync(user);
+            return generatedFileName;
+        }
+
+        return null;
     }
 
     private RoomUserDto MapToDto(RoomUser entity)

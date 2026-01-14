@@ -53,6 +53,24 @@
     });
   }
 
+  function openPdfViewer(file: any) {
+    ui.openModal({
+      id: 'pdf-viewer',
+      title: file.fileName,
+      type: 'custom',
+      data: { fileUrl: file.url, fileName: file.fileName },
+    });
+  }
+
+  function openImageEditor(file: any) {
+    ui.openModal({
+      id: 'image-editor',
+      title: `Edit ${file.fileName}`,
+      type: 'custom',
+      data: { fileUrl: file.url, fileName: file.fileName, fileId: file.id },
+    });
+  }
+
   function getTypeLabel(fileType: string): string {
     switch (fileType) {
       case 'pdf':
@@ -106,15 +124,26 @@
                 </p>
               </div>
               <div class="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                <a
-                  href={file.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  class="px-3 py-2 text-sm text-text-light hover:text-primary rounded hover:bg-white transition-colors font-medium"
-                  title="View"
-                >
-                  View
-                </a>
+                {#if file.fileType === 'pdf'}
+                  <button
+                    type="button"
+                    onclick={() => openPdfViewer(file)}
+                    class="px-3 py-2 text-sm text-text-light hover:text-primary rounded hover:bg-white transition-colors font-medium"
+                    title="Open PDF"
+                  >
+                    Open PDF
+                  </button>
+                {:else}
+                  <a
+                    href={file.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    class="px-3 py-2 text-sm text-text-light hover:text-primary rounded hover:bg-white transition-colors font-medium"
+                    title="View"
+                  >
+                    View
+                  </a>
+                {/if}
                 <button
                   type="button"
                   onclick={() => handleDownload(file.url, file.fileName)}
@@ -137,7 +166,7 @@
           <div class="grid grid-cols-3 gap-3">
             {#each groupedByType.images as file (file.id)}
               <div
-                class="aspect-square bg-surface rounded border border-border overflow-hidden hover:shadow-md transition-shadow group cursor-pointer"
+                class="aspect-square bg-surface rounded border border-border overflow-hidden hover:shadow-md transition-shadow group cursor-pointer relative"
               >
                 <img
                   src={file.url}
@@ -146,13 +175,24 @@
                   loading="lazy"
                 />
                 <div
-                  class="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-50 transition-all flex items-center justify-center gap-3 opacity-0 group-hover:opacity-100"
+                  class="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-50 transition-all flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100"
                 >
+                  <button
+                    type="button"
+                    onclick={(e) => {
+                      e.preventDefault();
+                      openImageEditor(file);
+                    }}
+                    class="px-3 py-1 bg-white rounded hover:bg-primary transition-colors text-xs font-medium"
+                    title="Edit"
+                  >
+                    Edit
+                  </button>
                   <a
                     href={file.url}
                     target="_blank"
                     rel="noreferrer"
-                    class="px-4 py-2 bg-white rounded hover:bg-primary transition-colors text-sm font-medium"
+                    class="px-3 py-1 bg-white rounded hover:bg-primary transition-colors text-xs font-medium"
                     title="View"
                   >
                     View
@@ -163,7 +203,7 @@
                       e.preventDefault();
                       handleDownload(file.url, file.fileName);
                     }}
-                    class="px-4 py-2 bg-white rounded hover:bg-primary transition-colors text-sm font-medium"
+                    class="px-3 py-1 bg-white rounded hover:bg-primary transition-colors text-xs font-medium"
                     title="Download"
                   >
                     Download
@@ -185,6 +225,14 @@
                   </p>
                 </div>
                 <div class="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button
+                    type="button"
+                    onclick={() => openImageEditor(file)}
+                    class="px-3 py-2 text-sm text-text-light hover:text-primary rounded hover:bg-white transition-colors font-medium"
+                    title="Edit"
+                  >
+                    Edit
+                  </button>
                   <a
                     href={file.url}
                     target="_blank"

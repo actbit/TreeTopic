@@ -33,6 +33,8 @@
   import ViewModeSelector from '$lib/components/messages/ViewModeSelector.svelte';
   import ShareList from '$lib/components/shares/ShareList.svelte';
   import FileUploadModal from '$lib/components/files/FileUploadModal.svelte';
+  import PdfViewerModal from '$lib/components/documents/PdfViewerModal.svelte';
+  import ImageEditorModal from '$lib/components/images/ImageEditorModal.svelte';
   import { ui } from '$lib/stores/ui';
   import { api, getCurrentTenant } from '$lib/api/client';
 
@@ -387,8 +389,12 @@
   });
 
   $effect(() => {
-    if (!$currentRoom) return;
+    if (!$currentRoom) {
+      checkedRoomUserId = null;
+      return;
+    }
 
+    // Only fetch if room ID changed
     if (checkedRoomUserId === $currentRoom.id) return;
     checkedRoomUserId = $currentRoom.id;
 
@@ -503,6 +509,8 @@
   <TopicEditModal />
   <TopicDeleteModal />
   <FileUploadModal />
+  <PdfViewerModal />
+  <ImageEditorModal />
   <MessageEditModal />
   <MessageDeleteModal />
 {:else}

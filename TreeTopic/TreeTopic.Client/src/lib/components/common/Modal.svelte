@@ -5,7 +5,7 @@
     isOpen?: boolean;
     title?: string;
     onClose?: () => void;
-    size?: 'small' | 'medium' | 'large';
+    size?: 'small' | 'medium' | 'large' | 'xlarge';
     closeButton?: boolean;
     children?: any;
   }
@@ -119,6 +119,10 @@
     max-width: 672px;
   }
 
+  .modal-xlarge {
+    max-width: 1200px;
+  }
+
   .modal-header {
     display: flex;
     align-items: center;
@@ -154,6 +158,11 @@
     padding: 16px 24px;
     max-height: calc(100vh - 200px);
     overflow-y: auto;
+  }
+
+  .modal-xlarge .modal-body {
+    max-height: calc(100vh - 180px);
+    padding: 0;
   }
 
   @keyframes modalSlideIn {

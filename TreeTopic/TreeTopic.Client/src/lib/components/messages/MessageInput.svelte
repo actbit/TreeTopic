@@ -115,9 +115,7 @@
         // ファイルがある場合はFormDataで /upload エンドポイントに送信
         const form = new FormData();
         form.append('topicId', $selectedTopic.id);
-        if (header) {
-          form.append('header', header);
-        }
+        form.append('header', header);
         form.append('body', trimmedContent);
         if ($replyTarget) {
           form.append('replyId', $replyTarget.id);
