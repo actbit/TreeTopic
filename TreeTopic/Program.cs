@@ -25,8 +25,8 @@ using TreeTopic.KeyProviders;
 using Microsoft.AspNetCore.DataProtection;
 using System.IO;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.Extensions.FileProviders;
+using TreeTopic.Hubs;
 namespace TreeTopic;
 
 public class Program
@@ -99,6 +99,8 @@ public class Program
 
         // Add services to the container.
         builder.Services.AddHttpContextAccessor();
+        builder.Services.AddSignalR();
+        builder.Services.AddSingleton<IConfigureOptions<Microsoft.AspNetCore.SignalR.JsonHubProtocolOptions>, SignalRJsonOptionsConfiguration>();
 
         builder.Services
             .AddAuthentication(options =>
@@ -841,6 +843,7 @@ public class Program
 
         // Map API controllers first (priority over static files)
         app.MapControllers();
+        app.MapHub<MessageHub>("/{tenant}/hubs/messages").RequireAuthorization();
 
         // Serve static files (SPA) after API routes
         app.UseDefaultFiles();
