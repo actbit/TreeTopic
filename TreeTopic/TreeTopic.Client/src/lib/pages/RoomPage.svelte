@@ -4,7 +4,7 @@
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
   import { auth, isAuthenticated } from '$lib/stores/auth';
-  import { currentRoom, setRooms, setCurrentRoom } from '$lib/stores/rooms';
+  import { currentRoom, setRooms, setCurrentRoom, addRoom, updateRoom, deleteRoom, roomList } from '$lib/stores/rooms';
   import { rooms } from '$lib/stores/rooms';
   import {
     selectedTopic,
@@ -13,6 +13,7 @@
     addTopic,
     topicList,
     updateTopic,
+    deleteTopic,
     expandedTopics,
     toggleTopicExpansion,
   } from '$lib/stores/topics';
@@ -52,6 +53,10 @@
   let messageHubTopicId: string | null = null;
   let messageSyncTimer: ReturnType<typeof setTimeout> | null = null;
   let messageHubConnected = $state(false);
+  let roomTopicHub: HubConnection | null = null;
+  let roomTopicHubTenant: string | null = null;
+  let roomTopicHubRoomId: string | null = null;
+  let roomTopicHubConnected = $state(false);
 
   let urlTopicId = $derived.by(() => ($page.params as any)?.topicId ?? null);
   let legacyQueryTopicId = $derived.by(() => $page.url.searchParams.get('topicId'));
@@ -60,6 +65,12 @@
     const baseUrl = getApiBaseUrl();
     const normalizedBaseUrl = baseUrl?.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
     return normalizedBaseUrl ? `${normalizedBaseUrl}/${tenant}/hubs/messages` : `/${tenant}/hubs/messages`;
+  }
+
+  function buildRoomTopicHubUrl(tenant: string) {
+    const baseUrl = getApiBaseUrl();
+    const normalizedBaseUrl = baseUrl?.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
+    return normalizedBaseUrl ? `${normalizedBaseUrl}/${tenant}/hubs/rooms` : `/${tenant}/hubs/rooms`;
   }
 
   async function startMessageHub(tenant: string) {
@@ -120,6 +131,103 @@
     }
   }
 
+  async function startRoomTopicHub(tenant: string) {
+    if (roomTopicHub && roomTopicHubTenant === tenant) return;
+
+    await stopRoomTopicHub();
+
+    const connection = new HubConnectionBuilder()
+      .withUrl(buildRoomTopicHubUrl(tenant), { withCredentials: true })
+      .withAutomaticReconnect()
+      .build();
+
+    connection.on('RoomCreated', (raw: any) => {
+      const normalized = normalizeRoom(raw);
+      const exists = $roomList.some((r) => r.id === normalized.id);
+      if (exists) {
+        updateRoom(normalized.id, normalized);
+      } else {
+        addRoom(normalized);
+      }
+    });
+
+    connection.on('RoomUpdated', (raw: any) => {
+      const normalized = normalizeRoom(raw);
+      updateRoom(normalized.id, normalized);
+    });
+
+    connection.on('RoomDeleted', (raw: any) => {
+      const roomId = raw?.roomId ?? raw?.RoomId ?? '';
+      if (!roomId) return;
+      deleteRoom(roomId);
+    });
+
+    connection.on('TopicCreated', (raw: any) => {
+      const normalized = normalizeTopic(raw);
+      if (!$currentRoom || normalized.roomId !== $currentRoom.id) return;
+      const exists = $topicList.some((t) => t.id === normalized.id);
+      if (exists) {
+        updateTopic(normalized.id, normalized);
+        return;
+      }
+
+      const parentId = normalized.parentId ?? null;
+      if (parentId && !$topicList.some((t) => t.id === parentId)) {
+        return;
+      }
+
+      addTopic(normalized);
+    });
+
+    connection.on('TopicUpdated', (raw: any) => {
+      const normalized = normalizeTopic(raw);
+      if (!$currentRoom || normalized.roomId !== $currentRoom.id) {
+        const existing = $topicList.find((t) => t.id === normalized.id);
+        if (existing) deleteTopic(normalized.id);
+        return;
+      }
+      updateTopic(normalized.id, normalized);
+    });
+
+    connection.on('TopicDeleted', (raw: any) => {
+      const topicId = raw?.topicId ?? raw?.TopicId ?? '';
+      const roomId = raw?.roomId ?? raw?.RoomId ?? '';
+      if (!topicId) return;
+      if ($currentRoom && roomId && roomId !== $currentRoom.id) return;
+      deleteTopic(topicId);
+    });
+
+    connection.onreconnected(async () => {
+      roomTopicHubConnected = true;
+      try {
+        await connection.invoke('JoinTenant', tenant);
+      } catch (err) {
+        console.error('Failed to rejoin room hub tenant:', err);
+      }
+
+      if (!roomTopicHubRoomId) return;
+      try {
+        await connection.invoke('JoinRoom', roomTopicHubRoomId);
+      } catch (err) {
+        console.error('Failed to rejoin room hub room:', err);
+      }
+    });
+
+    connection.onclose(() => {
+      roomTopicHubConnected = false;
+    });
+
+    try {
+      await connection.start();
+      roomTopicHub = connection;
+      roomTopicHubTenant = tenant;
+      roomTopicHubConnected = true;
+      await connection.invoke('JoinTenant', tenant);
+    } catch (err) {
+      console.error('Failed to start room hub:', err);
+    }
+  }
+
   async function stopMessageHub() {
     if (!messageHub) return;
     try {
@@ -131,6 +239,20 @@
       messageHubTenant = null;
       messageHubTopicId = null;
       messageHubConnected = false;
+    }
+  }
+
+  async function stopRoomTopicHub() {
+    if (!roomTopicHub) return;
+    try {
+      await roomTopicHub.stop();
+    } catch (err) {
+      console.error('Failed to stop room hub:', err);
+    } finally {
+      roomTopicHub = null;
+      roomTopicHubTenant = null;
+      roomTopicHubRoomId = null;
+      roomTopicHubConnected = false;
     }
   }
 
@@ -152,6 +274,28 @@
         messageHubTopicId = topicId;
       } catch (err) {
         console.error('Failed to join message hub topic:', err);
+      }
+    }
+  }
+
+  async function ensureRoomTopicHubRoom(roomId: string | null) {
+    if (!roomTopicHub || roomTopicHub.state !== HubConnectionState.Connected) return;
+
+    if (roomTopicHubRoomId && roomTopicHubRoomId !== roomId) {
+      try {
+        await roomTopicHub.invoke('LeaveRoom', roomTopicHubRoomId);
+      } catch (err) {
+        console.error('Failed to leave room hub room:', err);
+      }
+      roomTopicHubRoomId = null;
+    }
+
+    if (roomId && roomTopicHubRoomId !== roomId) {
+      try {
+        await roomTopicHub.invoke('JoinRoom', roomId);
+        roomTopicHubRoomId = roomId;
+      } catch (err) {
+        console.error('Failed to join room hub room:', err);
       }
     }
   }
@@ -465,6 +609,7 @@
     loadTenantData();
     return () => {
       void stopMessageHub();
+      void stopRoomTopicHub();
     };
   });
 
@@ -529,17 +674,27 @@
     if (!tenant) return;
     if (!$isAuthenticated) {
       void stopMessageHub();
+      void stopRoomTopicHub();
       return;
     }
 
     void startMessageHub(tenant).then(() => {
       void ensureMessageHubTopic($selectedTopic?.id ?? null);
     });
+
+    void startRoomTopicHub(tenant).then(() => {
+      void ensureRoomTopicHubRoom($currentRoom?.id ?? null);
+    });
   });
 
   $effect(() => {
     if (!messageHubConnected) return;
     void ensureMessageHubTopic($selectedTopic?.id ?? null);
+  });
+
+  $effect(() => {
+    if (!roomTopicHubConnected) return;
+    void ensureRoomTopicHubRoom($currentRoom?.id ?? null);
   });
 
   $effect(() => {

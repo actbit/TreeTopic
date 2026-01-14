@@ -4,6 +4,9 @@ using TreeTopic.Repositories;
 using TreeTopic.Common;
 using Microsoft.EntityFrameworkCore;
 using MaskedUUID.AspNetCore.Types;
+using Microsoft.AspNetCore.SignalR;
+using MaskedUUID.AspNetCore.Services;
+using TreeTopic.Hubs;
 
 namespace TreeTopic.Services;
 
@@ -23,14 +26,20 @@ public class TopicManagementService : BaseService, ITopicManagementService
 {
     private readonly ITopicRepository _topicRepository;
     private readonly IRoomRepository _roomRepository;
+    private readonly IHubContext<RoomTopicHub, IRoomTopicHubClient> _roomTopicHub;
+    private readonly IMaskedUUIDService _maskedUuidService;
 
     public TopicManagementService(
         ITopicRepository topicRepository,
         IRoomRepository roomRepository,
+        IHubContext<RoomTopicHub, IRoomTopicHubClient> roomTopicHub,
+        IMaskedUUIDService maskedUuidService,
         ILogger<TopicManagementService> logger) : base(logger)
     {
         _topicRepository = topicRepository;
         _roomRepository = roomRepository;
+        _roomTopicHub = roomTopicHub;
+        _maskedUuidService = maskedUuidService;
     }
 
     public async Task<Result<List<TopicDto>>> GetAllTopicsAsync(CancellationToken cancellationToken = default)
@@ -129,6 +138,7 @@ public class TopicManagementService : BaseService, ITopicManagementService
             await _topicRepository.SaveChangesAsync(cancellationToken);
 
             var dto = MapToDto(topic);
+            await BroadcastTopicCreatedAsync(dto);
             return Result<TopicDto>.Success(dto, 201);
         }, nameof(CreateTopicAsync));
     }
@@ -199,6 +209,7 @@ public class TopicManagementService : BaseService, ITopicManagementService
             await _topicRepository.SaveChangesAsync(cancellationToken);
 
             var dto = MapToDto(topic);
+            await BroadcastTopicUpdatedAsync(dto);
             return Result<TopicDto>.Success(dto);
         }, nameof(UpdateTopicAsync));
     }
@@ -231,8 +242,55 @@ public class TopicManagementService : BaseService, ITopicManagementService
             _topicRepository.Delete(topic);
             await _topicRepository.SaveChangesAsync(cancellationToken);
 
+            await BroadcastTopicDeletedAsync(topic);
             return Result.Success();
         }, nameof(DeleteTopicAsync));
+    }
+
+    private TopicRealtimeDto MapToRealtime(TopicDto dto)
+    {
+        var id = (Guid)dto.Id;
+        var roomId = (Guid)dto.RoomId;
+        var parentId = dto.ParentId.HasValue ? (Guid)dto.ParentId.Value : Guid.Empty;
+
+        return new TopicRealtimeDto(
+            id == Guid.Empty ? string.Empty : _maskedUuidService.EncodeSynchronous(id),
+            roomId == Guid.Empty ? string.Empty : _maskedUuidService.EncodeSynchronous(roomId),
+            dto.ParentId.HasValue && parentId != Guid.Empty ? _maskedUuidService.EncodeSynchronous(parentId) : null,
+            dto.Title,
+            dto.Description,
+            dto.HasChildren,
+            dto.CreatedAt,
+            dto.UpdatedAt);
+    }
+
+    private Task BroadcastTopicCreatedAsync(TopicDto dto)
+    {
+        var groupName = RoomTopicHubGroups.Room(_maskedUuidService.EncodeSynchronous((Guid)dto.RoomId));
+        var payload = MapToRealtime(dto);
+        Logger.LogInformation("[RoomTopicHub] Broadcast TopicCreated topic={TopicId} room={RoomId} group={Group}", dto.Id, dto.RoomId, groupName);
+        return _roomTopicHub.Clients.Group(groupName).TopicCreated(payload);
+    }
+
+    private Task BroadcastTopicUpdatedAsync(TopicDto dto)
+    {
+        var groupName = RoomTopicHubGroups.Room(_maskedUuidService.EncodeSynchronous((Guid)dto.RoomId));
+        var payload = MapToRealtime(dto);
+        Logger.LogInformation("[RoomTopicHub] Broadcast TopicUpdated topic={TopicId} room={RoomId} group={Group}", dto.Id, dto.RoomId, groupName);
+        return _roomTopicHub.Clients.Group(groupName).TopicUpdated(payload);
+    }
+
+    private Task BroadcastTopicDeletedAsync(Topic topic)
+    {
+        var roomId = topic.RoomId;
+        var topicId = topic.Id;
+        var groupName = RoomTopicHubGroups.Room(_maskedUuidService.EncodeSynchronous(roomId));
+        var payload = new TopicDeletedEvent(
+            _maskedUuidService.EncodeSynchronous(topicId),
+            _maskedUuidService.EncodeSynchronous(roomId),
+            topic.ParentId.HasValue ? _maskedUuidService.EncodeSynchronous(topic.ParentId.Value) : null);
+        Logger.LogInformation("[RoomTopicHub] Broadcast TopicDeleted topic={TopicId} room={RoomId} group={Group}", topicId, roomId, groupName);
+        return _roomTopicHub.Clients.Group(groupName).TopicDeleted(payload);
     }
 
     private TopicDto MapToDto(Topic topic)

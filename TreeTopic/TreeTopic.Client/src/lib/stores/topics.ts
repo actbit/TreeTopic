@@ -107,6 +107,7 @@ function createTopicsStore() {
               updatedTopics[parentIndex] = {
                 ...parent,
                 childIds: [...parent.childIds, topic.id],
+                hasChildren: true,
               };
             }
           }
