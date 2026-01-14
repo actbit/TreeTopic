@@ -7,6 +7,9 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Hosting;
 using Finbuckle.MultiTenant;
 using Finbuckle.MultiTenant.Abstractions;
+using Microsoft.AspNetCore.SignalR;
+using MaskedUUID.AspNetCore.Services;
+using TreeTopic.Hubs;
 using FileModel = TreeTopic.Models.File;
 
 namespace TreeTopic.Services;
@@ -15,6 +18,8 @@ public interface IMessageManagementService
 {
     Task<Result<List<MessageDto>>> GetAllMessagesAsync(CancellationToken cancellationToken = default);
     Task<Result<List<MessageDto>>> GetMessagesByTopicAsync(Guid topicId, CancellationToken cancellationToken = default);
+    Task<Result<List<MessageDto>>> GetMessagesAfterAsync(Guid topicId, Guid anchorMessageId, int take = 50, CancellationToken cancellationToken = default);
+    Task<Result<List<MessageDto>>> GetMessagesBeforeAsync(Guid topicId, Guid anchorMessageId, int take = 50, CancellationToken cancellationToken = default);
     Task<Result<MessageDto>> GetMessageByIdAsync(Guid messageId, CancellationToken cancellationToken = default);
     Task<Result<MessageDto>> CreateMessageAsync(CreateMessageRequest request, Guid userId, CancellationToken cancellationToken = default);
     Task<Result<MessageDto>> UpdateMessageAsync(Guid messageId, UpdateMessageRequest request, CancellationToken cancellationToken = default);
@@ -31,6 +36,8 @@ public class MessageManagementService : BaseService, IMessageManagementService
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly IWebHostEnvironment _webHostEnvironment;
     private readonly IMultiTenantContextAccessor<ApplicationTenantInfo> _tenantAccessor;
+    private readonly IHubContext<MessageHub, IMessageHubClient> _messageHub;
+    private readonly IMaskedUUIDService _maskedUuidService;
 
     public MessageManagementService(
         IMessageRepository messageRepository,
@@ -41,6 +48,8 @@ public class MessageManagementService : BaseService, IMessageManagementService
         UserManager<ApplicationUser> userManager,
         IWebHostEnvironment webHostEnvironment,
         IMultiTenantContextAccessor<ApplicationTenantInfo> tenantAccessor,
+        IHubContext<MessageHub, IMessageHubClient> messageHub,
+        IMaskedUUIDService maskedUuidService,
         ILogger<MessageManagementService> logger) : base(logger)
     {
         _messageRepository = messageRepository;
@@ -51,6 +60,8 @@ public class MessageManagementService : BaseService, IMessageManagementService
         _userManager = userManager;
         _webHostEnvironment = webHostEnvironment;
         _tenantAccessor = tenantAccessor;
+        _messageHub = messageHub;
+        _maskedUuidService = maskedUuidService;
     }
 
     private string? CurrentTenantId => _tenantAccessor.MultiTenantContext?.TenantInfo?.Id;
@@ -87,6 +98,97 @@ public class MessageManagementService : BaseService, IMessageManagementService
         return $"/uploads/{folder}/{savedFileName}".Replace("\\", "/");
     }
 
+    private string? GetTopicGroupName(Guid topicId)
+    {
+        try
+        {
+            var maskedTopicId = _maskedUuidService.EncodeSynchronous(topicId);
+            return MessageHubGroups.Topic(string.Empty, maskedTopicId);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to resolve SignalR group for topic {TopicId}", topicId);
+            return null;
+        }
+    }
+
+    private Task BroadcastMessageCreatedAsync(MessageDto dto)
+    {
+        var groupName = GetTopicGroupName(dto.TopicId);
+        if (string.IsNullOrEmpty(groupName))
+            return Task.CompletedTask;
+
+        Logger.LogInformation("[MessageHub] Broadcast MessageCreated message={MessageId} topic={TopicId} group={Group}", dto.Id, dto.TopicId, groupName);
+        var realtime = MapToRealtimeDto(dto);
+        return _messageHub.Clients.Group(groupName).MessageCreated(realtime);
+    }
+
+    private Task BroadcastMessageUpdatedAsync(MessageDto dto)
+    {
+        var groupName = GetTopicGroupName(dto.TopicId);
+        if (string.IsNullOrEmpty(groupName))
+            return Task.CompletedTask;
+
+        Logger.LogInformation("[MessageHub] Broadcast MessageUpdated message={MessageId} topic={TopicId} group={Group}", dto.Id, dto.TopicId, groupName);
+        var realtime = MapToRealtimeDto(dto);
+        return _messageHub.Clients.Group(groupName).MessageUpdated(realtime);
+    }
+
+    private Task BroadcastMessageDeletedAsync(Guid messageId, Guid topicId)
+    {
+        var groupName = GetTopicGroupName(topicId);
+        if (string.IsNullOrEmpty(groupName))
+            return Task.CompletedTask;
+
+        Logger.LogInformation("[MessageHub] Broadcast MessageDeleted message={MessageId} topic={TopicId} group={Group}", messageId, topicId, groupName);
+        var payload = new MessageDeletedEvent(
+            _maskedUuidService.EncodeSynchronous(messageId),
+            _maskedUuidService.EncodeSynchronous(topicId));
+        return _messageHub.Clients.Group(groupName).MessageDeleted(payload);
+    }
+
+    private MessageRealtimeDto MapToRealtimeDto(MessageDto dto)
+    {
+        var id = (Guid)dto.Id;
+        var topicId = (Guid)dto.TopicId;
+        var roomUserId = (Guid)dto.RoomUserId;
+        var replyId = dto.ReplyId.HasValue ? (Guid)dto.ReplyId.Value : Guid.Empty;
+
+        return new MessageRealtimeDto
+        {
+            Id = id == Guid.Empty ? string.Empty : _maskedUuidService.EncodeSynchronous(id),
+            TopicId = topicId == Guid.Empty ? string.Empty : _maskedUuidService.EncodeSynchronous(topicId),
+            RoomUserId = roomUserId == Guid.Empty ? string.Empty : _maskedUuidService.EncodeSynchronous(roomUserId),
+            UserName = dto.UserName,
+            UserAvatar = dto.UserAvatar,
+            Header = dto.Header,
+            Body = dto.Body,
+            ReplyId = replyId != Guid.Empty
+                ? _maskedUuidService.EncodeSynchronous(replyId)
+                : null,
+            Files = dto.Files?.Select(f => new FileRealtimeDto
+            {
+                Id = ((Guid)f.Id) == Guid.Empty ? string.Empty : _maskedUuidService.EncodeSynchronous((Guid)f.Id),
+                SourceFileId = f.SourceFileId.HasValue && (Guid)f.SourceFileId.Value != Guid.Empty
+                    ? _maskedUuidService.EncodeSynchronous((Guid)f.SourceFileId.Value)
+                    : null,
+                MessageId = f.MessageId.HasValue && (Guid)f.MessageId.Value != Guid.Empty
+                    ? _maskedUuidService.EncodeSynchronous((Guid)f.MessageId.Value)
+                    : null,
+                FileName = f.FileName,
+                SaveFileName = f.SaveFileName,
+                FileType = f.FileType,
+                Size = f.Size,
+                Url = f.Url,
+                IsLatest = f.IsLatest,
+                CreatedAt = f.CreatedAt,
+                UpdatedAt = f.UpdatedAt
+            }).ToList(),
+            CreatedAt = dto.CreatedAt,
+            UpdatedAt = dto.UpdatedAt
+        };
+    }
+
     public async Task<Result<List<MessageDto>>> GetAllMessagesAsync(CancellationToken cancellationToken = default)
     {
         return await ExecuteAsync(async () =>
@@ -116,6 +218,89 @@ public class MessageManagementService : BaseService, IMessageManagementService
             var dtos = messages.Select(MapToDto).ToList();
             return Result<List<MessageDto>>.Success(dtos);
         }, nameof(GetMessagesByTopicAsync));
+    }
+
+    public async Task<Result<List<MessageDto>>> GetMessagesAfterAsync(
+        Guid topicId,
+        Guid anchorMessageId,
+        int take = 50,
+        CancellationToken cancellationToken = default)
+    {
+        return await ExecuteAsync(async () =>
+        {
+            if (take <= 0) take = 50;
+
+            var anchor = await _messageRepository.Query()
+                .Where(m => m.Id == anchorMessageId)
+                .Select(m => new { m.Id, m.CreatedAt })
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (anchor == null)
+            {
+                anchor = await _messageRepository.Query()
+                    .Where(m => m.TopicId == topicId)
+                    .OrderBy(m => m.CreatedAt)
+                    .ThenBy(m => m.Id)
+                    .Select(m => new { m.Id, m.CreatedAt })
+                    .FirstOrDefaultAsync(cancellationToken);
+
+                if (anchor == null)
+                {
+                    return Result<List<MessageDto>>.Success(new List<MessageDto>());
+                }
+            }
+
+            var messages = await _messageRepository.Query()
+                .Where(m => m.TopicId == topicId)
+                .Where(m => m.CreatedAt > anchor.CreatedAt || (m.CreatedAt == anchor.CreatedAt && m.Id >= anchor.Id))
+                .OrderBy(m => m.CreatedAt)
+                .ThenBy(m => m.Id)
+                .Include(m => m.RoomUser)
+                .ThenInclude(ru => ru.ApplicationUser)
+                .Include(m => m.Files)
+                .Take(take)
+                .ToListAsync(cancellationToken);
+
+            var dtos = messages.Select(MapToDto).ToList();
+            return Result<List<MessageDto>>.Success(dtos);
+        }, nameof(GetMessagesAfterAsync));
+    }
+
+    public async Task<Result<List<MessageDto>>> GetMessagesBeforeAsync(
+        Guid topicId,
+        Guid anchorMessageId,
+        int take = 50,
+        CancellationToken cancellationToken = default)
+    {
+        return await ExecuteAsync(async () =>
+        {
+            if (take <= 0) take = 50;
+
+            var anchor = await _messageRepository.Query()
+                .Where(m => m.Id == anchorMessageId)
+                .Select(m => new { m.Id, m.CreatedAt })
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (anchor == null)
+            {
+                return Result<List<MessageDto>>.Success(new List<MessageDto>());
+            }
+
+            var messages = await _messageRepository.Query()
+                .Where(m => m.TopicId == topicId)
+                .Where(m => m.CreatedAt < anchor.CreatedAt || (m.CreatedAt == anchor.CreatedAt && m.Id < anchor.Id))
+                .OrderByDescending(m => m.CreatedAt)
+                .ThenByDescending(m => m.Id)
+                .Include(m => m.RoomUser)
+                .ThenInclude(ru => ru.ApplicationUser)
+                .Include(m => m.Files)
+                .Take(take)
+                .ToListAsync(cancellationToken);
+
+            messages.Reverse();
+            var dtos = messages.Select(MapToDto).ToList();
+            return Result<List<MessageDto>>.Success(dtos);
+        }, nameof(GetMessagesBeforeAsync));
     }
 
     public async Task<Result<MessageDto>> GetMessageByIdAsync(Guid messageId, CancellationToken cancellationToken = default)
@@ -189,6 +374,14 @@ public class MessageManagementService : BaseService, IMessageManagementService
                 .ToListAsync(cancellationToken);
 
             var dto = MapToDto(message);
+            try
+            {
+                await BroadcastMessageCreatedAsync(dto);
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Failed to broadcast message created for message {MessageId}", message.Id);
+            }
             return Result<MessageDto>.Success(dto, 201);
         }, nameof(CreateMessageAsync));
     }
@@ -223,6 +416,14 @@ public class MessageManagementService : BaseService, IMessageManagementService
                 .FirstOrDefaultAsync(cancellationToken);
 
             var dto = MapToDto(updated ?? message);
+            try
+            {
+                await BroadcastMessageUpdatedAsync(dto);
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Failed to broadcast message updated for message {MessageId}", messageId);
+            }
             return Result<MessageDto>.Success(dto);
         }, nameof(UpdateMessageAsync));
     }
@@ -238,6 +439,15 @@ public class MessageManagementService : BaseService, IMessageManagementService
 
             _messageRepository.Delete(message);
             await _messageRepository.SaveChangesAsync(cancellationToken);
+
+            try
+            {
+                await BroadcastMessageDeletedAsync(message.Id, message.TopicId);
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Failed to broadcast message deleted for message {MessageId}", message.Id);
+            }
 
             return Result.Success();
         }, nameof(DeleteMessageAsync));

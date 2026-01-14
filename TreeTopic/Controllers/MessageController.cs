@@ -37,6 +37,28 @@ public class MessageController : ControllerBase
         return result.ToApiResult();
     }
 
+    [HttpGet("topic/{topicId}/after/{messageId}")]
+    public async Task<IActionResult> GetAfter(
+        [FromRoute] MaskedGuid topicId,
+        [FromRoute] MaskedGuid messageId,
+        [FromQuery] int take = 50,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await _messageManagementService.GetMessagesAfterAsync((Guid)topicId, (Guid)messageId, take, cancellationToken);
+        return result.ToApiResult();
+    }
+
+    [HttpGet("topic/{topicId}/before/{messageId}")]
+    public async Task<IActionResult> GetBefore(
+        [FromRoute] MaskedGuid topicId,
+        [FromRoute] MaskedGuid messageId,
+        [FromQuery] int take = 50,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await _messageManagementService.GetMessagesBeforeAsync((Guid)topicId, (Guid)messageId, take, cancellationToken);
+        return result.ToApiResult();
+    }
+
     [HttpGet("{messageId}")]
     public async Task<IActionResult> GetById([FromRoute] MaskedGuid messageId, CancellationToken cancellationToken)
     {

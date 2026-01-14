@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { HubConnectionBuilder, HubConnectionState, type HubConnection } from '@microsoft/signalr';
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
   import { auth, isAuthenticated } from '$lib/stores/auth';
@@ -15,7 +16,7 @@
     expandedTopics,
     toggleTopicExpansion,
   } from '$lib/stores/topics';
-  import { messages, setMessages } from '$lib/stores/messages';
+  import { addMessage, deleteMessage, messageList, messages, setMessages, updateMessage } from '$lib/stores/messages';
   import { setFiles } from '$lib/stores/files';
   import AppLayout from '$lib/components/layout/AppLayout.svelte';
   import RoomSelector from '$lib/components/rooms/RoomSelector.svelte';
@@ -36,7 +37,7 @@
   import PdfViewerModal from '$lib/components/documents/PdfViewerModal.svelte';
   import ImageEditorModal from '$lib/components/images/ImageEditorModal.svelte';
   import { ui } from '$lib/stores/ui';
-  import { api, getCurrentTenant } from '$lib/api/client';
+  import { api, getApiBaseUrl, getCurrentTenant } from '$lib/api/client';
 
   let isLoading = $state(true);
   let loadError = $state<string | null>(null);
@@ -46,9 +47,114 @@
   let filesLoadRequestId = $state(0);
   let lastAppliedUrlTopicId = $state<string | null>(null);
   let checkedRoomUserId = $state<string | null>(null);
+  let messageHub: HubConnection | null = null;
+  let messageHubTenant: string | null = null;
+  let messageHubTopicId: string | null = null;
+  let messageSyncTimer: ReturnType<typeof setTimeout> | null = null;
+  let messageHubConnected = $state(false);
 
   let urlTopicId = $derived.by(() => ($page.params as any)?.topicId ?? null);
   let legacyQueryTopicId = $derived.by(() => $page.url.searchParams.get('topicId'));
+
+  function buildMessageHubUrl(tenant: string) {
+    const baseUrl = getApiBaseUrl();
+    const normalizedBaseUrl = baseUrl?.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
+    return normalizedBaseUrl ? `${normalizedBaseUrl}/${tenant}/hubs/messages` : `/${tenant}/hubs/messages`;
+  }
+
+  async function startMessageHub(tenant: string) {
+    if (messageHub && messageHubTenant === tenant) return;
+
+    await stopMessageHub();
+
+    const connection = new HubConnectionBuilder()
+      .withUrl(buildMessageHubUrl(tenant), { withCredentials: true })
+      .withAutomaticReconnect()
+      .build();
+
+    connection.on('MessageCreated', (raw: any) => {
+      const normalized = normalizeMessage(raw);
+      const exists = $messageList.some((m) => m.id === normalized.id);
+      if (exists) {
+        updateMessage(normalized.id, normalized);
+      } else {
+        addMessage(normalized);
+      }
+      if (normalized.topicId) scheduleMessageSync(normalized.topicId);
+    });
+
+    connection.on('MessageUpdated', (raw: any) => {
+      const normalized = normalizeMessage(raw);
+      updateMessage(normalized.id, normalized);
+      if (normalized.topicId) scheduleMessageSync(normalized.topicId);
+    });
+
+    connection.on('MessageDeleted', (raw: any) => {
+      const messageId = raw?.messageId ?? raw?.MessageId ?? '';
+      if (!messageId) return;
+      deleteMessage(messageId);
+      const topicId = raw?.topicId ?? raw?.TopicId ?? '';
+      if (topicId) scheduleMessageSync(topicId);
+    });
+
+    connection.onreconnected(async () => {
+      messageHubConnected = true;
+      if (!messageHubTopicId) return;
+      try {
+        await connection.invoke('JoinTopic', messageHubTopicId);
+      } catch (err) {
+        console.error('Failed to rejoin message hub topic:', err);
+      }
+    });
+    connection.onclose(() => {
+      messageHubConnected = false;
+    });
+
+    try {
+      await connection.start();
+      messageHub = connection;
+      messageHubTenant = tenant;
+      messageHubConnected = true;
+    } catch (err) {
+      console.error('Failed to start message hub:', err);
+    }
+  }
+
+  async function stopMessageHub() {
+    if (!messageHub) return;
+    try {
+      await messageHub.stop();
+    } catch (err) {
+      console.error('Failed to stop message hub:', err);
+    } finally {
+      messageHub = null;
+      messageHubTenant = null;
+      messageHubTopicId = null;
+      messageHubConnected = false;
+    }
+  }
+
+  async function ensureMessageHubTopic(topicId: string | null) {
+    if (!messageHub || messageHub.state !== HubConnectionState.Connected) return;
+
+    if (messageHubTopicId && messageHubTopicId !== topicId) {
+      try {
+        await messageHub.invoke('LeaveTopic', messageHubTopicId);
+      } catch (err) {
+        console.error('Failed to leave message hub topic:', err);
+      }
+      messageHubTopicId = null;
+    }
+
+    if (topicId && messageHubTopicId !== topicId) {
+      try {
+        await messageHub.invoke('JoinTopic', topicId);
+        messageHubTopicId = topicId;
+      } catch (err) {
+        console.error('Failed to join message hub topic:', err);
+      }
+    }
+  }
 
   function normalizeRoom(raw: any) {
     const id = raw?.id ?? raw?.Id ?? '';
@@ -232,6 +338,59 @@
     };
   }
 
+  function mergeMessagesForTopic(topicId: string, incoming: ReturnType<typeof normalizeMessage>[]) {
+    const existing = $messageList.filter((m) => m.topicId === topicId);
+    const map = new Map<string, typeof existing[number]>();
+    existing.forEach((m) => map.set(m.id, m));
+    incoming.forEach((m) => map.set(m.id, { ...map.get(m.id), ...m }));
+
+    const merged = Array.from(map.values())
+      .filter((m) => m.topicId === topicId)
+      .sort((a, b) => {
+        const at = new Date(a.createdAt).getTime();
+        const bt = new Date(b.createdAt).getTime();
+        if (at !== bt) return at - bt;
+        return a.id.localeCompare(b.id);
+      });
+
+    setMessages(topicId, merged);
+  }
+
+  function getAnchorIdForTopic(topicId: string, backCount: number) {
+    const topicMessages = $messageList
+      .filter((m) => m.topicId === topicId)
+      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+
+    if (topicMessages.length === 0) return null;
+    const index = Math.max(topicMessages.length - backCount, 0);
+    return topicMessages[index]?.id ?? topicMessages[0]?.id ?? null;
+  }
+
+  function scheduleMessageSync(topicId: string) {
+    if (messageSyncTimer) {
+      clearTimeout(messageSyncTimer);
+    }
+
+    messageSyncTimer = setTimeout(async () => {
+      const tenant = $page.params.tenant ?? getCurrentTenant();
+      if (!tenant) return;
+
+      const anchorId = getAnchorIdForTopic(topicId, 10);
+      if (!anchorId) return;
+
+      try {
+        const response = await api.get<any[]>(
+          `/${tenant}/api/Message/topic/${topicId}/after/${anchorId}`,
+          { params: { take: 50 } }
+        );
+        const list = Array.isArray(response) ? response.map(normalizeMessage) : [];
+        mergeMessagesForTopic(topicId, list);
+      } catch (err) {
+        console.error('Failed to sync messages:', err);
+      }
+    }, 300);
+  }
+
   function normalizeMaterial(raw: any) {
     const id = raw?.id ?? raw?.Id ?? '';
     const createdAt = raw?.uploadedAt ?? raw?.UploadedAt ?? raw?.createdAt ?? raw?.CreatedAt ?? null;
@@ -304,6 +463,9 @@
 
   onMount(() => {
     loadTenantData();
+    return () => {
+      void stopMessageHub();
+    };
   });
 
   // Backward compatibility: convert old `?topicId=...` to the new page URL.
@@ -360,6 +522,24 @@
         if (requestId !== loadRequestId) return;
         messages.setLoading(false);
       });
+  });
+
+  $effect(() => {
+    const tenant = $page.params.tenant ?? getCurrentTenant();
+    if (!tenant) return;
+    if (!$isAuthenticated) {
+      void stopMessageHub();
+      return;
+    }
+
+    void startMessageHub(tenant).then(() => {
+      void ensureMessageHubTopic($selectedTopic?.id ?? null);
+    });
+  });
+
+  $effect(() => {
+    if (!messageHubConnected) return;
+    void ensureMessageHubTopic($selectedTopic?.id ?? null);
   });
 
   $effect(() => {
