@@ -5,6 +5,7 @@
   import ErrorMessage from '../common/ErrorMessage.svelte';
   import { ui, activeModals } from '$lib/stores/ui';
   import { currentUser } from '$lib/stores/auth';
+  import { rooms } from '$lib/stores/rooms';
   import { api } from '$lib/api/client';
 
   const modalId = 'room-user-join';
@@ -46,7 +47,18 @@
         payload.name = trimmed;
       }
 
-      await api.post(`/${tenant}/api/RoomUsers/room/${roomId}/join`, payload);
+      const response = await api.post<any>(`/${tenant}/api/RoomUsers/room/${roomId}/join`, payload);
+
+      // Update currentRoomUser with the response (DisplayName and IconUrl are already resolved by backend)
+      if (response) {
+        rooms.setCurrentRoomUser({
+          id: response.id ?? response.Id ?? '',
+          displayName: response.displayName ?? response.DisplayName ?? '',
+          iconUrl: response.iconUrl ?? response.IconUrl,
+          useMainIcon: response.useMainIcon ?? response.UseMainIcon ?? false,
+        });
+      }
+
       ui.closeModal(modalId);
     } catch (err: unknown) {
       error = err instanceof Error ? err.message : 'Failed to set room name';

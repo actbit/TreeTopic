@@ -9,11 +9,21 @@ public class RoomUserDto
     public MaskedGuid Id { get; set; }
     public MaskedGuid ApplicationUserId { get; set; }
     public MaskedGuid RoomId { get; set; }
-    public MaskedGuid RoomPermissionId { get; set; }
-    public string? Name { get; set; }
-    public bool UseMainName { get; set; }
+    /// <summary>
+    /// Display name (already resolved based on UseMainName setting)
+    /// </summary>
     public string? DisplayName { get; set; }
+    /// <summary>
+    /// Icon URL (already resolved based on UseMainIcon setting)
+    /// </summary>
     public string? IconUrl { get; set; }
+    /// <summary>
+    /// Whether to use the main account's name
+    /// </summary>
+    public bool UseMainName { get; set; }
+    /// <summary>
+    /// Whether to use the main account's icon
+    /// </summary>
     public bool UseMainIcon { get; set; }
 }
 

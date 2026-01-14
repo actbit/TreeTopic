@@ -24,6 +24,41 @@
   let adjustedX = $state(0);
   let adjustedY = $state(0);
 
+  function adjustMenuPosition() {
+    if (menuElement) {
+      const rect = menuElement.getBoundingClientRect();
+      const windowHeight = window.innerHeight;
+      const windowWidth = window.innerWidth;
+      const padding = 8; // 画面端からのパディング
+
+      let newX = x;
+      let newY = y;
+
+      // 右側ではみ出ている場合
+      if (rect.right > windowWidth) {
+        newX = windowWidth - rect.width - padding;
+      }
+
+      // 左側ではみ出ている場合
+      if (newX < padding) {
+        newX = padding;
+      }
+
+      // 下側ではみ出ている場合
+      if (rect.bottom > windowHeight) {
+        newY = windowHeight - rect.height - padding;
+      }
+
+      // 上側ではみ出ている場合
+      if (newY < padding) {
+        newY = padding;
+      }
+
+      adjustedX = newX;
+      adjustedY = newY;
+    }
+  }
+
   $effect(() => {
     adjustedX = x;
     adjustedY = y;
@@ -45,20 +80,10 @@
   }
 
   onMount(() => {
-    if (menuElement) {
-      // メニューが画面外に出ないように位置を調整
-      const rect = menuElement.getBoundingClientRect();
-      const windowHeight = window.innerHeight;
-      const windowWidth = window.innerWidth;
-
-      if (rect.bottom > windowHeight) {
-        adjustedY = Math.max(0, y - rect.height);
-      }
-
-      if (rect.right > windowWidth) {
-        adjustedX = Math.max(0, x - rect.width);
-      }
-    }
+    // メニューが完全にレンダリングされた後に位置を調整
+    requestAnimationFrame(() => {
+      adjustMenuPosition();
+    });
 
     document.addEventListener('click', handleClickOutside);
     document.addEventListener('contextmenu', handleClickOutside);

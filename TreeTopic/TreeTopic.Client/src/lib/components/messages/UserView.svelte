@@ -70,11 +70,11 @@
             <img
               src={avatar}
               alt={user}
-              class="w-6 h-6 rounded-full flex-shrink-0"
+              class="avatar avatar-sm bg-primary"
             />
           {:else}
             <div
-              class="w-6 h-6 rounded-full bg-primary text-white flex items-center justify-center text-[10px] font-bold flex-shrink-0"
+              class="avatar avatar-sm bg-primary text-white"
             >
               {user?.charAt(0) ?? 'U'}
             </div>

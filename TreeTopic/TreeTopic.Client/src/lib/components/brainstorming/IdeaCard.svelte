@@ -68,7 +68,7 @@
 
   const currentUserVote = $derived.by(() => {
     if (!currentUserId) return null;
-    return (idea.votes ?? []).find((vote) => vote.applicationUserId === currentUserId) ?? null;
+    return (idea.votes ?? []).find((vote) => vote.roomUserId === currentUserId) ?? null;
   });
 
   const currentUserVoteType = $derived.by(() => currentUserVote?.voteType?.toLowerCase() ?? null);

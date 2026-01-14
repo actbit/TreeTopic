@@ -398,15 +398,17 @@
     api.get<any>(`/${tenant}/api/RoomUsers/room/${$currentRoom.id}/me`)
       .then((roomUserData: any) => {
         if (roomUserData) {
-          rooms.setCurrentRoomUser({
+          const roomUser = {
             id: roomUserData.id ?? roomUserData.Id ?? '',
             displayName: roomUserData.displayName ?? roomUserData.DisplayName ?? '',
             iconUrl: roomUserData.iconUrl ?? roomUserData.IconUrl,
             useMainIcon: roomUserData.useMainIcon ?? roomUserData.UseMainIcon ?? false,
-          });
+          };
+          rooms.setCurrentRoomUser(roomUser);
         }
       })
       .catch((err: unknown) => {
+        console.error('Failed to fetch RoomUser:', err);
         if (err instanceof api.ApiError && err.status === 404) {
           ui.openModal({
             id: 'room-user-join',

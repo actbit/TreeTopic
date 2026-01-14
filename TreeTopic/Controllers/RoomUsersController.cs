@@ -219,10 +219,10 @@ public class RoomUsersController : ControllerBase
             Id = entity.Id,
             ApplicationUserId = entity.ApplicationUserId,
             RoomId = entity.RoomId,
-            Name = entity.Name,
-            UseMainName = entity.UseMainName,
+            // DisplayName and IconUrl are already resolved based on UseMainName/UseMainIcon settings
             DisplayName = RoomUserNameHelper.ResolveDisplayName(entity),
             IconUrl = _iconService.GetRoomUserIconUrl(entity),
+            UseMainName = entity.UseMainName,
             UseMainIcon = entity.UseMainIcon
         };
     }

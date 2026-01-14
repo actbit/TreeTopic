@@ -2,6 +2,7 @@
   import IdeaCard from './IdeaCard.svelte';
   import { addIdea, brainstorm, brainstormBoard, deleteIdea, updateIdeaPosition } from '$lib/stores/brainstorm';
   import { currentUser } from '$lib/stores/auth';
+  import { currentRoomUser } from '$lib/stores/rooms';
   import { api } from '$lib/api/client';
 
   interface Props {
@@ -172,7 +173,7 @@
 
       const votes = getIdeaVotes(ideaId);
       const existingVote = votes.find(
-        (vote) => vote.applicationUserId === currentUserId && vote.voteType?.toLowerCase() === voteType.toLowerCase()
+        (vote) => vote.roomUserId === $currentRoomUser?.id && vote.voteType?.toLowerCase() === voteType.toLowerCase()
       );
 
       if (existingVote) {
@@ -189,7 +190,7 @@
         value: 1,
       });
 
-      const nextVotes = votes.filter((vote) => vote.applicationUserId !== currentUserId);
+      const nextVotes = votes.filter((vote) => vote.roomUserId !== $currentRoomUser?.id);
       nextVotes.push(created);
       setIdeaVotes(ideaId, nextVotes);
     } catch (err: unknown) {
@@ -299,7 +300,7 @@
             <IdeaCard
               {idea}
               isDragging={draggedIdea === idea.id}
-              currentUserId={currentUserId}
+              currentUserId={$currentRoomUser?.id}
               isVoting={votingIdeaId === idea.id}
               onVote={(voteType) => handleVote(idea.id, voteType)}
               onDelete={() => handleDeleteIdea(idea.id)}
