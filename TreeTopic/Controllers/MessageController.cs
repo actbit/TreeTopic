@@ -93,14 +93,14 @@ public class MessageController : ControllerBase
         if (!ModelState.IsValid)
             return ValidationProblem(ModelState);
 
-        var result = await _messageManagementService.UpdateMessageAsync((Guid)messageId, request, cancellationToken);
+        var result = await _messageManagementService.UpdateMessageAsync((Guid)messageId, request, CurrentUserId, cancellationToken);
         return result.ToApiResult();
     }
 
     [HttpDelete("{messageId}")]
     public async Task<IActionResult> Delete([FromRoute] MaskedGuid messageId, CancellationToken cancellationToken)
     {
-        var result = await _messageManagementService.DeleteMessageAsync(messageId, cancellationToken);
+        var result = await _messageManagementService.DeleteMessageAsync(messageId, CurrentUserId, cancellationToken);
         return result.ToApiResult();
     }
 
