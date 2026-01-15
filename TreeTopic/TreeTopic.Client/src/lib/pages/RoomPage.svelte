@@ -7,15 +7,16 @@
   import { currentRoom, setRooms, setCurrentRoom, addRoom, updateRoom, deleteRoom, roomList } from '$lib/stores/rooms';
   import { rooms } from '$lib/stores/rooms';
   import {
-    selectedTopic,
-    setSelectedTopic,
-    setTopics,
-    addTopic,
-    topicList,
-    updateTopic,
-    deleteTopic,
-    expandedTopics,
-    toggleTopicExpansion,
+  selectedTopic,
+  setSelectedTopic,
+  setTopics,
+  addTopic,
+  topicList,
+  updateTopic,
+  deleteTopic,
+  expandedTopics,
+  toggleTopicExpansion,
+  moveTopicParent,
   } from '$lib/stores/topics';
   import { addMessage, deleteMessage, messageList, messages, setMessages, updateMessage } from '$lib/stores/messages';
   import { setFiles } from '$lib/stores/files';

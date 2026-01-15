@@ -124,34 +124,35 @@ async function handleResponse<T>(response: Response): Promise<T> {
       data
     );
 
-    // Handle 401 Unauthorized
-    if (response.status === 401) {
-      auth.clear();
-      // Redirect to login page for current tenant
-      const tenant =
-        apiClientConfig.tenant ||
-        (typeof window !== 'undefined' ? inferTenantFromPathname(window.location.pathname) : '');
-      let path = '';
-
-      if (response.url) {
-        try {
-          path = new URL(response.url).pathname;
-        } catch {
-          path = response.url;
-        }
+    let requestPath = '';
+    if (response.url) {
+      try {
+        requestPath = new URL(response.url).pathname;
+      } catch {
+        requestPath = response.url;
       }
+    }
 
-      const currentPath = typeof window !== 'undefined' ? window.location.pathname : '';
-      const isOnLoginPage = tenant &&
-        (currentPath === `/${tenant}/login` || currentPath === `/${tenant}/auth/login`);
+    const currentPath = typeof window !== 'undefined' ? window.location.pathname : '';
+    const tenant =
+      apiClientConfig.tenant ||
+      (typeof window !== 'undefined' ? inferTenantFromPathname(currentPath) : '');
 
-      if (!isOnLoginPage) {
-        if (tenant) {
-          redirectToTenantOidc(tenant);
-        } else {
-          // If no tenant in context, redirect to home
-          goto('/');
-        }
+    const isAuthMeRequest = requestPath.toLowerCase().endsWith('/auth/me');
+    const isOnLoginPage =
+      Boolean(tenant) &&
+      (currentPath === `/${tenant}/login` || currentPath === `/${tenant}/auth/login`);
+
+    if (
+      !isOnLoginPage &&
+      (response.status === 401 || (response.status === 404 && isAuthMeRequest))
+    ) {
+      auth.clear();
+      if (tenant) {
+        redirectToTenantOidc(tenant);
+      } else {
+        // If no tenant in context, redirect to home
+        goto('/');
       }
     }
 
