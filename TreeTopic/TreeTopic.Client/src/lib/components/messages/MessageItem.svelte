@@ -8,6 +8,7 @@
   import { ui } from '$lib/stores/ui';
   import type { ModalConfig } from '$lib/types/ui';
   import { getMessageAnchorId } from '$lib/utils/messageAnchor';
+  import { createTopicParentId } from '$lib/stores/topics';
 
   type MessageContentPart =
     | { type: 'text'; value: string }
@@ -62,6 +63,45 @@
     showContextMenu = false;
   }
 
+  function getSuggestedTopicTitle(): string {
+    const MAX_TITLE_LENGTH = 120;
+    const subject = message.subject?.trim();
+    if (subject) {
+      return subject.length > MAX_TITLE_LENGTH ? `${subject.slice(0, MAX_TITLE_LENGTH).trim()}…` : subject;
+    }
+
+    const normalized = (message.content ?? '').replace(/\s+/g, ' ').trim();
+    if (!normalized) {
+      return '';
+    }
+
+    const firstLine = normalized.split('\n')[0] ?? normalized;
+    if (firstLine.length <= MAX_TITLE_LENGTH) {
+      return firstLine;
+    }
+
+    return `${firstLine.slice(0, MAX_TITLE_LENGTH).trim()}…`;
+  }
+
+  function openCreateChildTopicFromMessage() {
+    const parentId = message.topicId;
+    createTopicParentId.set(parentId);
+    const modal: ModalConfig = {
+      id: 'topic-create',
+      title: 'Create Topic',
+      type: 'custom',
+      data: {
+        parentId,
+        prefillTitle: getSuggestedTopicTitle(),
+        prefillDescription: (message.content ?? '').trim(),
+        autoNavigate: true,
+        sourceMessageId: message.id,
+      },
+    };
+    ui.openModal(modal);
+    showContextMenu = false;
+  }
+
   async function copyMessageUrl() {
     if (typeof window === 'undefined') return;
 
@@ -98,6 +138,12 @@
       label: 'Reply',
       icon: '↩',
       action: replyToMessage,
+    },
+    {
+      id: 'create-child-topic',
+      label: 'Create child topic',
+      icon: '➕',
+      action: openCreateChildTopicFromMessage,
     },
     {
       id: 'copy-url',

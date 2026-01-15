@@ -1,27 +1,55 @@
 <script lang="ts">
+  import { goto } from '$app/navigation';
   import Modal from '../common/Modal.svelte';
   import Button from '../common/Button.svelte';
   import Input from '../common/Input.svelte';
   import ErrorMessage from '../common/ErrorMessage.svelte';
   import { ui, activeModals } from '$lib/stores/ui';
-  import { topicList, addTopic, updateTopic, selectedTopic, createTopicParentId } from '$lib/stores/topics';
+  import {
+    topicList,
+    addTopic,
+    updateTopic,
+    setSelectedTopic,
+    createTopicParentId,
+  } from '$lib/stores/topics';
   import { currentRoom } from '$lib/stores/rooms';
   import { isRequired, minLength } from '$lib/utils/validation';
   import { api } from '$lib/api/client';
 
   const modalId = 'topic-create';
-  let isOpen = $derived.by(() => $activeModals.some((m) => m.id === modalId));
+  let modalConfig = $derived.by(() => $activeModals.find((m) => m.id === modalId) ?? null);
+  let isOpen = $derived.by(() => modalConfig !== null);
+  let modalData = $derived.by(() => modalConfig?.data ?? {});
+  let parentId = $derived.by(() => modalData.parentId ?? $createTopicParentId);
+  let prefillTitle = $derived.by(() => modalData.prefillTitle ?? '');
+  let prefillDescription = $derived.by(() => modalData.prefillDescription ?? '');
+  let navigateOnCreate = $derived.by(() => modalData.autoNavigate ?? false);
 
   let title = $state('');
   let description = $state('');
   let isLoading = $state(false);
   let error = $state<string | null>(null);
   let titleError = $state<string | undefined>(undefined);
+  let hasInitializedModal = $state(false);
 
-  let parentId = $derived.by(() => $createTopicParentId);
+  $effect(() => {
+    if (isOpen) {
+      if (!hasInitializedModal) {
+        title = prefillTitle ?? '';
+        description = prefillDescription ?? '';
+        error = null;
+        titleError = undefined;
+        hasInitializedModal = true;
+      }
+    } else {
+      hasInitializedModal = false;
+    }
+  });
 
   async function handleCreate(e: Event) {
     e.preventDefault();
+
+    const activeParentId = parentId ?? null;
 
     titleError = undefined;
     error = null;
@@ -49,7 +77,7 @@
         roomId: $currentRoom.id,
         title: title.trim(),
         description: description.trim(),
-        parentId: parentId || null,
+        parentId: activeParentId,
       })) as Record<string, any>;
 
       // Normalize response to ensure all required fields exist
@@ -60,8 +88,14 @@
         description: response.description || response.Description || undefined,
         parentId: response.parentId || response.ParentId || null,
         childIds: response.childIds || response.ChildIds || [],
-        createdAt: response.createdAt || response.CreatedAt ? new Date(response.createdAt || response.CreatedAt) : new Date(),
-        updatedAt: response.updatedAt || response.UpdatedAt ? new Date(response.updatedAt || response.UpdatedAt) : new Date(),
+        createdAt:
+          response.createdAt || response.CreatedAt
+            ? new Date(response.createdAt || response.CreatedAt)
+            : new Date(),
+        updatedAt:
+          response.updatedAt || response.UpdatedAt
+            ? new Date(response.updatedAt || response.UpdatedAt)
+            : new Date(),
         creatorId: response.creatorId || response.CreatorId || '',
         messageCount: response.messageCount || response.MessageCount || 0,
         unreadCount: response.unreadCount || response.UnreadCount || 0,
@@ -75,15 +109,31 @@
       addTopic(normalizedTopic);
 
       // Update parent's hasChildren flag if this is a child topic
-      if (parentId) {
-        const parent = $topicList.find((t) => t.id === parentId);
+      if (activeParentId) {
+        const parent = $topicList.find((t) => t.id === activeParentId);
         if (parent && !parent.hasChildren) {
-          updateTopic(parentId, { hasChildren: true });
+          updateTopic(activeParentId, { hasChildren: true });
         }
+      }
+
+      const shouldNavigate = navigateOnCreate;
+      if (shouldNavigate) {
+        setSelectedTopic(normalizedTopic);
       }
 
       resetForm();
       ui.closeModal(modalId);
+
+      if (shouldNavigate && normalizedTopic.roomId && normalizedTopic.id) {
+        try {
+          await goto(`/${tenant}/room/${normalizedTopic.roomId}/topic/${normalizedTopic.id}`, {
+            keepFocus: true,
+            noScroll: true,
+          });
+        } catch (navigateError) {
+          console.error('Failed to navigate to new topic:', navigateError);
+        }
+      }
     } catch (err: unknown) {
       error = err instanceof Error ? err.message : 'Failed to create topic';
     } finally {
@@ -94,13 +144,12 @@
   function resetForm() {
     title = '';
     description = '';
-    parentId = null;
+    createTopicParentId.set(null);
   }
 
   function handleClose() {
     ui.closeModal(modalId);
     resetForm();
-    createTopicParentId.set(null);
   }
 </script>
 
@@ -156,4 +205,3 @@
     </div>
   </form>
 </Modal>
-

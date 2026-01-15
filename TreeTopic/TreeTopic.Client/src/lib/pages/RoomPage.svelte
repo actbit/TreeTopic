@@ -591,9 +591,10 @@
   async function loadTenantData() {
     isLoading = true;
     loadError = null;
+    let tenant: string | null = null;
 
     try {
-      const tenant = $page.params.tenant ?? getCurrentTenant();
+      tenant = $page.params.tenant ?? getCurrentTenant();
       if (!tenant) throw new Error('Tenant not found in URL');
 
       api.configureApiClient(tenant);
@@ -628,6 +629,17 @@
         });
       }
     } catch (error) {
+      const resolvedTenant = tenant ?? ($page.params.tenant ?? getCurrentTenant());
+      if (
+        resolvedTenant &&
+        error instanceof api.ApiError &&
+        (error.status === 401 || error.status === 403)
+      ) {
+        auth.logout();
+        redirectToTenantLogin(resolvedTenant);
+        return;
+      }
+
       loadError = error instanceof Error ? error.message : 'Failed to load tenant data';
     } finally {
       isLoading = false;
