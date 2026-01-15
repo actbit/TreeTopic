@@ -1,5 +1,6 @@
 <script lang="ts">
   import { brainstorm } from '$lib/stores/brainstorm';
+  import type { BrainstormBoard as BrainstormBoardType } from '$lib/stores/brainstorm';
   import { auth } from '$lib/stores/auth';
   import BrainstormBoard from '$lib/components/brainstorming/BrainstormBoard.svelte';
   import LoadingSpinner from '$lib/components/common/LoadingSpinner.svelte';
@@ -10,7 +11,7 @@
   interface PageData {
     boardId: string;
     tenant?: string;
-    board?: unknown;
+    board?: BrainstormBoardType;
     loadError?: string | null;
   }
 
@@ -77,7 +78,9 @@
       }
       api.configureApiClient(tenant);
       await auth.fetchCurrentUser(tenant);
-      const boardData = await api.get(`/${tenant}/api/Brainstorm/${resolvedBoardId}`);
+      const boardData = (await api.get(
+        `/${tenant}/api/Brainstorm/${resolvedBoardId}`
+      )) as BrainstormBoardType;
       brainstorm.setCurrentBoard(boardData);
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to load brainstorm board';

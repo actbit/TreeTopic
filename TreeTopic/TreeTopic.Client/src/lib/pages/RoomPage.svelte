@@ -186,7 +186,35 @@
         if (existing) deleteTopic(normalized.id);
         return;
       }
-      updateTopic(normalized.id, normalized);
+
+      const existing = $topicList.find((t) => t.id === normalized.id);
+      if (!existing) {
+        addTopic(normalized);
+        return;
+      }
+
+      const normalizedParentId = normalized.parentId ?? null;
+      const previousParentId = existing.parentId ?? null;
+      if (previousParentId !== normalizedParentId) {
+        moveTopicParent(normalized.id, normalizedParentId);
+      }
+
+      updateTopic(normalized.id, {
+        parentId: normalized.parentId,
+        roomId: normalized.roomId,
+        title: normalized.title,
+        description: normalized.description,
+        creatorId: normalized.creatorId,
+        messageCount: normalized.messageCount,
+        unreadCount: normalized.unreadCount,
+        userPermission: normalized.userPermission,
+        permissions: normalized.permissions,
+        isArchived: normalized.isArchived,
+        tags: normalized.tags,
+        hasChildren: normalized.hasChildren,
+        createdAt: normalized.createdAt,
+        updatedAt: normalized.updatedAt,
+      });
     });
 
     connection.on('TopicDeleted', (raw: any) => {
@@ -628,6 +656,38 @@
     });
   });
 
+  function buildReturnUrl(): string {
+    if (typeof window === 'undefined') return '/';
+    const { pathname, search, hash } = window.location;
+    return `${pathname}${search}${hash}`;
+  }
+
+  function redirectToTenantLogin(tenant: string): void {
+    if (!tenant || typeof window === 'undefined') return;
+    const returnUrl = buildReturnUrl();
+    window.location.href = `/${tenant}/auth/login?returnUrl=${encodeURIComponent(returnUrl)}`;
+  }
+
+  async function handleRoomUserNotFound(tenant: string, roomId: string): Promise<void> {
+    try {
+      await auth.fetchCurrentUser(tenant);
+      ui.openModal({
+        id: 'room-user-join',
+        title: 'Set your name',
+        type: 'custom',
+        data: { roomId },
+      });
+    } catch (error: unknown) {
+      if (error instanceof api.ApiError && error.status === 404) {
+        auth.logout();
+        redirectToTenantLogin(tenant);
+        return;
+      }
+
+      console.error('Failed to refresh ApplicationUser after missing RoomUser:', error);
+    }
+  }
+
   // If URL changes (back/forward) reflect it into selected topic.
   $effect(() => {
     const tenant = $page.params.tenant ?? getCurrentTenant();
@@ -749,15 +809,12 @@
         }
       })
       .catch((err: unknown) => {
-        console.error('Failed to fetch RoomUser:', err);
         if (err instanceof api.ApiError && err.status === 404) {
-          ui.openModal({
-            id: 'room-user-join',
-            title: 'Set your name',
-            type: 'custom',
-            data: { roomId: $currentRoom.id },
-          });
+          void handleRoomUserNotFound(tenant, $currentRoom.id);
+          return;
         }
+
+        console.error('Failed to fetch RoomUser:', err);
       });
   });
 </script>

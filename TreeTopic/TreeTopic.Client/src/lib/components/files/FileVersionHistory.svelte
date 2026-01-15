@@ -1,7 +1,7 @@
 <script lang="ts">
   import { formatDate, formatTime } from '$lib/utils/date';
   import { formatFileSize } from '$lib/utils/validation';
-  import type { File as FileDto } from '$lib/types/ui';
+  import type { Material as FileDto } from '$lib/stores/files';
 
   interface Props {
     file: FileDto;

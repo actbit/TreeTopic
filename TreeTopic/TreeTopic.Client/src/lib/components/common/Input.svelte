@@ -6,7 +6,7 @@
     value?: string;
     type?: InputType;
     placeholder?: string;
-    error?: string;
+    error?: string | null;
     disabled?: boolean;
     required?: boolean;
     icon?: string;

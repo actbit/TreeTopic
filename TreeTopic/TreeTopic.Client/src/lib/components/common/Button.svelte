@@ -15,6 +15,7 @@
     onclick?: (e: MouseEvent) => void;
     children?: any;
     ariaLabel?: string;
+    title?: string;
   }
 
   let {
@@ -28,6 +29,7 @@
     onclick,
     children,
     ariaLabel,
+    title,
   }: Props = $props();
 
   const dispatch = createEventDispatcher<{ click: MouseEvent }>();
@@ -44,6 +46,7 @@
   onclick={handleClick}
   class="btn btn-{variant} btn-{size} {fullWidth ? 'btn-full-width' : ''}"
   aria-label={ariaLabel}
+  title={title}
   aria-busy={loading}
   aria-disabled={disabled}
 >

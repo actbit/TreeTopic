@@ -126,11 +126,19 @@
         response = await api.post(`/${tenant}/api/Message/upload`, form);
       } else {
         // ファイルがない場合はJSONで送信
-        const payload = {
+        interface MessagePayload {
+          topicId: string;
+          header: string;
+          body: string;
+          replyId?: string;
+        }
+
+        const payload: MessagePayload = {
           topicId: $selectedTopic.id,
-          header: header,
+          header,
           body: trimmedContent,
         };
+
         if ($replyTarget) {
           payload.replyId = $replyTarget.id;
         }

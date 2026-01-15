@@ -463,6 +463,7 @@ export const api = {
   put,
   patch,
   delete: del,
+  del,
   configureApiClient,
   getCurrentTenant,
   setApiBaseUrl,

@@ -1,6 +1,7 @@
 <script lang="ts">
   import IdeaCard from './IdeaCard.svelte';
   import { addIdea, brainstorm, brainstormBoard, deleteIdea, updateIdeaPosition } from '$lib/stores/brainstorm';
+  import type { BrainIdea, BrainIdeaVote } from '$lib/stores/brainstorm';
   import { currentUser } from '$lib/stores/auth';
   import { currentRoomUser } from '$lib/stores/rooms';
   import { api } from '$lib/api/client';
@@ -16,7 +17,7 @@
   const cardWidth = 220;
   const cardHeight = 132;
 
-  let boardContainer: HTMLDivElement | undefined = $state();
+  let boardContainer: HTMLElement | null = null;
   let draggedIdea: string | null = $state(null);
   let offsetX = $state(0);
   let offsetY = $state(0);
@@ -71,11 +72,14 @@
       }
 
       const { positionLeft, positionTop } = getDefaultIdeaPosition();
-      const created = await api.post(`/${tenant}/api/brainstorm/${resolvedBoardId}/ideas`, {
-        idea: trimmedIdea,
-        positionLeft,
-        positionTop,
-      });
+      const created = (await api.post(
+        `/${tenant}/api/brainstorm/${resolvedBoardId}/ideas`,
+        {
+          idea: trimmedIdea,
+          positionLeft,
+          positionTop,
+        }
+      )) as BrainIdea;
       addIdea(created);
       newIdeaText = '';
     } catch (err: unknown) {
@@ -185,10 +189,13 @@
         return;
       }
 
-      const created = await api.post(`/${tenant}/api/brainstorm/${resolvedBoardId}/ideas/${ideaId}/votes`, {
-        voteType,
-        value: 1,
-      });
+      const created = (await api.post(
+        `/${tenant}/api/brainstorm/${resolvedBoardId}/ideas/${ideaId}/votes`,
+        {
+          voteType,
+          value: 1,
+        }
+      )) as BrainIdeaVote;
 
       const nextVotes = votes.filter((vote) => vote.roomUserId !== $currentRoomUser?.id);
       nextVotes.push(created);
