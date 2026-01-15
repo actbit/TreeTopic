@@ -22,8 +22,8 @@ public interface IMessageManagementService
     Task<Result<List<MessageDto>>> GetMessagesBeforeAsync(Guid topicId, Guid anchorMessageId, int take = 50, CancellationToken cancellationToken = default);
     Task<Result<MessageDto>> GetMessageByIdAsync(Guid messageId, CancellationToken cancellationToken = default);
     Task<Result<MessageDto>> CreateMessageAsync(CreateMessageRequest request, Guid userId, CancellationToken cancellationToken = default);
-    Task<Result<MessageDto>> UpdateMessageAsync(Guid messageId, UpdateMessageRequest request, CancellationToken cancellationToken = default);
-    Task<Result> DeleteMessageAsync(Guid messageId, CancellationToken cancellationToken = default);
+    Task<Result<MessageDto>> UpdateMessageAsync(Guid messageId, UpdateMessageRequest request, Guid userId, CancellationToken cancellationToken = default);
+    Task<Result> DeleteMessageAsync(Guid messageId, Guid userId, CancellationToken cancellationToken = default);
 }
 
 public class MessageManagementService : BaseService, IMessageManagementService
@@ -389,14 +389,20 @@ public class MessageManagementService : BaseService, IMessageManagementService
     public async Task<Result<MessageDto>> UpdateMessageAsync(
         Guid messageId,
         UpdateMessageRequest request,
+        Guid userId,
         CancellationToken cancellationToken = default)
     {
         return await ExecuteAsync(async () =>
         {
-            var message = await _messageRepository.GetByIdAsync(messageId, cancellationToken);
+            var message = await _messageRepository.Query()
+                .Include(m => m.RoomUser)
+                .FirstOrDefaultAsync(m => m.Id == messageId, cancellationToken);
 
             if (message == null)
                 return Result<MessageDto>.NotFound("Message not found");
+
+            if (message.RoomUser == null || message.RoomUser.ApplicationUserId != userId)
+                return Result<MessageDto>.Forbidden("You are not allowed to edit this message");
 
             if (!string.IsNullOrEmpty(request.Header))
                 message.Header = request.Header;
@@ -428,14 +434,19 @@ public class MessageManagementService : BaseService, IMessageManagementService
         }, nameof(UpdateMessageAsync));
     }
 
-    public async Task<Result> DeleteMessageAsync(Guid messageId, CancellationToken cancellationToken = default)
+    public async Task<Result> DeleteMessageAsync(Guid messageId, Guid userId, CancellationToken cancellationToken = default)
     {
         return await ExecuteAsync(async () =>
         {
-            var message = await _messageRepository.GetByIdAsync(messageId, cancellationToken);
+            var message = await _messageRepository.Query()
+                .Include(m => m.RoomUser)
+                .FirstOrDefaultAsync(m => m.Id == messageId, cancellationToken);
 
             if (message == null)
                 return Result.NotFound("Message not found");
+
+            if (message.RoomUser == null || message.RoomUser.ApplicationUserId != userId)
+                return Result.Forbidden("You are not allowed to delete this message");
 
             _messageRepository.Delete(message);
             await _messageRepository.SaveChangesAsync(cancellationToken);
