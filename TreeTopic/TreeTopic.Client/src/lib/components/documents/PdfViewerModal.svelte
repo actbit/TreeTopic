@@ -1,9 +1,13 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
   import Modal from '../common/Modal.svelte';
   import Button from '../common/Button.svelte';
   import { ui, activeModals } from '$lib/stores/ui';
   import * as pdfjsLib from 'pdfjs-dist';
+  import type { PDFDocumentProxy, PDFPageProxy } from 'pdfjs-dist/types/src/display/api';
+  import { api } from '$lib/api/client';
+  import { files } from '$lib/stores/files';
+  import { currentRoom } from '$lib/stores/rooms';
+  import { page } from '$app/stores';
 
   // Initialize PDF.js worker
   pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
@@ -17,12 +21,13 @@
   let fileUrl = $derived.by(() => modal?.data?.fileUrl ?? null);
   let fileName = $derived.by(() => modal?.data?.fileName ?? 'Document');
 
-  let canvasElement: HTMLCanvasElement | undefined = $state();
-  let pdfDocument: pdfjsLib.PDFDocumentProxy | null = $state(null);
+  let canvasElement: HTMLCanvasElement | null = $state(null);
+  let pdfDocument: PDFDocumentProxy | null = $state(null);
   let currentPage = $state(1);
-  let totalPages = $derived(pdfDocument?.numPages ?? 0);
+  let totalPages = $state(0);
   let scale = $state(1.0);
   let isLoading = $state(false);
+  let isSaving = $state(false);
   let error = $state<string | null>(null);
   let pageInput = $state('1');
 
@@ -32,6 +37,10 @@
       pageInput = '1';
       scale = 1.0;
     }
+  });
+
+  $effect(() => {
+    totalPages = pdfDocument?.numPages ?? 0;
   });
 
   $effect(() => {
@@ -59,21 +68,24 @@
 
     try {
       isLoading = true;
-      const page = await pdfDocument.getPage(pageNum);
+      const page: PDFPageProxy = await pdfDocument.getPage(pageNum);
 
       const viewport = page.getViewport({ scale });
-      canvasElement.width = viewport.width;
-      canvasElement.height = viewport.height;
+      const canvas = canvasElement;
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
 
-      const context = canvasElement.getContext('2d');
+      const context = canvas.getContext('2d');
       if (!context) {
         throw new Error('Failed to get canvas context');
       }
 
-      await page.render({
+      const renderParams = {
         canvasContext: context,
-        viewport: viewport,
-      }).promise;
+        viewport,
+        canvas,
+      };
+      await page.render(renderParams).promise;
     } catch (err) {
       error = err instanceof Error ? err.message : 'Failed to render page';
     } finally {
@@ -127,6 +139,74 @@
     }
   }
 
+  async function savePdf() {
+    if (!fileUrl) return;
+
+    if (!$currentRoom) {
+      error = 'No room selected';
+      return;
+    }
+
+    try {
+      isSaving = true;
+      error = null;
+
+      const response = await fetch(fileUrl);
+      if (!response.ok) {
+        throw new Error('Failed to download PDF for saving');
+      }
+
+      const blob = await response.blob();
+      const file = new File([blob], `saved_${fileName}`, { type: 'application/pdf' });
+
+      const tenant = api.getCurrentTenant() || $page.params.tenant || 'default';
+      const roomId = $currentRoom.id;
+
+      const formData = new FormData();
+      formData.append('roomId', roomId);
+      formData.append('file', file);
+
+      const uploadResponse = await api.post<any>(
+        `/${tenant}/api/File/room/${roomId}`,
+        formData
+      );
+
+      if (uploadResponse) {
+        files.addFile({
+          id: uploadResponse.id ?? uploadResponse.Id ?? '',
+          roomId: uploadResponse.roomId ?? uploadResponse.RoomId ?? roomId,
+          messageId: uploadResponse.messageId ?? uploadResponse.MessageId ?? undefined,
+          fileName: uploadResponse.fileName ?? uploadResponse.FileName ?? file.name,
+          originalFileName:
+            uploadResponse.originalFileName ??
+            uploadResponse.OriginalFileName ??
+            uploadResponse.fileName ??
+            uploadResponse.FileName ??
+            file.name,
+          mimeType: uploadResponse.mimeType ?? uploadResponse.MimeType ?? 'application/pdf',
+          size: uploadResponse.size ?? uploadResponse.Size ?? file.size,
+          url: uploadResponse.url ?? uploadResponse.Url ?? '',
+          fileType: uploadResponse.fileType ?? uploadResponse.FileType ?? 'pdf',
+          uploadedAt:
+            uploadResponse.uploadedAt ??
+            uploadResponse.UploadedAt ??
+            new Date().toISOString(),
+          uploadedBy: uploadResponse.uploadedBy ?? uploadResponse.UploadedBy ?? '',
+          uploadedByName:
+            uploadResponse.uploadedByName ?? uploadResponse.UploadedByName ?? '',
+          versions: [],
+          isArchived: uploadResponse.isArchived ?? uploadResponse.IsArchived ?? false,
+          tags: uploadResponse.tags ?? uploadResponse.Tags ?? [],
+          description: uploadResponse.description ?? uploadResponse.Description ?? '',
+        });
+      }
+    } catch (err) {
+      error = err instanceof Error ? err.message : 'Failed to save PDF';
+    } finally {
+      isSaving = false;
+    }
+  }
+
   function handleClose() {
     ui.closeModal(modalId);
     pdfDocument = null;
@@ -163,7 +243,7 @@
       <div class="flex items-center gap-2">
         <Button
           variant="secondary"
-          size="sm"
+          size="small"
           onclick={previousPage}
           disabled={isLoading || currentPage <= 1}
         >
@@ -185,7 +265,7 @@
 
         <Button
           variant="secondary"
-          size="sm"
+          size="small"
           onclick={nextPage}
           disabled={isLoading || currentPage >= totalPages}
         >
@@ -197,7 +277,7 @@
       <div class="flex items-center gap-2">
         <Button
           variant="secondary"
-          size="sm"
+          size="small"
           onclick={zoomOut}
           disabled={isLoading || scale <= 0.5}
         >
@@ -208,7 +288,7 @@
 
         <Button
           variant="secondary"
-          size="sm"
+          size="small"
           onclick={zoomIn}
           disabled={isLoading || scale >= 3.0}
         >
@@ -217,7 +297,7 @@
 
         <Button
           variant="secondary"
-          size="sm"
+          size="small"
           onclick={resetZoom}
           disabled={isLoading}
         >
@@ -228,11 +308,20 @@
       <!-- Download button -->
       <Button
         variant="secondary"
-        size="sm"
+        size="small"
         onclick={downloadPdf}
         disabled={isLoading || !fileUrl}
       >
         Download
+      </Button>
+      <Button
+        variant="primary"
+        size="small"
+        onclick={savePdf}
+        disabled={isLoading || isSaving || !fileUrl}
+        loading={isSaving}
+      >
+        Save
       </Button>
     </div>
 
@@ -275,6 +364,7 @@
   }
 
   input[type='number'] {
+    appearance: textfield;
     -moz-appearance: textfield;
   }
 

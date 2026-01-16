@@ -73,7 +73,7 @@
   <!-- Messages area -->
   <div
     bind:this={messagesContainer}
-    class="flex-1 flex flex-col overflow-hidden"
+    class="flex-1 flex flex-col overflow-hidden min-h-0"
   >
     {#if $messagesLoading}
       <div class="flex items-center justify-center h-full">
@@ -89,7 +89,7 @@
         </p>
       </div>
 
-      <div class="flex-1 overflow-y-auto padding-md spacing-md">
+      <div class="flex-1 overflow-y-auto padding-md spacing-md min-h-0">
         {#each filteredMessages as message (message.id)}
           <MessageItem {message} />
         {/each}

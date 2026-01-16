@@ -10,12 +10,12 @@
   let messagesContainer: HTMLDivElement | undefined = $state();
   let didScrollToAnchor = $state(false);
 
-  let targetAnchorId = $derived.by(() => getMessageAnchorIdFromHash($page.url.hash));
-  let topicMessages = $derived.by(() => {
-    return $selectedTopic
+  let targetAnchorId = $derived(getMessageAnchorIdFromHash($page.url.hash));
+  let topicMessages = $derived(
+    $selectedTopic
       ? $messageList.filter((m) => m.topicId === $selectedTopic.id)
-      : [];
-  });
+      : []
+  );
 
   function tryScrollToTarget(behavior: ScrollBehavior = 'auto'): boolean {
     if (!targetAnchorId) return false;
@@ -66,10 +66,10 @@
   });
 </script>
 
-<div
-  bind:this={messagesContainer}
-  class="flex-1 overflow-y-auto padding-md spacing-md bg-surface"
->
+    <div
+      bind:this={messagesContainer}
+      class="flex-1 overflow-y-auto padding-md spacing-md bg-surface message-list"
+    >
   {#if $messagesLoading}
     <div class="flex items-center justify-center h-full">
       <LoadingSpinner message="Loading messages..." />
@@ -89,8 +89,9 @@
 </div>
 
 <style>
-  div {
+  .message-list {
     display: flex;
     flex-direction: column;
+    min-height: 0;
   }
 </style>

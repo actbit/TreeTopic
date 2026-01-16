@@ -1,6 +1,5 @@
 <script lang="ts">
-  import * as fabricLib from 'fabric';
-  const fabric = fabricLib;
+  import * as fabric from 'fabric';
   import Modal from '../common/Modal.svelte';
   import Button from '../common/Button.svelte';
   import { ui, activeModals } from '$lib/stores/ui';
@@ -15,13 +14,13 @@
   let fileUrl = $derived.by(() => modal?.data?.fileUrl ?? null);
   let fileName = $derived.by(() => modal?.data?.fileName ?? 'Image');
 
-  let canvasElement: HTMLCanvasElement | undefined = $state();
+  let canvasElement: HTMLCanvasElement | null = $state(null);
   let canvas: fabric.Canvas | null = $state(null);
   let selectedColor = $state('#4A90E2'); // Blue
   let markerSize = $state(50);
   let isLoading = $state(false);
   let error = $state<string | null>(null);
-  let history = $state<string[]>([]);
+  let history = $state<any[]>([]);
   let historyIndex = $state(-1);
 
   const colors = [
@@ -31,6 +30,21 @@
     { name: 'Yellow', value: '#FFD700' },
     { name: 'Purple', value: '#9B59B6' },
   ];
+  const imageLoadOptions = { crossOrigin: 'anonymous' as const };
+
+  function resetHistory() {
+    history = [];
+    historyIndex = -1;
+  }
+
+  function getPointerPosition(event: MouseEvent) {
+    const rect = canvasElement?.getBoundingClientRect();
+    if (!rect) return null;
+    return {
+      x: event.clientX - rect.left,
+      y: event.clientY - rect.top,
+    };
+  }
 
   $effect(() => {
     if (isOpen && canvasElement && !canvas) {
@@ -45,42 +59,14 @@
       isLoading = true;
       error = null;
 
-      // Create Fabric canvas
       canvas = new fabric.Canvas(canvasElement, {
         width: 800,
         height: 600,
         backgroundColor: '#ffffff',
       });
 
-      // Load image
-      if (fileUrl) {
-        fabric.Image.fromURL(
-          fileUrl,
-          (img) => {
-            if (canvas) {
-              // Scale image to fit canvas
-              const scale = Math.min(
-                canvas.width! / img.width!,
-                canvas.height! / img.height!
-              );
-              img.scale(scale);
-              img.set({
-                left: (canvas.width! - img.width! * scale) / 2,
-                top: (canvas.height! - img.height! * scale) / 2,
-                selectable: false,
-                evented: false,
-              });
-
-              canvas.sendToBack(img);
-              canvas.renderAll();
-
-              // Save initial state
-              saveState();
-            }
-          },
-          { crossOrigin: 'anonymous' }
-        );
-      }
+      resetHistory();
+      await loadBackgroundImage();
     } catch (err) {
       error = err instanceof Error ? err.message : 'Failed to initialize canvas';
     } finally {
@@ -88,18 +74,50 @@
     }
   }
 
+  async function loadBackgroundImage() {
+    if (!canvas) return;
+
+    if (!fileUrl) {
+      canvas.renderAll();
+      saveState();
+      return;
+    }
+
+    try {
+      const img = await fabric.Image.fromURL(fileUrl, imageLoadOptions);
+      const canvasWidth = canvas.getWidth();
+      const canvasHeight = canvas.getHeight();
+      const width = img.width ?? img.getScaledWidth() ?? canvasWidth;
+      const height = img.height ?? img.getScaledHeight() ?? canvasHeight;
+      const safeWidth = Math.max(1, width);
+      const safeHeight = Math.max(1, height);
+      const scale = Math.min(canvasWidth / safeWidth, canvasHeight / safeHeight);
+      img.scale(scale);
+      const scaledWidth = img.getScaledWidth();
+      const scaledHeight = img.getScaledHeight();
+      img.set({
+        left: (canvasWidth - scaledWidth) / 2,
+        top: (canvasHeight - scaledHeight) / 2,
+        selectable: false,
+        evented: false,
+      });
+      canvas.sendObjectToBack(img);
+      canvas.renderAll();
+      saveState();
+    } catch (err) {
+      error = err instanceof Error ? err.message : 'Failed to load image';
+    }
+  }
+
   function addMarker(e: MouseEvent) {
     if (!canvas) return;
 
-    const rect = canvasElement?.getBoundingClientRect();
-    if (!rect) return;
-
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+    const pointer = getPointerPosition(e);
+    if (!pointer) return;
 
     const circle = new fabric.Circle({
-      left: x,
-      top: y,
+      left: pointer.x,
+      top: pointer.y,
       radius: markerSize / 2,
       fill: 'transparent',
       stroke: selectedColor,
@@ -126,6 +144,7 @@
 
   function saveState() {
     if (!canvas) return;
+
     historyIndex++;
     history = history.slice(0, historyIndex);
     history.push(canvas.toJSON());
@@ -134,8 +153,10 @@
   function undo() {
     if (historyIndex > 0 && canvas) {
       historyIndex--;
-      canvas.loadFromJSON(history[historyIndex], () => {
-        canvas.renderAll();
+      const currentCanvas = canvas;
+      const snapshot = history[historyIndex];
+      currentCanvas.loadFromJSON(snapshot, () => {
+        currentCanvas.renderAll();
       });
     }
   }
@@ -143,40 +164,28 @@
   function redo() {
     if (historyIndex < history.length - 1 && canvas) {
       historyIndex++;
-      canvas.loadFromJSON(history[historyIndex], () => {
-        canvas.renderAll();
+      const currentCanvas = canvas;
+      const snapshot = history[historyIndex];
+      currentCanvas.loadFromJSON(snapshot, () => {
+        currentCanvas.renderAll();
       });
     }
   }
 
-  function clearAll() {
+  async function clearAll() {
     if (!canvas) return;
-    canvas.clear();
-    canvas.backgroundColor = '#ffffff';
-    // Reload original image
-    if (fileUrl) {
-      fabric.Image.fromURL(
-        fileUrl,
-        (img) => {
-          if (canvas) {
-            const scale = Math.min(
-              canvas.width! / img.width!,
-              canvas.height! / img.height!
-            );
-            img.scale(scale);
-            img.set({
-              left: (canvas.width! - img.width! * scale) / 2,
-              top: (canvas.height! - img.height! * scale) / 2,
-              selectable: false,
-              evented: false,
-            });
-            canvas.sendToBack(img);
-            canvas.renderAll();
-            saveState();
-          }
-        },
-        { crossOrigin: 'anonymous' }
-      );
+
+    try {
+      isLoading = true;
+      error = null;
+      canvas.clear();
+      canvas.backgroundColor = '#ffffff';
+      resetHistory();
+      await loadBackgroundImage();
+    } catch (err) {
+      error = err instanceof Error ? err.message : 'Failed to clear canvas';
+    } finally {
+      isLoading = false;
     }
   }
 
@@ -222,12 +231,30 @@
       if (uploadResponse) {
         files.addFile({
           id: uploadResponse.id ?? uploadResponse.Id ?? '',
+          roomId: uploadResponse.roomId ?? uploadResponse.RoomId ?? roomId,
+          messageId: uploadResponse.messageId ?? uploadResponse.MessageId ?? undefined,
           fileName: uploadResponse.fileName ?? uploadResponse.FileName ?? '',
-          fileType: uploadResponse.fileType ?? uploadResponse.FileType ?? 'image',
+          originalFileName:
+            uploadResponse.originalFileName ??
+            uploadResponse.OriginalFileName ??
+            uploadResponse.fileName ??
+            uploadResponse.FileName ??
+            file.name,
+          mimeType: uploadResponse.mimeType ?? uploadResponse.MimeType ?? 'image/png',
           size: uploadResponse.size ?? uploadResponse.Size ?? 0,
           url: uploadResponse.url ?? uploadResponse.Url ?? '',
-          roomId: uploadResponse.roomId ?? uploadResponse.RoomId ?? roomId,
-          uploadedAt: uploadResponse.uploadedAt ?? uploadResponse.UploadedAt ?? new Date().toISOString(),
+          fileType: uploadResponse.fileType ?? uploadResponse.FileType ?? 'image',
+          uploadedAt:
+            uploadResponse.uploadedAt ??
+            uploadResponse.UploadedAt ??
+            new Date().toISOString(),
+          uploadedBy: uploadResponse.uploadedBy ?? uploadResponse.UploadedBy ?? '',
+          uploadedByName:
+            uploadResponse.uploadedByName ?? uploadResponse.UploadedByName ?? '',
+          versions: [],
+          isArchived: uploadResponse.isArchived ?? uploadResponse.IsArchived ?? false,
+          tags: uploadResponse.tags ?? uploadResponse.Tags ?? [],
+          description: uploadResponse.description ?? uploadResponse.Description ?? '',
         });
       }
 
@@ -251,24 +278,35 @@
 
   function handleCanvasClick(e: MouseEvent) {
     // Only add marker if clicking on empty area
-    const pointer = canvas?.getPointer(e);
-    const objects = canvas?.getObjects();
+    if (!canvas) return;
+    const pointer = getPointerPosition(e);
+    if (!pointer) return;
 
-    if (pointer && objects) {
-      const clickedObject = objects.find(
-        (obj) =>
-          obj.containsPoint(pointer) ||
-          (obj.aCoords &&
-            pointer.x >= obj.aCoords.tl.x &&
-            pointer.x <= obj.aCoords.br.x &&
-            pointer.y >= obj.aCoords.tl.y &&
-            pointer.y <= obj.aCoords.br.y)
-      );
+    const objects = canvas.getObjects();
+    const pointerPoint = new fabric.Point(pointer.x, pointer.y);
 
-      if (!clickedObject) {
-        addMarker(e);
-        saveState();
+    const clickedObject = objects.find((obj: fabric.Object) => {
+      if (obj.containsPoint) {
+        if (obj.containsPoint(pointerPoint)) {
+          return true;
+        }
       }
+
+      if (!obj.aCoords) {
+        return false;
+      }
+
+      return (
+        pointer.x >= obj.aCoords.tl.x &&
+        pointer.x <= obj.aCoords.br.x &&
+        pointer.y >= obj.aCoords.tl.y &&
+        pointer.y <= obj.aCoords.br.y
+      );
+    });
+
+    if (!clickedObject) {
+      addMarker(e);
+      saveState();
     }
   }
 </script>
@@ -312,7 +350,7 @@
       <div class="flex items-center gap-2">
         <Button
           variant="secondary"
-          size="sm"
+          size="small"
           onclick={undo}
           disabled={isLoading || historyIndex <= 0}
           title="Undo"
@@ -321,7 +359,7 @@
         </Button>
         <Button
           variant="secondary"
-          size="sm"
+          size="small"
           onclick={redo}
           disabled={isLoading || historyIndex >= history.length - 1}
           title="Redo"
@@ -330,7 +368,7 @@
         </Button>
         <Button
           variant="secondary"
-          size="sm"
+          size="small"
           onclick={deleteSelected}
           disabled={isLoading}
           title="Delete selected circle"
@@ -339,7 +377,7 @@
         </Button>
         <Button
           variant="secondary"
-          size="sm"
+          size="small"
           onclick={clearAll}
           disabled={isLoading}
           title="Clear all marks"

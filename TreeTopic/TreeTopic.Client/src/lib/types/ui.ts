@@ -298,19 +298,6 @@ export interface PermissionInfo {
 }
 
 /**
- * File upload progress
- */
-export interface FileUploadProgress {
-  fileId: string;
-  fileName: string;
-  progress: number; // 0-100
-  status: 'pending' | 'uploading' | 'completed' | 'failed';
-  error?: string;
-  size: number;
-  uploadedBytes: number;
-}
-
-/**
  * Viewport dimensions
  */
 export interface ViewportSize {

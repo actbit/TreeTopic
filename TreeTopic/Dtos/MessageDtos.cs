@@ -23,6 +23,9 @@ public class MessageDto : BaseDto
     public List<MessageDto>? Replies { get; set; }
 
     public List<FileDto>? Files { get; set; }
+
+    public MaskedGuid? ChildTopicId { get; set; }
+    public string? ChildTopicTitle { get; set; }
 }
 
 public class CreateMessageRequest : BaseCreateRequest
@@ -40,6 +43,8 @@ public class CreateMessageRequest : BaseCreateRequest
 
     // ファイルアップロード用
     public List<IFormFile>? Files { get; set; }
+
+    public CreateChildTopicRequest? ChildTopic { get; set; }
 }
 
 public class UpdateMessageRequest : BaseUpdateRequest
@@ -48,4 +53,31 @@ public class UpdateMessageRequest : BaseUpdateRequest
     public string? Header { get; set; }
 
     public string? Body { get; set; }
+}
+
+public class CreateChildTopicRequest : BaseCreateRequest
+{
+    public MaskedGuid? ParentId { get; set; }
+
+    [Required]
+    [MinLength(2)]
+    public string Title { get; set; } = string.Empty;
+
+    public string? Description { get; set; }
+
+    public List<MaskedGuid>? SelectedMessageIds { get; set; }
+}
+
+public class MoveMessagesRequest : BaseCreateRequest
+{
+    [Required]
+    public MaskedGuid SourceTopicId { get; set; }
+
+    [Required]
+    public MaskedGuid TargetTopicId { get; set; }
+
+    [Required]
+    public MaskedGuid AnchorMessageId { get; set; }
+
+    public bool IncludeAnchorMessage { get; set; } = false;
 }

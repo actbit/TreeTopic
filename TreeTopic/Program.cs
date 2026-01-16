@@ -844,6 +844,7 @@ public class Program
         // Map API controllers first (priority over static files)
         app.MapControllers();
         app.MapHub<MessageHub>("/{tenant}/hubs/messages").RequireAuthorization();
+        app.MapHub<RoomTopicHub>("/{tenant}/hubs/rooms").RequireAuthorization();
 
         // Serve static files (SPA) after API routes
         app.UseDefaultFiles();

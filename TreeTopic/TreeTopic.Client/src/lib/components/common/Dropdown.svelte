@@ -30,6 +30,7 @@
 
   let isOpen = $state(false);
   let dropdownElement: HTMLDivElement | undefined = $state();
+  let dropdownButtonId = $state(`dropdown-button-${Math.random().toString(36).slice(2, 9)}`);
 
   const selectedLabel = $derived(
     items.find((item) => item.value === value)?.label || placeholder
@@ -68,13 +69,16 @@
 
 <div class="dropdown-group">
   {#if label}
-    <label class="dropdown-label">
+    <label class="dropdown-label" for={dropdownButtonId}>
       {label}
     </label>
   {/if}
 
   <div class="dropdown-wrapper" bind:this={dropdownElement}>
     <button
+      id={dropdownButtonId}
+      aria-haspopup="listbox"
+      aria-expanded={isOpen}
       type="button"
       onclick={toggleDropdown}
       {disabled}

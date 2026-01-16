@@ -66,10 +66,10 @@ function createAuthStore() {
      */
     async fetchCurrentUser(tenant: string): Promise<void> {
       try {
-      const userData = await api.get<AuthMeResponse>(`/${tenant}/auth/me`);
-      set({
-        user: {
-          id: userData.userId,
+        const userData = await api.get<AuthMeResponse>(`/${tenant}/auth/me`);
+        set({
+          user: {
+            id: userData.userId,
             userName: userData.userName,
             email: userData.email,
             displayName: userData.displayName ?? userData.userName,
@@ -81,12 +81,19 @@ function createAuthStore() {
           error: null,
         });
       } catch (error) {
+        const message =
+          error instanceof api.ApiError
+            ? error.data?.message ?? error.message ?? 'Failed to fetch user info'
+            : 'Failed to fetch user info';
+
         set({
           user: null,
           isAuthenticated: false,
           isLoading: false,
-          error: 'Failed to fetch user info',
+          error: message,
         });
+
+        throw error;
       }
     },
     /**

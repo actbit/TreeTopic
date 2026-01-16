@@ -4,17 +4,19 @@
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
   import { auth, isAuthenticated } from '$lib/stores/auth';
-  import { currentRoom, setRooms, setCurrentRoom } from '$lib/stores/rooms';
+  import { currentRoom, setRooms, setCurrentRoom, addRoom, updateRoom, deleteRoom, roomList } from '$lib/stores/rooms';
   import { rooms } from '$lib/stores/rooms';
   import {
-    selectedTopic,
-    setSelectedTopic,
-    setTopics,
-    addTopic,
-    topicList,
-    updateTopic,
-    expandedTopics,
-    toggleTopicExpansion,
+  selectedTopic,
+  setSelectedTopic,
+  setTopics,
+  addTopic,
+  topicList,
+  updateTopic,
+  deleteTopic,
+  expandedTopics,
+  toggleTopicExpansion,
+  moveTopicParent,
   } from '$lib/stores/topics';
   import { addMessage, deleteMessage, messageList, messages, setMessages, updateMessage } from '$lib/stores/messages';
   import { setFiles } from '$lib/stores/files';
@@ -52,6 +54,10 @@
   let messageHubTopicId: string | null = null;
   let messageSyncTimer: ReturnType<typeof setTimeout> | null = null;
   let messageHubConnected = $state(false);
+  let roomTopicHub: HubConnection | null = null;
+  let roomTopicHubTenant: string | null = null;
+  let roomTopicHubRoomId: string | null = null;
+  let roomTopicHubConnected = $state(false);
 
   let urlTopicId = $derived.by(() => ($page.params as any)?.topicId ?? null);
   let legacyQueryTopicId = $derived.by(() => $page.url.searchParams.get('topicId'));
@@ -60,6 +66,12 @@
     const baseUrl = getApiBaseUrl();
     const normalizedBaseUrl = baseUrl?.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
     return normalizedBaseUrl ? `${normalizedBaseUrl}/${tenant}/hubs/messages` : `/${tenant}/hubs/messages`;
+  }
+
+  function buildRoomTopicHubUrl(tenant: string) {
+    const baseUrl = getApiBaseUrl();
+    const normalizedBaseUrl = baseUrl?.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
+    return normalizedBaseUrl ? `${normalizedBaseUrl}/${tenant}/hubs/rooms` : `/${tenant}/hubs/rooms`;
   }
 
   async function startMessageHub(tenant: string) {
@@ -120,6 +132,142 @@
     }
   }
 
+  async function startRoomTopicHub(tenant: string) {
+    if (roomTopicHub && roomTopicHubTenant === tenant) return;
+
+    await stopRoomTopicHub();
+
+    const connection = new HubConnectionBuilder()
+      .withUrl(buildRoomTopicHubUrl(tenant), { withCredentials: true })
+      .withAutomaticReconnect()
+      .build();
+
+    connection.on('RoomCreated', (raw: any) => {
+      const normalized = normalizeRoom(raw);
+      const exists = $roomList.some((r) => r.id === normalized.id);
+      if (exists) {
+        updateRoom(normalized.id, normalized);
+      } else {
+        addRoom(normalized);
+      }
+    });
+
+    connection.on('RoomUpdated', (raw: any) => {
+      const normalized = normalizeRoom(raw);
+      updateRoom(normalized.id, normalized);
+    });
+
+    connection.on('RoomDeleted', (raw: any) => {
+      const roomId = raw?.roomId ?? raw?.RoomId ?? '';
+      if (!roomId) return;
+      deleteRoom(roomId);
+    });
+
+    connection.on('TopicCreated', (raw: any) => {
+      const normalized = normalizeTopic(raw);
+      if (!$currentRoom || normalized.roomId !== $currentRoom.id) return;
+      const exists = $topicList.some((t) => t.id === normalized.id);
+      if (exists) {
+        // 既存の場合はトピックを更新
+        updateTopic(normalized.id, normalized);
+        return;
+      }
+
+      const parentId = normalized.parentId ?? null;
+      if (parentId && !$topicList.some((t) => t.id === parentId)) {
+        return;
+      }
+
+      addTopic(normalized);
+    });
+
+    connection.on('TopicUpdated', (raw: any) => {
+      const normalized = normalizeTopic(raw);
+      if (!$currentRoom || normalized.roomId !== $currentRoom.id) {
+        const existing = $topicList.find((t) => t.id === normalized.id);
+        if (existing) deleteTopic(normalized.id);
+        return;
+      }
+
+      const existing = $topicList.find((t) => t.id === normalized.id);
+      if (!existing) {
+        addTopic(normalized);
+        return;
+      }
+
+      const normalizedParentId = normalized.parentId ?? null;
+      const previousParentId = existing.parentId ?? null;
+      if (previousParentId !== normalizedParentId) {
+        moveTopicParent(normalized.id, normalizedParentId);
+      }
+
+      updateTopic(normalized.id, {
+        parentId: normalized.parentId,
+        roomId: normalized.roomId,
+        title: normalized.title,
+        description: normalized.description,
+        creatorId: normalized.creatorId,
+        messageCount: normalized.messageCount,
+        unreadCount: normalized.unreadCount,
+        userPermission: normalized.userPermission,
+        permissions: normalized.permissions,
+        isArchived: normalized.isArchived,
+        tags: normalized.tags,
+        hasChildren: normalized.hasChildren,
+        createdAt: normalized.createdAt,
+        updatedAt: normalized.updatedAt,
+      });
+    });
+
+    connection.on('TopicDeleted', (raw: any) => {
+      const topicId = raw?.topicId ?? raw?.TopicId ?? '';
+      const roomId = raw?.roomId ?? raw?.RoomId ?? '';
+      if (!topicId) return;
+      if ($currentRoom && roomId && roomId !== $currentRoom.id) return;
+
+      // 削除するトピックの情報を取得
+      const deletedTopic = $topicList.find(t => t.id === topicId);
+      const parentId = deletedTopic?.parentId;
+
+      deleteTopic(topicId);
+
+      // 親トピックがあればhasChildrenを更新
+      if (parentId) {
+        topics.refreshHasChildren(parentId);
+      }
+    });
+
+    connection.onreconnected(async () => {
+      roomTopicHubConnected = true;
+      try {
+        await connection.invoke('JoinTenant', tenant);
+      } catch (err) {
+        console.error('Failed to rejoin room hub tenant:', err);
+      }
+
+      if (!roomTopicHubRoomId) return;
+      try {
+        await connection.invoke('JoinRoom', roomTopicHubRoomId);
+      } catch (err) {
+        console.error('Failed to rejoin room hub room:', err);
+      }
+    });
+
+    connection.onclose(() => {
+      roomTopicHubConnected = false;
+    });
+
+    try {
+      await connection.start();
+      roomTopicHub = connection;
+      roomTopicHubTenant = tenant;
+      roomTopicHubConnected = true;
+      await connection.invoke('JoinTenant', tenant);
+    } catch (err) {
+      console.error('Failed to start room hub:', err);
+    }
+  }
+
   async function stopMessageHub() {
     if (!messageHub) return;
     try {
@@ -131,6 +279,20 @@
       messageHubTenant = null;
       messageHubTopicId = null;
       messageHubConnected = false;
+    }
+  }
+
+  async function stopRoomTopicHub() {
+    if (!roomTopicHub) return;
+    try {
+      await roomTopicHub.stop();
+    } catch (err) {
+      console.error('Failed to stop room hub:', err);
+    } finally {
+      roomTopicHub = null;
+      roomTopicHubTenant = null;
+      roomTopicHubRoomId = null;
+      roomTopicHubConnected = false;
     }
   }
 
@@ -152,6 +314,28 @@
         messageHubTopicId = topicId;
       } catch (err) {
         console.error('Failed to join message hub topic:', err);
+      }
+    }
+  }
+
+  async function ensureRoomTopicHubRoom(roomId: string | null) {
+    if (!roomTopicHub || roomTopicHub.state !== HubConnectionState.Connected) return;
+
+    if (roomTopicHubRoomId && roomTopicHubRoomId !== roomId) {
+      try {
+        await roomTopicHub.invoke('LeaveRoom', roomTopicHubRoomId);
+      } catch (err) {
+        console.error('Failed to leave room hub room:', err);
+      }
+      roomTopicHubRoomId = null;
+    }
+
+    if (roomId && roomTopicHubRoomId !== roomId) {
+      try {
+        await roomTopicHub.invoke('JoinRoom', roomId);
+        roomTopicHubRoomId = roomId;
+      } catch (err) {
+        console.error('Failed to join room hub room:', err);
       }
     }
   }
@@ -188,6 +372,7 @@
       title: raw?.title ?? raw?.Title ?? '',
       description: raw?.description ?? raw?.Description,
       parentId: raw?.parentId ?? raw?.ParentId ?? null,
+      sourceMessageId: raw?.sourceMessageId ?? raw?.SourceMessageId ?? null,
       childIds: raw?.childIds ?? raw?.ChildIds ?? [],
       createdAt: createdAt ? new Date(createdAt) : new Date(),
       updatedAt: updatedAt ? new Date(updatedAt) : new Date(),
@@ -229,6 +414,7 @@
           roomId: t.roomId,
           hasChildren: t.hasChildren,
           updatedAt: t.updatedAt,
+          sourceMessageId: t.sourceMessageId ?? null,
         });
       }
     }
@@ -335,6 +521,8 @@
       isOwner: false,
       canEdit: true,
       canDelete: true,
+      childTopicId: (raw?.childTopicId || raw?.ChildTopicId) || null,
+      childTopicTitle: (raw?.childTopicTitle || raw?.ChildTopicTitle) || null,
     };
   }
 
@@ -418,9 +606,10 @@
   async function loadTenantData() {
     isLoading = true;
     loadError = null;
+    let tenant: string | null = null;
 
     try {
-      const tenant = $page.params.tenant ?? getCurrentTenant();
+      tenant = $page.params.tenant ?? getCurrentTenant();
       if (!tenant) throw new Error('Tenant not found in URL');
 
       api.configureApiClient(tenant);
@@ -455,6 +644,17 @@
         });
       }
     } catch (error) {
+      const resolvedTenant = tenant ?? ($page.params.tenant ?? getCurrentTenant());
+      if (
+        resolvedTenant &&
+        error instanceof api.ApiError &&
+        (error.status === 401 || error.status === 403)
+      ) {
+        auth.logout();
+        redirectToTenantLogin(resolvedTenant);
+        return;
+      }
+
       loadError = error instanceof Error ? error.message : 'Failed to load tenant data';
     } finally {
       isLoading = false;
@@ -465,6 +665,7 @@
     loadTenantData();
     return () => {
       void stopMessageHub();
+      void stopRoomTopicHub();
     };
   });
 
@@ -482,6 +683,38 @@
       noScroll: true,
     });
   });
+
+  function buildReturnUrl(): string {
+    if (typeof window === 'undefined') return '/';
+    const { pathname, search, hash } = window.location;
+    return `${pathname}${search}${hash}`;
+  }
+
+  function redirectToTenantLogin(tenant: string): void {
+    if (!tenant || typeof window === 'undefined') return;
+    const returnUrl = buildReturnUrl();
+    window.location.href = `/${tenant}/auth/login?returnUrl=${encodeURIComponent(returnUrl)}`;
+  }
+
+  async function handleRoomUserNotFound(tenant: string, roomId: string): Promise<void> {
+    try {
+      await auth.fetchCurrentUser(tenant);
+      ui.openModal({
+        id: 'room-user-join',
+        title: 'Set your name',
+        type: 'custom',
+        data: { roomId },
+      });
+    } catch (error: unknown) {
+      if (error instanceof api.ApiError && error.status === 404) {
+        auth.logout();
+        redirectToTenantLogin(tenant);
+        return;
+      }
+
+      console.error('Failed to refresh ApplicationUser after missing RoomUser:', error);
+    }
+  }
 
   // If URL changes (back/forward) reflect it into selected topic.
   $effect(() => {
@@ -529,17 +762,27 @@
     if (!tenant) return;
     if (!$isAuthenticated) {
       void stopMessageHub();
+      void stopRoomTopicHub();
       return;
     }
 
     void startMessageHub(tenant).then(() => {
       void ensureMessageHubTopic($selectedTopic?.id ?? null);
     });
+
+    void startRoomTopicHub(tenant).then(() => {
+      void ensureRoomTopicHubRoom($currentRoom?.id ?? null);
+    });
   });
 
   $effect(() => {
     if (!messageHubConnected) return;
     void ensureMessageHubTopic($selectedTopic?.id ?? null);
+  });
+
+  $effect(() => {
+    if (!roomTopicHubConnected) return;
+    void ensureRoomTopicHubRoom($currentRoom?.id ?? null);
   });
 
   $effect(() => {
@@ -594,15 +837,12 @@
         }
       })
       .catch((err: unknown) => {
-        console.error('Failed to fetch RoomUser:', err);
         if (err instanceof api.ApiError && err.status === 404) {
-          ui.openModal({
-            id: 'room-user-join',
-            title: 'Set your name',
-            type: 'custom',
-            data: { roomId: $currentRoom.id },
-          });
+          void handleRoomUserNotFound(tenant, $currentRoom.id);
+          return;
         }
+
+        console.error('Failed to fetch RoomUser:', err);
       });
   });
 </script>
@@ -640,7 +880,7 @@
 
     {#snippet mainContent()}
       {#if $currentRoom && $selectedTopic}
-        <div class="flex flex-col h-full">
+        <div class="room-main">
           <div class="border-b border-border room-topic-header">
             <div>
               <h2 class="text-lg font-semibold text-text">{$selectedTopic.title}</h2>
@@ -652,8 +892,12 @@
               <ViewModeSelector />
             </div>
           </div>
-          <MessagesView />
-          <MessageInput />
+          <div class="room-messages-container">
+            <MessagesView />
+          </div>
+          <div class="message-input-wrapper">
+            <MessageInput />
+          </div>
         </div>
       {:else if $currentRoom}
         <div class="flex items-center justify-center h-full text-center">
@@ -717,8 +961,28 @@
 {/if}
 
 <style>
-  .room-topic-header {
-    padding: var(--spacing-sm) var(--spacing-md);
+.room-topic-header {
+  padding: var(--spacing-sm) var(--spacing-md);
+}
+
+  .room-main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .room-messages-container {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .message-input-wrapper {
+    flex: 0 0 auto;
   }
 
   @media (max-width: 768px) {

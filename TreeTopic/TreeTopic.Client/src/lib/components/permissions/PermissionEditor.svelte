@@ -43,8 +43,8 @@
           ? `/api/room/${resourceId}/permissions`
           : `/api/topic/${resourceId}/permissions`;
 
-      const data = await api.get(endpoint);
-      permissions = data || [];
+      const data = (await api.get<any[]>(endpoint)) ?? [];
+      permissions = data;
       error = null;
     } catch (err: any) {
       error = err.message || 'Failed to load permissions';

@@ -36,6 +36,8 @@ export interface Message {
   reactions?: { emoji: string; userIds: string[] }[];
   readBy?: string[]; // user IDs
   sortOrder?: number; // for custom ordering
+  childTopicId?: string;
+  childTopicTitle?: string;
 }
 
 /**
@@ -79,9 +81,13 @@ function createMessagesStore() {
         const messagesMap = new Map(state.messages.map((m) => [m.id, m]));
         messages.forEach((m) => messagesMap.set(m.id, m));
 
+        const allMessages = Array.from(messagesMap.values());
+        const sorted = [...allMessages].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+
         return {
           ...state,
-          messages: Array.from(messagesMap.values()),
+          messages: allMessages,
+          sortedMessages: sorted,
           messagesByTopic,
           currentTopicId: topicId,
           error: null,
@@ -98,9 +104,13 @@ function createMessagesStore() {
         const topicMessages = messagesByTopic.get(message.topicId) || [];
         messagesByTopic.set(message.topicId, [...topicMessages, message.id]);
 
+        const newMessages = [...state.messages, message];
+        const sorted = [...newMessages].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+
         return {
           ...state,
-          messages: [...state.messages, message],
+          messages: newMessages,
+          sortedMessages: sorted,
           messagesByTopic,
         };
       });
@@ -135,9 +145,13 @@ function createMessagesStore() {
           );
         }
 
+        const filtered = state.messages.filter((m) => m.id !== messageId);
+        const sorted = [...filtered].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+
         return {
           ...state,
-          messages: state.messages.filter((m) => m.id !== messageId),
+          messages: filtered,
+          sortedMessages: sorted,
           messagesByTopic,
         };
       });

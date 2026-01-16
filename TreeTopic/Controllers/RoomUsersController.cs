@@ -3,7 +3,9 @@ using Finbuckle.MultiTenant.Abstractions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Routing;
 using MaskedUUID.AspNetCore.Types;
+using System;
 using System.Linq;
 using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
@@ -12,6 +14,7 @@ using TreeTopic.Models;
 using TreeTopic.Repositories;
 using TreeTopic.Common;
 using TreeTopic.Services;
+using TreeTopic.Constants;
 
 namespace TreeTopic.Controllers;
 
@@ -84,6 +87,12 @@ public class RoomUsersController : ControllerBase
             return ValidationProblem(ModelState);
         }
 
+        var currentApplicationUser = await GetCurrentApplicationUserAsync();
+        if (currentApplicationUser == null)
+        {
+            return RedirectToTenantLogin();
+        }
+
         var existing = await _roomUserRepository.GetByRoomAndUserAsync((Guid)roomId, CurrentUserId, cancellationToken);
         if (existing != null)
         {
@@ -131,18 +140,44 @@ public class RoomUsersController : ControllerBase
         await _roomUserRepository.SaveChangesAsync(cancellationToken);
 
         // Ensure ApplicationUser has icon
-        var user = await _userManager.FindByIdAsync(CurrentUserId.ToString());
-        if (toCreate.UseMainIcon && user != null)
+        if (toCreate.UseMainIcon)
         {
-            var iconFileName = await EnsureApplicationUserIconAsync(user, cancellationToken);
+            var iconFileName = await EnsureApplicationUserIconAsync(currentApplicationUser, cancellationToken);
             if (iconFileName != null)
             {
-                toCreate.ApplicationUser = user;
+                toCreate.ApplicationUser = currentApplicationUser;
                 toCreate.ApplicationUser.IconFileName = iconFileName;
             }
         }
 
         return Ok(MapToDto(toCreate));
+    }
+
+    private async Task<ApplicationUser?> GetCurrentApplicationUserAsync()
+    {
+        if (CurrentUserId == Guid.Empty)
+        {
+            return null;
+        }
+
+        return await _userManager.FindByIdAsync(CurrentUserId.ToString());
+    }
+
+    private IActionResult RedirectToTenantLogin()
+    {
+        var tenantIdentifier = HttpContext.GetRouteValue("tenant")?.ToString();
+        var baseLoginPath = string.IsNullOrEmpty(tenantIdentifier)
+            ? AuthenticationConstants.Paths.LoginPath
+            : $"/{tenantIdentifier}{AuthenticationConstants.Paths.LoginPath}";
+
+        var returnUrl = $"{Request.Path}{Request.QueryString}";
+        if (!string.IsNullOrEmpty(returnUrl))
+        {
+            var encodedReturnUrl = Uri.EscapeDataString(returnUrl);
+            return Redirect($"{baseLoginPath}?returnUrl={encodedReturnUrl}");
+        }
+
+        return Redirect(baseLoginPath);
     }
 
     [HttpPost("room/{roomId}")]
