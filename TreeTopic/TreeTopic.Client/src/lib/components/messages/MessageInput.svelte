@@ -1,11 +1,24 @@
 <script lang="ts">
   import Button from '../common/Button.svelte';
   import ErrorMessage from '../common/ErrorMessage.svelte';
-  import { selectedTopic } from '$lib/stores/topics';
+  import {
+    addTopic,
+    selectedTopic,
+    topicList,
+    updateTopic,
+    type Topic,
+  } from '$lib/stores/topics';
   import { currentRoom } from '$lib/stores/rooms';
-  import { addMessage, cancelReply, replyTarget } from '$lib/stores/messages';
+  import {
+    addMessage,
+    cancelReply,
+    messageList,
+    replyTarget,
+    type Message,
+  } from '$lib/stores/messages';
+  import Modal from '../common/Modal.svelte';
   import { ui } from '$lib/stores/ui';
-  import { isRequired } from '$lib/utils/validation';
+  import { isRequired, minLength } from '$lib/utils/validation';
   import { getMessageAnchorId } from '$lib/utils/messageAnchor';
   import { api } from '$lib/api/client';
 
@@ -15,10 +28,30 @@
   let error = $state<string | null>(null);
   let fileInput: HTMLInputElement | undefined = $state();
   let selectedFiles = $state<File[]>([]);
+  let isCreatingChildTopic = $state(false);
+  let isChildTopicModalOpen = $state(false);
+  let childTopicTitle = $state('');
+  let childTopicDescription = $state('');
+  let childTopicTitleError = $state<string | null>(null);
+  let selectedHistoryMessageIds = $state<Set<string>>(new Set());
+  let recentHistoryMessages = $state<Message[]>([]);
+  let lastHistoryTopicId = $state<string | null>(null);
+
+  interface ChildTopicPayload {
+    parentId: string;
+    title: string;
+    description: string;
+    selectedMessageIds: string[];
+  }
 
   function fileKey(file: File): string {
     return `${file.name}|${file.size}|${file.lastModified}`;
   }
+
+  type MessageApiResponse = {
+    childTopicId?: string;
+    ChildTopicId?: string;
+  } & Record<string, unknown>;
 
   function normalizeMessage(raw: any) {
     const id = raw?.id ?? raw?.Id ?? '';
@@ -83,13 +116,105 @@
       reactions: [],
       readBy: [],
       sortOrder: raw?.sortOrder ?? raw?.SortOrder ?? undefined,
+      childTopicId: raw?.childTopicId ?? raw?.ChildTopicId ?? null,
+      childTopicTitle: raw?.childTopicTitle ?? raw?.ChildTopicTitle ?? null,
     };
+  }
+
+  function getSuggestedChildTopicTitle() {
+    const MAX_LENGTH = 120;
+    const normalizedSubject = subject.trim();
+    if (normalizedSubject) {
+      return normalizedSubject.length <= MAX_LENGTH
+        ? normalizedSubject
+        : `${normalizedSubject.slice(0, MAX_LENGTH).trim()}…`;
+    }
+
+    const normalizedContent = content.replace(/\s+/g, ' ').trim();
+    if (!normalizedContent) {
+      return '';
+    }
+
+    const firstLine = normalizedContent.split('\n')[0] ?? normalizedContent;
+    return firstLine.length <= MAX_LENGTH
+      ? firstLine
+      : `${firstLine.slice(0, MAX_LENGTH).trim()}…`;
+  }
+
+  function openChildTopicModal() {
+    if (!isCreatingChildTopic) {
+      isCreatingChildTopic = true;
+      childTopicTitleError = null;
+      if (!childTopicTitle.trim()) {
+        childTopicTitle = getSuggestedChildTopicTitle();
+      }
+    }
+    isChildTopicModalOpen = true;
+  }
+
+  function closeChildTopicModal() {
+    isChildTopicModalOpen = false;
+  }
+
+  function applyChildTopicSelection() {
+    // Just close the modal, keep the child topic state for message submission
+    closeChildTopicModal();
+  }
+
+  let childTopicTitlePreview = $derived(childTopicTitle.trim());
+  let childTopicDescriptionPreview = $derived(childTopicDescription.trim());
+  let isChildTopicActive = $derived(
+    childTopicTitlePreview.length > 0 ||
+    childTopicDescriptionPreview.length > 0 ||
+    selectedHistoryMessageIds.size > 0 ||
+    isCreatingChildTopic
+  );
+
+  function resetChildTopicForm() {
+    isCreatingChildTopic = false;
+    isChildTopicModalOpen = false;
+    childTopicTitle = '';
+    childTopicDescription = '';
+    childTopicTitleError = null;
+    selectedHistoryMessageIds = new Set();
+  }
+
+  $effect(() => {
+    const currentTopicId = $selectedTopic?.id ?? null;
+    if (currentTopicId !== lastHistoryTopicId) {
+      selectedHistoryMessageIds = new Set();
+      lastHistoryTopicId = currentTopicId;
+    }
+  });
+
+  $effect(() => {
+    recentHistoryMessages = $selectedTopic
+      ? $messageList
+          .filter((m) => m.topicId === $selectedTopic.id)
+          .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+          .slice(0, 20)
+      : [];
+  });
+
+  function toggleHistoryMessageSelection(messageId: string) {
+    const next = new Set(selectedHistoryMessageIds);
+    if (next.has(messageId)) {
+      next.delete(messageId);
+    } else {
+      next.add(messageId);
+    }
+    selectedHistoryMessageIds = next;
+  }
+
+  function clearHistorySelection() {
+    selectedHistoryMessageIds = new Set();
   }
 
   async function handleSubmit(e: Event) {
     e.preventDefault();
 
     error = null;
+    childTopicTitleError = null;
 
     if (!$currentRoom || !$selectedTopic) {
       error = 'Please select a room and topic first';
@@ -101,6 +226,22 @@
       return;
     }
 
+    let childTopicPayload: ChildTopicPayload | null = null;
+    const trimmedChildTopicTitle = childTopicTitle.trim();
+    if (trimmedChildTopicTitle.length > 0) {
+      if (!minLength(trimmedChildTopicTitle, 2)) {
+        childTopicTitleError = 'Child topic title must be at least 2 characters';
+        return;
+      }
+
+      childTopicPayload = {
+        parentId: $selectedTopic.id,
+        title: trimmedChildTopicTitle,
+        description: childTopicDescription.trim(),
+        selectedMessageIds: Array.from(selectedHistoryMessageIds),
+      };
+    }
+
     isLoading = true;
 
     try {
@@ -110,7 +251,7 @@
       const trimmedSubject = subject.trim();
       const header = trimmedSubject || '';
 
-      let response;
+      let response: MessageApiResponse;
       if (selectedFiles.length > 0) {
         // ファイルがある場合はFormDataで /upload エンドポイントに送信
         const form = new FormData();
@@ -120,22 +261,46 @@
         if ($replyTarget) {
           form.append('replyId', $replyTarget.id);
         }
+        if (childTopicPayload) {
+          form.append('childTopic.ParentId', childTopicPayload.parentId);
+          form.append('childTopic.Title', childTopicPayload.title);
+          form.append('childTopic.Description', childTopicPayload.description);
+          childTopicPayload.selectedMessageIds.forEach((id) =>
+            form.append('childTopic.SelectedMessageIds', id)
+          );
+        }
         for (const file of selectedFiles) {
           form.append('files', file);
         }
-        response = await api.post(`/${tenant}/api/Message/upload`, form);
+        response = await api.post<MessageApiResponse>(`/${tenant}/api/Message/upload`, form);
       } else {
         // ファイルがない場合はJSONで送信
-        const payload = {
+        interface MessagePayload {
+          topicId: string;
+          header: string;
+          body: string;
+          replyId?: string;
+          childTopic?: ChildTopicPayload;
+        }
+
+        const payload: MessagePayload = {
           topicId: $selectedTopic.id,
-          header: header,
+          header,
           body: trimmedContent,
         };
+
         if ($replyTarget) {
           payload.replyId = $replyTarget.id;
         }
-        response = await api.post(`/${tenant}/api/Message`, payload);
+
+        if (childTopicPayload) {
+          payload.childTopic = childTopicPayload;
+        }
+
+        response = await api.post<MessageApiResponse>(`/${tenant}/api/Message`, payload);
       }
+      const childTopicIdFromResponse =
+        response?.childTopicId ?? response?.ChildTopicId ?? null;
       addMessage({
         ...normalizeMessage(response),
         subject: trimmedSubject,
@@ -146,10 +311,70 @@
       cancelReply();
       selectedFiles = [];
       if (fileInput) fileInput.value = '';
+      resetChildTopicForm();
+      if (childTopicIdFromResponse) {
+        void syncChildTopicFromMessage(childTopicIdFromResponse);
+      }
     } catch (err: unknown) {
       error = err instanceof Error ? err.message : 'Failed to send message';
     } finally {
       isLoading = false;
+    }
+  }
+
+  function normalizeTopicResponse(raw: any): Topic {
+    const id = raw?.id ?? raw?.Id ?? '';
+    const roomId = raw?.roomId ?? raw?.RoomId ?? '';
+    const parentId = raw?.parentId ?? raw?.ParentId ?? null;
+    const createdAt = raw?.createdAt ?? raw?.CreatedAt ?? null;
+    const updatedAt = raw?.updatedAt ?? raw?.UpdatedAt ?? null;
+
+    return {
+      id,
+      roomId,
+      parentId,
+      sourceMessageId: raw?.sourceMessageId ?? raw?.SourceMessageId ?? null,
+      title: raw?.title ?? raw?.Title ?? '',
+      description: raw?.description ?? raw?.Description ?? undefined,
+      childIds: raw?.childIds ?? raw?.ChildIds ?? [],
+      createdAt: createdAt ? new Date(createdAt) : new Date(),
+      updatedAt: updatedAt ? new Date(updatedAt) : new Date(),
+      creatorId: raw?.creatorId ?? raw?.CreatorId ?? '',
+      messageCount: raw?.messageCount ?? raw?.MessageCount ?? 0,
+      unreadCount: raw?.unreadCount ?? raw?.UnreadCount ?? 0,
+      userPermission: raw?.userPermission ?? raw?.UserPermission ?? 'admin',
+      permissions: raw?.permissions ?? raw?.Permissions ?? [],
+      isArchived: raw?.isArchived ?? raw?.IsArchived ?? false,
+      tags: raw?.tags ?? raw?.Tags ?? [],
+      hasChildren: raw?.hasChildren ?? raw?.HasChildren ?? false,
+    };
+  }
+
+  async function syncChildTopicFromMessage(childTopicId: string | null) {
+    if (!childTopicId) return;
+
+    const tenant = api.getCurrentTenant();
+    if (!tenant) return;
+
+    try {
+      const response = await api.get<any>(`/${tenant}/api/Topic/${childTopicId}`);
+      const normalizedTopic = normalizeTopicResponse(response);
+      if (!normalizedTopic.id) return;
+
+      const exists = $topicList.some((topic) => topic.id === normalizedTopic.id);
+      if (!exists) {
+        addTopic(normalizedTopic);
+      }
+
+      if (normalizedTopic.parentId) {
+        const parentId = normalizedTopic.parentId;
+        const parent = $topicList.find((topic) => topic.id === parentId);
+        if (parent && !parent.hasChildren) {
+          updateTopic(parentId, { hasChildren: true });
+        }
+      }
+    } catch (syncError) {
+      console.error('Failed to sync created child topic:', syncError);
     }
   }
 
@@ -242,6 +467,41 @@
       style="resize: none;"
     ></textarea>
 
+    <div class="child-topic-toggle">
+      <button
+        type="button"
+        onclick={openChildTopicModal}
+        class="button button-ghost button-small"
+        disabled={isLoading}
+      >
+        Create child topic
+      </button>
+      <span class="text-small text-light">
+        Open modal to select messages for the child topic
+      </span>
+    </div>
+
+    {#if isChildTopicActive}
+      <div class="child-topic-indicator">
+        <span class="child-topic-indicator__label">
+          Child topic creation in progress
+          {#if childTopicTitlePreview}
+            ："{childTopicTitlePreview}"
+          {:else}
+            ：(title not set)
+          {/if}
+        </span>
+        <button
+          type="button"
+          class="child-topic-indicator__clear"
+          onclick={resetChildTopicForm}
+          disabled={isLoading}
+        >
+          Clear
+        </button>
+      </div>
+    {/if}
+
     <div class="flex items-center gap-2">
       <input
         type="file"
@@ -302,6 +562,107 @@
   </form>
 </div>
 
+<Modal
+  isOpen={isChildTopicModalOpen}
+  title="Create child topic"
+  size="large"
+  onClose={() => {
+    closeChildTopicModal();
+  }}
+>
+  <div class="child-topic-form">
+    <div>
+      <label for="child-topic-title" class="form-label">Child topic title</label>
+      <input
+        id="child-topic-title"
+        type="text"
+        bind:value={childTopicTitle}
+        placeholder="Enter child topic title"
+        class="form-input"
+        disabled={isLoading}
+        minlength="2"
+        oninput={() => (childTopicTitleError = null)}
+      />
+      {#if childTopicTitleError}
+        <p class="text-error text-small">{childTopicTitleError}</p>
+      {/if}
+    </div>
+    <div>
+      <label for="child-topic-description" class="form-label">Description (optional)</label>
+      <textarea
+        id="child-topic-description"
+        bind:value={childTopicDescription}
+        placeholder="Provide a description for the child topic"
+        class="form-input child-topic-description"
+        rows="2"
+        disabled={isLoading}
+      ></textarea>
+    </div>
+    {#if recentHistoryMessages.length > 0}
+      <div class="child-topic-history">
+        <div class="child-topic-history__header">
+          <span class="text-small text-bold">Select messages to move</span>
+          <button
+            type="button"
+            class="child-topic-history__clear"
+            onclick={clearHistorySelection}
+            disabled={isLoading || selectedHistoryMessageIds.size === 0}
+          >
+            Clear
+          </button>
+        </div>
+        <div class="child-topic-history__list">
+          {#each recentHistoryMessages as history (history.id)}
+            <label class="child-topic-history__item">
+              <input
+                type="checkbox"
+                checked={selectedHistoryMessageIds.has(history.id)}
+                disabled={isLoading}
+                onchange={() => toggleHistoryMessageSelection(history.id)}
+              />
+              <div class="child-topic-history__content">
+                <div class="child-topic-history__meta">
+                  <span class="text-small text-bold">
+                    {history.userDisplayName || history.userName}
+                  </span>
+                  <span class="text-small text-light">
+                    {history.createdAt.toLocaleString()}
+                  </span>
+                </div>
+                <div class="text-small child-topic-history__snippet">
+                  {history.subject || history.content || 'Empty message'}
+                </div>
+              </div>
+            </label>
+          {/each}
+        </div>
+      </div>
+    {/if}
+    <div class="flex spacing-md padding-top-md">
+      <Button
+        type="button"
+        variant="primary"
+        size="base"
+        fullWidth
+        disabled={isLoading}
+        onclick={applyChildTopicSelection}
+      >
+        Done
+      </Button>
+      <Button
+        type="button"
+        variant="secondary"
+        size="base"
+        fullWidth
+        disabled={isLoading}
+        onclick={resetChildTopicForm}
+      >
+        Cancel
+      </Button>
+    </div>
+  </div>
+</Modal>
+
 <style>
   textarea {
     font-family: var(--font-family-base);
@@ -346,6 +707,41 @@
 
   .selected-file__remove:hover:not(:disabled) {
     color: var(--color-error);
+  }
+
+  .child-topic-indicator {
+    margin-top: var(--spacing-xs);
+    padding: var(--spacing-xs) var(--spacing-sm);
+    border-radius: var(--border-radius-sm);
+    background-color: color-mix(in srgb, var(--color-primary) 8%, var(--color-surface));
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--spacing-xs);
+  }
+
+  .child-topic-indicator__label {
+    font-size: var(--font-size-sm);
+    color: var(--color-text);
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .child-topic-indicator__clear {
+    border: none;
+    background: transparent;
+    color: var(--color-error);
+    font-size: var(--font-size-xs);
+    cursor: pointer;
+    text-decoration: underline;
+  }
+
+  .child-topic-indicator__clear:disabled {
+    color: var(--color-text-light);
+    cursor: not-allowed;
+    text-decoration: none;
   }
 
   .replying-to {
@@ -402,5 +798,98 @@
 
   .replying-to__cancel:hover {
     color: var(--color-primary);
+  }
+
+  .child-topic-toggle {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    margin-top: var(--spacing-sm);
+  }
+
+  .child-topic-form {
+    margin-top: var(--spacing-sm);
+    padding: var(--spacing-sm);
+    border: 1px solid var(--color-border);
+    border-radius: var(--border-radius-sm);
+    background-color: var(--color-surface);
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-sm);
+  }
+
+  .child-topic-description {
+    min-height: 60px;
+    resize: vertical;
+    font-family: var(--font-family-base);
+  }
+
+  .child-topic-history {
+    margin-top: var(--spacing-sm);
+    padding: var(--spacing-sm);
+    border: 1px solid var(--color-border);
+    border-radius: var(--border-radius-sm);
+    background-color: var(--color-surface);
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-xs);
+  }
+
+  .child-topic-history__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .child-topic-history__clear {
+    border: none;
+    background: transparent;
+    color: var(--color-primary);
+    font-size: var(--font-size-xs);
+    cursor: pointer;
+    padding: 0;
+  }
+
+  .child-topic-history__list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-xs);
+    max-height: 220px;
+    overflow-y: auto;
+  }
+
+  .child-topic-history__item {
+    display: flex;
+    gap: var(--spacing-sm);
+    align-items: flex-start;
+    padding: var(--spacing-xs);
+    border-radius: var(--border-radius-sm);
+    background-color: color-mix(in srgb, var(--color-primary) 6%, var(--color-surface));
+    cursor: pointer;
+  }
+
+  .child-topic-history__item input {
+    margin-top: 4px;
+  }
+
+  .child-topic-history__content {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    width: 100%;
+  }
+
+  .child-topic-history__meta {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--spacing-sm);
+    font-size: var(--font-size-xs);
+    color: var(--color-text-light);
+  }
+
+  .child-topic-history__snippet {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 </style>

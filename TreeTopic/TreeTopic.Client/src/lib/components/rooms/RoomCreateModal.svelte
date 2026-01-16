@@ -5,6 +5,7 @@
   import ErrorMessage from '../common/ErrorMessage.svelte';
   import { ui, activeModals } from '$lib/stores/ui';
   import { rooms, addRoom } from '$lib/stores/rooms';
+  import type { Room } from '$lib/stores/rooms';
   import { isRequired, minLength } from '$lib/utils/validation';
   import { api } from '$lib/api/client';
 
@@ -39,13 +40,13 @@
 
     try {
       const tenant = api.getCurrentTenant();
-      const response = await api.post(`/${tenant}/api/Room`, {
+      const response = (await api.post(`/${tenant}/api/Room`, {
         name: name.trim(),
         description: description.trim(),
         settings: {
           isPublic,
         },
-      });
+      })) as Room;
 
       addRoom(response);
       resetForm();

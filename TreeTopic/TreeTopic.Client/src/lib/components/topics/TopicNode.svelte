@@ -342,14 +342,13 @@
   .topic-item {
     margin: 0;
     padding: 0;
-    /* Add left border for hierarchy visualization */
-    border-left: 2px solid var(--color-border);
     padding-left: calc(var(--topic-level) * 16px);
   }
 
-  .topic-item[style*="--topic-level: 0"] {
-    border-left: none;
-    padding-left: 0;
+  .topic-children {
+    margin-left: 8px;
+    padding-left: 8px;
+    border-left: 1px solid var(--color-border);
   }
 
   .topic-header {
@@ -417,11 +416,6 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-  }
-
-  .topic-children {
-    margin: 0;
-    padding: 0;
   }
 
   .topic-add-button {

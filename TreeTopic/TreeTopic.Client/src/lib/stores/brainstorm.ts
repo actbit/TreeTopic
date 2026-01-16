@@ -5,6 +5,7 @@ export interface BrainIdeaVote {
   brainIdeaId: string;
   applicationUserId?: string;
   userName?: string;
+  roomUserId?: string;
   voteType: string;
   value: number;
 }

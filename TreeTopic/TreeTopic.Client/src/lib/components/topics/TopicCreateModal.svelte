@@ -1,27 +1,60 @@
 <script lang="ts">
+  import { goto } from '$app/navigation';
   import Modal from '../common/Modal.svelte';
   import Button from '../common/Button.svelte';
   import Input from '../common/Input.svelte';
   import ErrorMessage from '../common/ErrorMessage.svelte';
   import { ui, activeModals } from '$lib/stores/ui';
-  import { topicList, addTopic, updateTopic, selectedTopic, createTopicParentId } from '$lib/stores/topics';
+  import {
+    topicList,
+    addTopic,
+    updateTopic,
+    setSelectedTopic,
+    createTopicParentId,
+    expandedTopics,
+    toggleTopicExpansion,
+  } from '$lib/stores/topics';
   import { currentRoom } from '$lib/stores/rooms';
   import { isRequired, minLength } from '$lib/utils/validation';
   import { api } from '$lib/api/client';
 
   const modalId = 'topic-create';
-  let isOpen = $derived.by(() => $activeModals.some((m) => m.id === modalId));
+  let modalConfig = $derived.by(() => $activeModals.find((m) => m.id === modalId) ?? null);
+  let isOpen = $derived.by(() => modalConfig !== null);
+  let modalData = $derived.by(() => modalConfig?.data ?? {});
+  let parentId = $derived.by(() => modalData.parentId ?? $createTopicParentId);
+  let prefillTitle = $derived.by(() => modalData.prefillTitle ?? '');
+  let prefillDescription = $derived.by(() => modalData.prefillDescription ?? '');
+  let navigateOnCreate = $derived.by(() => modalData.autoNavigate ?? false);
+  let sourceMessageId = $derived.by(() => modalData.sourceMessageId ?? null);
+  let transferHistory = $state(false);
 
   let title = $state('');
   let description = $state('');
   let isLoading = $state(false);
   let error = $state<string | null>(null);
   let titleError = $state<string | undefined>(undefined);
+  let hasInitializedModal = $state(false);
 
-  let parentId = $derived.by(() => $createTopicParentId);
+  $effect(() => {
+    if (isOpen) {
+      if (!hasInitializedModal) {
+        title = prefillTitle ?? '';
+        description = prefillDescription ?? '';
+        error = null;
+        titleError = undefined;
+        transferHistory = modalData.transferHistory ?? false;
+        hasInitializedModal = true;
+      }
+    } else {
+      hasInitializedModal = false;
+    }
+  });
 
   async function handleCreate(e: Event) {
     e.preventDefault();
+
+    const activeParentId = parentId ?? null;
 
     titleError = undefined;
     error = null;
@@ -49,7 +82,8 @@
         roomId: $currentRoom.id,
         title: title.trim(),
         description: description.trim(),
-        parentId: parentId || null,
+        parentId: activeParentId,
+        sourceMessageId,
       })) as Record<string, any>;
 
       // Normalize response to ensure all required fields exist
@@ -59,9 +93,16 @@
         title: response.title || response.Title || '',
         description: response.description || response.Description || undefined,
         parentId: response.parentId || response.ParentId || null,
+        sourceMessageId: response.sourceMessageId || response.SourceMessageId || null,
         childIds: response.childIds || response.ChildIds || [],
-        createdAt: response.createdAt || response.CreatedAt ? new Date(response.createdAt || response.CreatedAt) : new Date(),
-        updatedAt: response.updatedAt || response.UpdatedAt ? new Date(response.updatedAt || response.UpdatedAt) : new Date(),
+        createdAt:
+          response.createdAt || response.CreatedAt
+            ? new Date(response.createdAt || response.CreatedAt)
+            : new Date(),
+        updatedAt:
+          response.updatedAt || response.UpdatedAt
+            ? new Date(response.updatedAt || response.UpdatedAt)
+            : new Date(),
         creatorId: response.creatorId || response.CreatorId || '',
         messageCount: response.messageCount || response.MessageCount || 0,
         unreadCount: response.unreadCount || response.UnreadCount || 0,
@@ -74,16 +115,43 @@
 
       addTopic(normalizedTopic);
 
-      // Update parent's hasChildren flag if this is a child topic
-      if (parentId) {
-        const parent = $topicList.find((t) => t.id === parentId);
-        if (parent && !parent.hasChildren) {
-          updateTopic(parentId, { hasChildren: true });
+      if (activeParentId && !$expandedTopics.has(activeParentId)) {
+        toggleTopicExpansion(activeParentId);
+      }
+
+      const shouldNavigate = navigateOnCreate;
+      if (shouldNavigate) {
+        setSelectedTopic(normalizedTopic);
+      }
+
+      const shouldTransferHistory =
+        transferHistory && activeParentId && sourceMessageId;
+      if (shouldTransferHistory) {
+        try {
+          await api.post(`/${tenant}/api/Message/move`, {
+            sourceTopicId: activeParentId,
+            targetTopicId: normalizedTopic.id,
+            anchorMessageId: sourceMessageId,
+            includeAnchorMessage: false,
+          });
+        } catch (moveError) {
+          console.error('Failed to transfer earlier messages to child topic:', moveError);
         }
       }
 
       resetForm();
       ui.closeModal(modalId);
+
+      if (shouldNavigate && normalizedTopic.roomId && normalizedTopic.id) {
+        try {
+          await goto(`/${tenant}/room/${normalizedTopic.roomId}/topic/${normalizedTopic.id}`, {
+            keepFocus: true,
+            noScroll: true,
+          });
+        } catch (navigateError) {
+          console.error('Failed to navigate to new topic:', navigateError);
+        }
+      }
     } catch (err: unknown) {
       error = err instanceof Error ? err.message : 'Failed to create topic';
     } finally {
@@ -94,13 +162,13 @@
   function resetForm() {
     title = '';
     description = '';
-    parentId = null;
+    createTopicParentId.set(null);
+    transferHistory = false;
   }
 
   function handleClose() {
     ui.closeModal(modalId);
     resetForm();
-    createTopicParentId.set(null);
   }
 </script>
 
@@ -132,6 +200,22 @@
       ></textarea>
     </div>
 
+    {#if sourceMessageId}
+      <div class="transfer-history-group">
+        <label class="transfer-toggle">
+          <input
+            type="checkbox"
+            bind:checked={transferHistory}
+            disabled={isLoading}
+          />
+          <span>Move earlier messages into this child topic</span>
+        </label>
+        <p class="text-small text-light transfer-helper">
+          Moves every message sent before the highlighted message so the new topic starts at that point.
+        </p>
+      </div>
+    {/if}
+
     <div class="flex spacing-md padding-top-md">
       <Button
         type="submit"
@@ -157,3 +241,27 @@
   </form>
 </Modal>
 
+<style>
+  .transfer-history-group {
+    margin-top: var(--spacing-md);
+  }
+
+  .transfer-toggle {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    font-size: var(--font-size-sm);
+    color: var(--color-text);
+  }
+
+  .transfer-toggle input[type='checkbox'] {
+    width: 16px;
+    height: 16px;
+  }
+
+  .transfer-helper {
+    margin-top: 4px;
+    font-size: var(--font-size-xs);
+    color: var(--color-text-light);
+  }
+</style>

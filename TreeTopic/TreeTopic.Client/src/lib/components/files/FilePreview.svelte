@@ -1,7 +1,7 @@
 <script lang="ts">
   import Modal from '../common/Modal.svelte';
   import { ui, activeModals } from '$lib/stores/ui';
-  import type { File as FileDto } from '$lib/types/ui';
+  import type { Material as FileDto } from '$lib/stores/files';
 
   interface Props {
     file?: FileDto | null;

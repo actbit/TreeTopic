@@ -158,6 +158,12 @@
     roomTopicsError = null;
     roomTopicsLoading = true;
 
+    if (!$currentRoom) {
+      roomTopics = [];
+      roomTopicsLoading = false;
+      return;
+    }
+
     try {
       const tenant = api.getCurrentTenant();
       const raw = await api.get<any[]>(`/${tenant}/api/Topic/room/${$currentRoom.id}`);

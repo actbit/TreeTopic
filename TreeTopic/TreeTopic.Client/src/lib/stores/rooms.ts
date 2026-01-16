@@ -33,6 +33,8 @@ export interface Room {
     allowGuestAccess?: boolean;
     [key: string]: any;
   };
+  canEdit?: boolean;
+  canDelete?: boolean;
 }
 
 /**
