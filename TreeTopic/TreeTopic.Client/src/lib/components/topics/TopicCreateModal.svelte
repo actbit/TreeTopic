@@ -11,6 +11,8 @@
     updateTopic,
     setSelectedTopic,
     createTopicParentId,
+    expandedTopics,
+    toggleTopicExpansion,
   } from '$lib/stores/topics';
   import { currentRoom } from '$lib/stores/rooms';
   import { isRequired, minLength } from '$lib/utils/validation';
@@ -24,6 +26,8 @@
   let prefillTitle = $derived.by(() => modalData.prefillTitle ?? '');
   let prefillDescription = $derived.by(() => modalData.prefillDescription ?? '');
   let navigateOnCreate = $derived.by(() => modalData.autoNavigate ?? false);
+  let sourceMessageId = $derived.by(() => modalData.sourceMessageId ?? null);
+  let transferHistory = $state(false);
 
   let title = $state('');
   let description = $state('');
@@ -39,6 +43,7 @@
         description = prefillDescription ?? '';
         error = null;
         titleError = undefined;
+        transferHistory = modalData.transferHistory ?? false;
         hasInitializedModal = true;
       }
     } else {
@@ -78,6 +83,7 @@
         title: title.trim(),
         description: description.trim(),
         parentId: activeParentId,
+        sourceMessageId,
       })) as Record<string, any>;
 
       // Normalize response to ensure all required fields exist
@@ -87,6 +93,7 @@
         title: response.title || response.Title || '',
         description: response.description || response.Description || undefined,
         parentId: response.parentId || response.ParentId || null,
+        sourceMessageId: response.sourceMessageId || response.SourceMessageId || null,
         childIds: response.childIds || response.ChildIds || [],
         createdAt:
           response.createdAt || response.CreatedAt
@@ -108,17 +115,28 @@
 
       addTopic(normalizedTopic);
 
-      // Update parent's hasChildren flag if this is a child topic
-      if (activeParentId) {
-        const parent = $topicList.find((t) => t.id === activeParentId);
-        if (parent && !parent.hasChildren) {
-          updateTopic(activeParentId, { hasChildren: true });
-        }
+      if (activeParentId && !$expandedTopics.has(activeParentId)) {
+        toggleTopicExpansion(activeParentId);
       }
 
       const shouldNavigate = navigateOnCreate;
       if (shouldNavigate) {
         setSelectedTopic(normalizedTopic);
+      }
+
+      const shouldTransferHistory =
+        transferHistory && activeParentId && sourceMessageId;
+      if (shouldTransferHistory) {
+        try {
+          await api.post(`/${tenant}/api/Message/move`, {
+            sourceTopicId: activeParentId,
+            targetTopicId: normalizedTopic.id,
+            anchorMessageId: sourceMessageId,
+            includeAnchorMessage: false,
+          });
+        } catch (moveError) {
+          console.error('Failed to transfer earlier messages to child topic:', moveError);
+        }
       }
 
       resetForm();
@@ -145,6 +163,7 @@
     title = '';
     description = '';
     createTopicParentId.set(null);
+    transferHistory = false;
   }
 
   function handleClose() {
@@ -181,6 +200,22 @@
       ></textarea>
     </div>
 
+    {#if sourceMessageId}
+      <div class="transfer-history-group">
+        <label class="transfer-toggle">
+          <input
+            type="checkbox"
+            bind:checked={transferHistory}
+            disabled={isLoading}
+          />
+          <span>Move earlier messages into this child topic</span>
+        </label>
+        <p class="text-small text-light transfer-helper">
+          Moves every message sent before the highlighted message so the new topic starts at that point.
+        </p>
+      </div>
+    {/if}
+
     <div class="flex spacing-md padding-top-md">
       <Button
         type="submit"
@@ -205,3 +240,28 @@
     </div>
   </form>
 </Modal>
+
+<style>
+  .transfer-history-group {
+    margin-top: var(--spacing-md);
+  }
+
+  .transfer-toggle {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    font-size: var(--font-size-sm);
+    color: var(--color-text);
+  }
+
+  .transfer-toggle input[type='checkbox'] {
+    width: 16px;
+    height: 16px;
+  }
+
+  .transfer-helper {
+    margin-top: 4px;
+    font-size: var(--font-size-xs);
+    color: var(--color-text-light);
+  }
+</style>

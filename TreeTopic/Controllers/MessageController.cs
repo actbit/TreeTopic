@@ -97,6 +97,23 @@ public class MessageController : ControllerBase
         return result.ToApiResult();
     }
 
+    [HttpPost("move")]
+    public async Task<IActionResult> MoveMessages([FromBody] MoveMessagesRequest request, CancellationToken cancellationToken)
+    {
+        if (!ModelState.IsValid)
+            return ValidationProblem(ModelState);
+
+        var result = await _messageManagementService.MoveMessagesBeforeAsync(
+            (Guid)request.SourceTopicId,
+            (Guid)request.TargetTopicId,
+            (Guid)request.AnchorMessageId,
+            request.IncludeAnchorMessage,
+            includeEarlierMessages: true,
+            cancellationToken);
+
+        return result.ToApiResult();
+    }
+
     [HttpDelete("{messageId}")]
     public async Task<IActionResult> Delete([FromRoute] MaskedGuid messageId, CancellationToken cancellationToken)
     {

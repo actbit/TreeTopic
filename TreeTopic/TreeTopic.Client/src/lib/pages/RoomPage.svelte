@@ -168,6 +168,7 @@
       if (!$currentRoom || normalized.roomId !== $currentRoom.id) return;
       const exists = $topicList.some((t) => t.id === normalized.id);
       if (exists) {
+        // 既存の場合はトピックを更新
         updateTopic(normalized.id, normalized);
         return;
       }
@@ -223,7 +224,17 @@
       const roomId = raw?.roomId ?? raw?.RoomId ?? '';
       if (!topicId) return;
       if ($currentRoom && roomId && roomId !== $currentRoom.id) return;
+
+      // 削除するトピックの情報を取得
+      const deletedTopic = $topicList.find(t => t.id === topicId);
+      const parentId = deletedTopic?.parentId;
+
       deleteTopic(topicId);
+
+      // 親トピックがあればhasChildrenを更新
+      if (parentId) {
+        topics.refreshHasChildren(parentId);
+      }
     });
 
     connection.onreconnected(async () => {
@@ -361,6 +372,7 @@
       title: raw?.title ?? raw?.Title ?? '',
       description: raw?.description ?? raw?.Description,
       parentId: raw?.parentId ?? raw?.ParentId ?? null,
+      sourceMessageId: raw?.sourceMessageId ?? raw?.SourceMessageId ?? null,
       childIds: raw?.childIds ?? raw?.ChildIds ?? [],
       createdAt: createdAt ? new Date(createdAt) : new Date(),
       updatedAt: updatedAt ? new Date(updatedAt) : new Date(),
@@ -402,6 +414,7 @@
           roomId: t.roomId,
           hasChildren: t.hasChildren,
           updatedAt: t.updatedAt,
+          sourceMessageId: t.sourceMessageId ?? null,
         });
       }
     }
@@ -508,6 +521,8 @@
       isOwner: false,
       canEdit: true,
       canDelete: true,
+      childTopicId: (raw?.childTopicId || raw?.ChildTopicId) || null,
+      childTopicTitle: (raw?.childTopicTitle || raw?.ChildTopicTitle) || null,
     };
   }
 
@@ -865,7 +880,7 @@
 
     {#snippet mainContent()}
       {#if $currentRoom && $selectedTopic}
-        <div class="flex flex-col h-full">
+        <div class="room-main">
           <div class="border-b border-border room-topic-header">
             <div>
               <h2 class="text-lg font-semibold text-text">{$selectedTopic.title}</h2>
@@ -877,8 +892,12 @@
               <ViewModeSelector />
             </div>
           </div>
-          <MessagesView />
-          <MessageInput />
+          <div class="room-messages-container">
+            <MessagesView />
+          </div>
+          <div class="message-input-wrapper">
+            <MessageInput />
+          </div>
         </div>
       {:else if $currentRoom}
         <div class="flex items-center justify-center h-full text-center">
@@ -942,8 +961,28 @@
 {/if}
 
 <style>
-  .room-topic-header {
-    padding: var(--spacing-sm) var(--spacing-md);
+.room-topic-header {
+  padding: var(--spacing-sm) var(--spacing-md);
+}
+
+  .room-main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .room-messages-container {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .message-input-wrapper {
+    flex: 0 0 auto;
   }
 
   @media (max-width: 768px) {

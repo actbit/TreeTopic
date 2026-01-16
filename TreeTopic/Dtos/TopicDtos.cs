@@ -9,6 +9,8 @@ public class TopicDto : BaseDto
 
     public MaskedGuid? ParentId { get; set; }
 
+    public MaskedGuid? SourceMessageId { get; set; }
+
     public string Title { get; set; } = string.Empty;
 
     public string? Description { get; set; }
@@ -28,6 +30,8 @@ public class CreateTopicRequest : BaseCreateRequest
     public string Title { get; set; } = string.Empty;
 
     public string? Description { get; set; }
+
+    public MaskedGuid? SourceMessageId { get; set; }
 }
 
 public class UpdateTopicRequest : BaseUpdateRequest

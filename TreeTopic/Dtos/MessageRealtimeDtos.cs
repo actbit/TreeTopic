@@ -12,6 +12,8 @@ public class MessageRealtimeDto
     public string Header { get; set; } = string.Empty;
     public string Body { get; set; } = string.Empty;
     public string? ReplyId { get; set; }
+    public string? ChildTopicId { get; set; }
+    public string? ChildTopicTitle { get; set; }
     public List<FileRealtimeDto>? Files { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }

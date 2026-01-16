@@ -17,6 +17,7 @@ public record TopicRealtimeDto(
     string Title,
     string? Description,
     bool HasChildren,
+    string? SourceMessageId,
     DateTime CreatedAt,
     DateTime? UpdatedAt);
 

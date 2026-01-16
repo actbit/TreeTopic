@@ -13,7 +13,7 @@
   });
 </script>
 
-<div class="flex-1 flex flex-col min-h-0">
+<div class="messages-view">
   {#if currentMode === 'default'}
     <MessageList />
   {:else if currentMode === 'timeline'}
@@ -28,7 +28,17 @@
     <SearchView />
   {:else if currentMode === 'topic'}
     <TopicView />
-  {:else}
+{:else}
     <MessageList />
   {/if}
 </div>
+
+<style>
+  .messages-view {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+  }
+</style>

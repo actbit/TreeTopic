@@ -126,10 +126,13 @@ public class TopicManagementService : BaseService, ITopicManagementService
                     return Result<TopicDto>.NotFound("Parent topic not found");
             }
 
+            Guid? sourceMessageId = request.SourceMessageId.HasValue ? (Guid)request.SourceMessageId.Value : null;
+
             var topic = new Topic
             {
                 RoomId = request.RoomId,
-                ParentId = parentId
+                ParentId = parentId,
+                SourceMessageId = sourceMessageId
             };
             topic.Title = request.Title?.Trim() ?? string.Empty;
             topic.Description = request.Description?.Trim();
@@ -139,6 +142,18 @@ public class TopicManagementService : BaseService, ITopicManagementService
 
             var dto = MapToDto(topic);
             await BroadcastTopicCreatedAsync(dto);
+
+            // 親トピックのhasChildrenを更新してブロードキャスト
+            if (parentId.HasValue)
+            {
+                var parent = await _topicRepository.GetByIdAsync(parentId.Value, cancellationToken);
+                if (parent != null)
+                {
+                    var parentDto = MapToDto(parent);
+                    await BroadcastTopicUpdatedAsync(parentDto);
+                }
+            }
+
             return Result<TopicDto>.Success(dto, 201);
         }, nameof(CreateTopicAsync));
     }
@@ -155,6 +170,7 @@ public class TopicManagementService : BaseService, ITopicManagementService
             if (topic == null)
                 return Result<TopicDto>.NotFound("Topic not found");
 
+            var oldParentId = topic.ParentId;
             Guid? parentId = request.ParentId.HasValue ? (Guid)request.ParentId.Value : null;
             if (parentId.HasValue)
             {
@@ -210,6 +226,33 @@ public class TopicManagementService : BaseService, ITopicManagementService
 
             var dto = MapToDto(topic);
             await BroadcastTopicUpdatedAsync(dto);
+
+            // 親が変更された場合、古い親と新しい親のhasChildrenを更新してブロードキャスト
+            if (oldParentId != topic.ParentId)
+            {
+                // 古い親を更新
+                if (oldParentId.HasValue)
+                {
+                    var oldParent = await _topicRepository.GetByIdAsync(oldParentId.Value, cancellationToken);
+                    if (oldParent != null)
+                    {
+                        var oldParentDto = MapToDto(oldParent);
+                        await BroadcastTopicUpdatedAsync(oldParentDto);
+                    }
+                }
+
+                // 新しい親を更新
+                if (topic.ParentId.HasValue)
+                {
+                    var newParent = await _topicRepository.GetByIdAsync(topic.ParentId.Value, cancellationToken);
+                    if (newParent != null)
+                    {
+                        var newParentDto = MapToDto(newParent);
+                        await BroadcastTopicUpdatedAsync(newParentDto);
+                    }
+                }
+            }
+
             return Result<TopicDto>.Success(dto);
         }, nameof(UpdateTopicAsync));
     }
@@ -222,6 +265,8 @@ public class TopicManagementService : BaseService, ITopicManagementService
 
             if (topic == null)
                 return Result.NotFound("Topic not found");
+
+            var oldParentId = topic.ParentId;
 
             if (strategy == TopicDeleteStrategy.ReparentToParent)
             {
@@ -243,6 +288,18 @@ public class TopicManagementService : BaseService, ITopicManagementService
             await _topicRepository.SaveChangesAsync(cancellationToken);
 
             await BroadcastTopicDeletedAsync(topic);
+
+            // 親トピックのhasChildrenを更新してブロードキャスト
+            if (oldParentId.HasValue)
+            {
+                var oldParent = await _topicRepository.GetByIdAsync(oldParentId.Value, cancellationToken);
+                if (oldParent != null)
+                {
+                    var oldParentDto = MapToDto(oldParent);
+                    await BroadcastTopicUpdatedAsync(oldParentDto);
+                }
+            }
+
             return Result.Success();
         }, nameof(DeleteTopicAsync));
     }
@@ -253,15 +310,20 @@ public class TopicManagementService : BaseService, ITopicManagementService
         var roomId = (Guid)dto.RoomId;
         var parentId = dto.ParentId.HasValue ? (Guid)dto.ParentId.Value : Guid.Empty;
 
-        return new TopicRealtimeDto(
-            id == Guid.Empty ? string.Empty : _maskedUuidService.EncodeSynchronous(id),
-            roomId == Guid.Empty ? string.Empty : _maskedUuidService.EncodeSynchronous(roomId),
-            dto.ParentId.HasValue && parentId != Guid.Empty ? _maskedUuidService.EncodeSynchronous(parentId) : null,
-            dto.Title,
-            dto.Description,
-            dto.HasChildren,
-            dto.CreatedAt,
-            dto.UpdatedAt);
+            var sourceMessageEncoded = dto.SourceMessageId.HasValue && (Guid)dto.SourceMessageId.Value != Guid.Empty
+                ? _maskedUuidService.EncodeSynchronous((Guid)dto.SourceMessageId.Value)
+                : null;
+
+            return new TopicRealtimeDto(
+                id == Guid.Empty ? string.Empty : _maskedUuidService.EncodeSynchronous(id),
+                roomId == Guid.Empty ? string.Empty : _maskedUuidService.EncodeSynchronous(roomId),
+                dto.ParentId.HasValue && parentId != Guid.Empty ? _maskedUuidService.EncodeSynchronous(parentId) : null,
+                dto.Title,
+                dto.Description,
+                dto.HasChildren,
+                sourceMessageEncoded,
+                dto.CreatedAt,
+                dto.UpdatedAt);
     }
 
     private Task BroadcastTopicCreatedAsync(TopicDto dto)
@@ -299,16 +361,17 @@ public class TopicManagementService : BaseService, ITopicManagementService
         var hasChildren = _topicRepository.Query()
             .Any(t => t.ParentId == topic.Id);
 
-        return new TopicDto
-        {
-            Id = topic.Id,
-            RoomId = topic.RoomId,
-            ParentId = topic.ParentId.HasValue ? topic.ParentId : null,
-            Title = topic.Title,
-            Description = topic.Description,
-            HasChildren = hasChildren,
-            CreatedAt = topic.CreatedAt,
-            UpdatedAt = topic.UpdatedAt
-        };
+            return new TopicDto
+            {
+                Id = topic.Id,
+                RoomId = topic.RoomId,
+                ParentId = topic.ParentId.HasValue ? topic.ParentId : null,
+                SourceMessageId = topic.SourceMessageId.HasValue ? topic.SourceMessageId : null,
+                Title = topic.Title,
+                Description = topic.Description,
+                HasChildren = hasChildren,
+                CreatedAt = topic.CreatedAt,
+                UpdatedAt = topic.UpdatedAt
+            };
     }
 }
