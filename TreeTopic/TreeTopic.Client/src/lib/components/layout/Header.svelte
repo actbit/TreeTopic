@@ -1,7 +1,6 @@
 <script lang="ts">
   import { sidebarCollapsed } from '$lib/stores/ui';
-  import { currentUser } from '$lib/stores/auth';
-  import { currentRoomUser } from '$lib/stores/rooms';
+  import type { Snippet } from 'svelte';
 
   interface Props {
     onMenuToggle?: () => void;
@@ -42,38 +41,6 @@
     {#if children}
       <div class="flex items-center header-content">
         {@render children()}
-      </div>
-    {/if}
-
-    {#if $currentUser}
-      <div class="flex items-center header-user">
-        {#if $currentRoomUser}
-          {#if $currentRoomUser.iconUrl}
-            <img
-              src={$currentRoomUser.iconUrl}
-              alt={$currentRoomUser.displayName}
-              class="avatar avatar-md bg-primary"
-            />
-          {:else}
-            <div class="avatar avatar-md bg-primary text-white">
-              {$currentRoomUser.displayName?.charAt(0) ?? 'U'}
-            </div>
-          {/if}
-          <span class="text-small text-bold">{$currentRoomUser.displayName}</span>
-        {:else}
-          {#if $currentUser.avatar}
-            <img
-              src={$currentUser.avatar}
-              alt={$currentUser.displayName}
-              class="avatar avatar-md bg-primary"
-            />
-          {:else}
-            <div class="avatar avatar-md bg-primary text-white">
-              {$currentUser.displayName?.charAt(0) ?? 'U'}
-            </div>
-          {/if}
-          <span class="text-small text-bold">{$currentUser.displayName}</span>
-        {/if}
       </div>
     {/if}
   </div>
@@ -153,11 +120,5 @@
 
   .header-content {
     gap: var(--spacing-md);
-  }
-
-  .header-user {
-    gap: var(--spacing-sm);
-    padding-left: var(--spacing-xl);
-    border-left: 1px solid var(--color-border);
   }
 </style>

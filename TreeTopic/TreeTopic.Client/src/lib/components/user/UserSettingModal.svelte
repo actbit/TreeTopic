@@ -1,79 +1,130 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
-  {each} from 'svelte';
-  import { goto } from '$app/navigation';
   import { api } from '$lib/api/client';
-  import { ui, modals } from '$lib/stores/ui';
-  import { user } from '$lib/stores/auth';
-  import { currentRoom } from '$lib/stores/rooms';
-  import type { RoomUserDto, ApplicationUser } from '$lib/types';
+  import { ui, activeModals } from '$lib/stores/ui';
+  import { auth } from '$lib/stores/auth';
+  import { currentRoom, type CurrentRoomUser } from '$lib/stores/rooms';
+  import type { User } from '$lib/stores/auth';
 
   import Button from '$lib/components/common/Button.svelte';
   import Input from '$lib/components/common/Input.svelte';
   import Modal from '$lib/components/common/Modal.svelte';
 
+  // APIレスポンスの型
+  interface ApiResponse<T> {
+    success: boolean;
+    data: T;
+  }
+
   // Props
-  export let roomId: string;
-  export let active: boolean = false;
+  interface Props {
+    roomId: string;
+    onclose?: () => void;
+  }
+  let { roomId, onclose }: Props = $props();
 
-  // Modal 管理用の変数
-  $: modalActive = active;
+  // Modal ID
+  const modalId = 'user-setting';
+  let isOpen = $derived.by(() => $activeModals.some((m) => m.id === modalId));
 
-  // ストアから値を取得
-  const authUser = $user;
-  const currentRoomData = $currentRoom;
+  // ストアから値を取得（リアクティブ）
+  let authUser = $derived($auth.user);
 
   // UI 状態
-  let isLoading = false;
-  let error = '';
-  let success = '';
+  let isLoading = $state(false);
+  let error = $state('');
+  let success = $state('');
 
   // タブの状態
-  let activeTab = 'room'; // 'room' または 'application'
+  let activeTab = $state('room'); // 'room' または 'application'
 
-  // RoomUser 設定状態
-  let roomUser: RoomUserDto = {
+  // RoomUser 設定状態（CurrentRoomUserをベースに拡張）
+  let roomUser = $state<CurrentRoomUser & { useMainName: boolean }>({
     id: '',
-    applicationUserId: '',
-    roomId: '',
     displayName: '',
     iconUrl: '',
-    useMainName: false,
-    useMainIcon: false
-  };
+    useMainIcon: false,
+    useMainName: false
+  });
 
-  // ApplicationUser 設定状態
-  let applicationUser: ApplicationUser = {
+  // ApplicationUser 設定状態（Userをベースに拡張）
+  let applicationUser = $state<User & {
+    normalizedUserName?: string;
+    normalizedEmail?: string;
+    emailConfirmed?: boolean;
+    passwordHash?: string;
+    securityStamp?: string;
+    concurrencyStamp?: string;
+    phoneNumber?: string;
+    phoneNumberConfirmed?: boolean;
+    twoFactorEnabled?: boolean;
+    lockoutEnd?: Date | null;
+    lockoutEnabled?: boolean;
+    accessFailedCount?: number;
+    iconFileName?: string;
+    sub?: string;
+  }>({
     id: '',
-    tenantId: '',
     userName: '',
-    normalizedUserName: '',
     email: '',
-    normalizedEmail: '',
-    emailConfirmed: false,
-    passwordHash: '',
-    securityStamp: '',
-    concurrencyStamp: '',
-    phoneNumber: '',
-    phoneNumberConfirmed: false,
-    twoFactorEnabled: false,
-    lockoutEnd: null,
-    lockoutEnabled: false,
-    accessFailedCount: 0,
     displayName: '',
-    iconFileName: '',
-    sub: ''
-  };
+    iconUrl: '',
+    roles: []
+  });
 
   // ファイルアップロード用
-  let iconFile: File | null = null;
-  let previewUrl: string | null = null;
+  let iconFile = $state<File | null>(null);
+  let previewUrl = $state<string | null>(null);
+
+  // ApplicationUser用のファイルアップロード
+  let applicationIconFile = $state<File | null>(null);
+  let applicationPreviewUrl = $state<string | null>(null);
+
+  // ファイル入力の参照
+  let roomFileInput: HTMLInputElement;
+  let applicationFileInput: HTMLInputElement;
+
+  // 元の設定を保存（復元用）
+  let originalRoomUser = $state<(CurrentRoomUser & { useMainName: boolean }) | null>(null);
+  let originalApplicationUser = $state<(User & {
+    normalizedUserName?: string;
+    normalizedEmail?: string;
+    emailConfirmed?: boolean;
+    passwordHash?: string;
+    securityStamp?: string;
+    concurrencyStamp?: string;
+    phoneNumber?: string;
+    phoneNumberConfirmed?: boolean;
+    twoFactorEnabled?: boolean;
+    lockoutEnd?: Date | null;
+    lockoutEnabled?: boolean;
+    accessFailedCount?: number;
+    iconFileName?: string;
+    sub?: string;
+  }) | null>(null);
+
+  // 設定が変更されたかどうかを検出
+  let hasChangesRoom = $derived.by(() => {
+    return originalRoomUser && JSON.stringify(roomUser) !== JSON.stringify(originalRoomUser);
+  });
+  let hasChangesApplication = $derived.by(() => {
+    return originalApplicationUser && JSON.stringify(applicationUser) !== JSON.stringify(originalApplicationUser);
+  });
 
   // モーダルが開かれたときの処理
-  $: if (modalActive) {
-    resetModal();
-    loadUserData();
-  }
+  $effect(() => {
+    if (isOpen) {
+      // エラーと成功メッセージをクリア
+      error = '';
+      success = '';
+      iconFile = null;
+      previewUrl = null;
+      applicationIconFile = null;
+      applicationPreviewUrl = null;
+      activeTab = 'room';
+      // データを読み込んで元の設定を保存
+      loadUserData();
+    }
+  });
 
   async function loadUserData() {
     if (!roomId || !authUser) return;
@@ -82,18 +133,25 @@
       isLoading = true;
       error = '';
 
-      // RoomUser 情報を取得
-      const response = await api.get(`/RoomUsers/room/${roomId}/me`);
-      if (response.success) {
-        roomUser = response.data;
-        // ユーザー名を同期
-        applicationUser.displayName = roomUser.displayName;
+      // テナントを取得
+      const tenant = api.getCurrentTenant();
+
+      // RoomUser 情報を取得（直接データを取得）
+      const roomUserData = await api.get(`/${tenant}/api/RoomUsers/room/${roomId}/me`) as typeof roomUser;
+      roomUser = roomUserData;
+      // ユーザー名を同期
+      applicationUser.displayName = roomUser.displayName;
+      // 元の設定がまだ保存されていない場合のみ保存
+      if (!originalRoomUser) {
+        originalRoomUser = JSON.parse(JSON.stringify(roomUserData));
       }
 
-      // ApplicationUser 情報を取得
-      const userResponse = await api.get('/User/me');
-      if (userResponse.success) {
-        applicationUser = userResponse.data;
+      // ApplicationUser 情報を取得（直接データを取得）
+      const userData = await api.get(`/${tenant}/api/Users/me`) as typeof applicationUser;
+      applicationUser = userData;
+      // 元の設定がまだ保存されていない場合のみ保存
+      if (!originalApplicationUser) {
+        originalApplicationUser = JSON.parse(JSON.stringify(userData));
       }
     } catch (err) {
       error = 'データの読み込みに失敗しました';
@@ -111,21 +169,14 @@
       error = '';
       success = '';
 
-      const response = await api.put(`/RoomUsers/room/${roomId}/me`, roomUser);
+      // テナントを取得
+      const tenant = api.getCurrentTenant();
 
-      if (response.success) {
-        success = '部屋のユーザー設定を保存しました';
-        // ストアを更新
-        currentRoom.update(room => {
-          if (room && room.roomUsers) {
-            const index = room.roomUsers.findIndex(u => u.id === roomUser.id);
-            if (index !== -1) {
-              room.roomUsers[index] = response.data;
-            }
-          }
-          return room;
-        });
-      }
+      const updatedRoomUser = await api.put(`/${tenant}/api/RoomUsers/room/${roomId}/me`, roomUser) as typeof roomUser;
+
+      success = '部屋のユーザー設定を保存しました';
+      // 元の設定を更新
+      originalRoomUser = JSON.parse(JSON.stringify(updatedRoomUser));
     } catch (err) {
       error = '保存に失敗しました';
       console.error(err);
@@ -142,16 +193,15 @@
       error = '';
       success = '';
 
-      const response = await api.put('/User', applicationUser);
+      // テナントを取得
+      const tenant = api.getCurrentTenant();
 
-      if (response.success) {
-        success = 'ユーザー設定を保存しました';
-        // 認証ストアを更新
-        user.update(u => ({
-          ...u!,
-          displayName: applicationUser.displayName
-        }));
-      }
+      const updatedUser = await api.put(`/${tenant}/api/Users/me`, applicationUser) as typeof applicationUser;
+
+      success = 'ユーザー設定を保存しました';
+      // TODO: 認証ストアを更新
+      // 元の設定を更新
+      originalApplicationUser = JSON.parse(JSON.stringify(updatedUser));
     } catch (err) {
       error = '保存に失敗しました';
       console.error(err);
@@ -167,24 +217,55 @@
       isLoading = true;
       error = '';
 
+      // テナントを取得
+      const tenant = api.getCurrentTenant();
+
       const formData = new FormData();
       formData.append('icon', iconFile);
 
-      const response = await api.post(`/RoomUsers/room/${roomId}/me/icon`, formData, {
-        isFileUpload: true
-      });
+      const response = await api.post(`/${tenant}/api/RoomUsers/room/${roomId}/me/icon`, formData) as { iconUrl: string; iconFileName?: string };
 
-      if (response.success) {
-        // RoomUser のアイコンを更新
-        roomUser.iconUrl = response.data.iconUrl;
+      // RoomUser のアイコンを更新
+      roomUser.iconUrl = response.iconUrl;
 
-        // ApplicationUser のアイコンファイル名を更新
-        if (response.data.iconFileName) {
-          applicationUser.iconFileName = response.data.iconFileName;
-        }
-
-        success = 'アイコンを更新しました';
+      // ApplicationUser のアイコンファイル名を更新
+      if (response.iconFileName) {
+        applicationUser.iconFileName = response.iconFileName;
       }
+
+      success = 'アイコンを更新しました';
+    } catch (err) {
+      error = 'アイコンの更新に失敗しました';
+      console.error(err);
+    } finally {
+      isLoading = false;
+    }
+  }
+
+  async function handleApplicationIconUpload() {
+    if (!applicationIconFile || !authUser) return;
+
+    try {
+      isLoading = true;
+      error = '';
+
+      // テナントを取得
+      const tenant = api.getCurrentTenant();
+
+      const formData = new FormData();
+      formData.append('icon', applicationIconFile);
+
+      const response = await api.post(`/${tenant}/api/Users/me/icon`, formData) as { iconUrl: string; iconFileName?: string };
+
+      // ApplicationUser のアイコンを更新
+      if (response.iconUrl) {
+        applicationUser.iconUrl = response.iconUrl;
+      }
+      if (response.iconFileName) {
+        applicationUser.iconFileName = response.iconFileName;
+      }
+
+      success = 'アイコンを更新しました';
     } catch (err) {
       error = 'アイコンの更新に失敗しました';
       console.error(err);
@@ -202,16 +283,56 @@
     }
   }
 
+  function handleApplicationFileChange(event: Event) {
+    const input = event.target as HTMLInputElement;
+    if (input.files && input.files[0]) {
+      applicationIconFile = input.files[0];
+      // プレビューURLを生成
+      applicationPreviewUrl = URL.createObjectURL(applicationIconFile);
+    }
+  }
+
   function resetModal() {
     error = '';
     success = '';
     iconFile = null;
     previewUrl = null;
+    applicationIconFile = null;
+    applicationPreviewUrl = null;
     activeTab = 'room';
   }
 
+  // 設定を復元する
+  function restoreSettings() {
+    if (activeTab === 'room' && originalRoomUser) {
+      roomUser = JSON.parse(JSON.stringify(originalRoomUser));
+      // プレビューをクリア
+      iconFile = null;
+      previewUrl = null;
+      // ファイル入力をリセット
+      if (roomFileInput) {
+        roomFileInput.value = '';
+      }
+      success = '元の設定に復元しました';
+      // メッセージを3秒後に消す
+      setTimeout(() => { success = ''; }, 3000);
+    } else if (activeTab === 'application' && originalApplicationUser) {
+      applicationUser = JSON.parse(JSON.stringify(originalApplicationUser));
+      // プレビューをクリア
+      applicationIconFile = null;
+      applicationPreviewUrl = null;
+      // ファイル入力をリセット
+      if (applicationFileInput) {
+        applicationFileInput.value = '';
+      }
+      success = '元の設定に復元しました';
+      // メッセージを3秒後に消す
+      setTimeout(() => { success = ''; }, 3000);
+    }
+  }
+
   function closeModal() {
-    modals.close('user-setting');
+    ui.closeModal(modalId);
     resetModal();
   }
 
@@ -221,36 +342,36 @@
   }
 
   // 現在のタブのコンポーネント
-  const currentTabComponent = activeTab === 'room' ?
-    ({
+  let currentTabComponent = $derived(activeTab === 'room' ?
+    {
       title: '部屋のユーザー設定',
       description: 'この部屋での表示名とアイコンを設定します'
-    }) :
-    ({
+    } :
+    {
       title: '全般ユーザー設定',
       description: 'アカウント全般の設定を変更します'
     });
 </script>
 
-{#if modalActive}
+{#if isOpen}
   <Modal
+    {isOpen}
     title={currentTabComponent.title}
-    description={currentTabComponent.description}
-    on:close={closeModal}
-    width="large"
+    onClose={closeModal}
+    size="large"
   >
     <div class="user-setting-modal">
       <!-- タブナビゲーション -->
       <div class="tab-navigation">
         <button
           class:tab-active={activeTab === 'room'}
-          on:click={() => switchTab('room')}
+          onclick={() => switchTab('room')}
         >
           部屋のユーザー設定
         </button>
         <button
           class:tab-active={activeTab === 'application'}
-          on:click={() => switchTab('application')}
+          onclick={() => switchTab('application')}
         >
           全般ユーザー設定
         </button>
@@ -267,8 +388,7 @@
                 bind:value={roomUser.displayName}
                 placeholder="表示名を入力"
                 required
-                {minLength}=2
-                {maxLength}=50
+                disabled={roomUser.useMainName}
               />
               <p class="help-text">この部屋での表示名です</p>
             </div>
@@ -289,14 +409,15 @@
                   <input
                     type="file"
                     accept="image/*"
-                    on:change={handleFileChange}
-                    disabled={isLoading}
+                    onchange={handleFileChange}
+                    disabled={isLoading || roomUser.useMainIcon}
+                    bind:this={roomFileInput}
                   />
                   {#if iconFile}
                     <Button
                       variant="primary"
-                      on:click={handleIconUpload}
-                      disabled={isLoading}
+                      onclick={handleIconUpload}
+                      disabled={isLoading || roomUser.useMainIcon}
                     >
                       アイコンを更新
                     </Button>
@@ -335,35 +456,42 @@
                 bind:value={applicationUser.displayName}
                 placeholder="表示名を入力"
                 required
-                {minLength}=2
-                {maxLength}=50
               />
               <p class="help-text">アプリ全体での表示名です</p>
             </div>
 
             <div class="form-section">
-              <h3>メールアドレス</h3>
-              <Input
-                bind:value={applicationUser.email}
-                type="email"
-                placeholder="メールアドレス"
-                disabled
-              />
-              <p class="help-text">メールアドレスは変更できません</p>
-            </div>
-
-            <div class="form-section">
-              <h3>アカウント設定</h3>
-              <div class="info-list">
-                <div class="info-item">
-                  <span class="info-label">ユーザー名:</span>
-                  <span class="info-value">{applicationUser.userName}</span>
+              <h3>アイコン</h3>
+              <div class="icon-upload">
+                <div class="icon-preview">
+                  {#if applicationPreviewUrl}
+                    <img src={applicationPreviewUrl} alt="プレビュー" />
+                  {:else if applicationUser.iconUrl}
+                    <img src={applicationUser.iconUrl} alt="現在のアイコン" />
+                  {:else}
+                    <div class="no-icon">アイコンなし</div>
+                  {/if}
                 </div>
-                <div class="info-item">
-                  <span class="info-label">メール確認:</span>
-                  <span class="info-value">{applicationUser.emailConfirmed ? '完了' : '未完了'}</span>
+                <div class="icon-upload-controls">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onchange={handleApplicationFileChange}
+                    disabled={isLoading}
+                    bind:this={applicationFileInput}
+                  />
+                  {#if applicationIconFile}
+                    <Button
+                      variant="primary"
+                      onclick={handleApplicationIconUpload}
+                      disabled={isLoading}
+                    >
+                      アイコンを更新
+                    </Button>
+                  {/if}
                 </div>
               </div>
+              <p class="help-text">アプリ全体で使用するアイコンです</p>
             </div>
           </div>
         {/if}
@@ -385,23 +513,43 @@
       <!-- ボタン -->
       <div class="modal-actions">
         {#if activeTab === 'room'}
+          <!-- 復元ボタン（設定変更がある場合のみ表示） -->
+          {#if hasChangesRoom}
+            <Button
+              variant="secondary"
+              onclick={restoreSettings}
+              disabled={isLoading}
+            >
+              元の設定に戻す
+            </Button>
+          {/if}
           <Button
             variant="primary"
-            on:click={saveRoomUserSettings}
+            onclick={saveRoomUserSettings}
             disabled={isLoading}
           >
             保存
           </Button>
         {:else if activeTab === 'application'}
+          <!-- 復元ボタン（設定変更がある場合のみ表示） -->
+          {#if hasChangesApplication}
+            <Button
+              variant="secondary"
+              onclick={restoreSettings}
+              disabled={isLoading}
+            >
+              元の設定に戻す
+            </Button>
+          {/if}
           <Button
             variant="primary"
-            on:click={saveApplicationUserSettings}
+            onclick={saveApplicationUserSettings}
             disabled={isLoading}
           >
             保存
           </Button>
         {/if}
-        <Button on:click={closeModal} disabled={isLoading}>
+        <Button onclick={closeModal} disabled={isLoading}>
           キャンセル
         </Button>
       </div>
@@ -521,28 +669,6 @@
   .checkbox-label input[type="checkbox"] {
     width: 1rem;
     height: 1rem;
-  }
-
-  .info-list {
-    display: flex;
-    flex-direction: column;
-    gap: 0.75rem;
-  }
-
-  .info-item {
-    display: flex;
-    justify-content: space-between;
-    padding: 0.5rem 0;
-    border-bottom: 1px solid #f3f4f6;
-  }
-
-  .info-label {
-    font-weight: 500;
-    color: #374151;
-  }
-
-  .info-value {
-    color: #6b7280;
   }
 
   .error-message {

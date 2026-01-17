@@ -322,3 +322,15 @@ export const selectionCount = derived(
   selectedItems,
   ($selected) => $selected.size
 );
+
+/**
+ * Modal store utilities
+ */
+export const modals = {
+  open: (id: string, title: string, data?: any) => {
+    ui.openModal({ id, title, type: 'custom', data });
+  },
+  close: (id: string) => {
+    ui.closeModal(id);
+  },
+};

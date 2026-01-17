@@ -341,3 +341,14 @@ export interface ApplicationUser {
   iconFileName: string | null;
   sub: string | null;
 }
+
+/**
+ * ApplicationUser DTO - バックエンドから返される必要最小限の情報
+ */
+export interface ApplicationUserDto {
+  id: string;
+  userName: string;
+  email: string;
+  displayName: string;
+  iconFileName: string | null;
+}

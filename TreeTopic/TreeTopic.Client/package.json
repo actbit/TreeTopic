@@ -31,5 +31,8 @@
 		"@microsoft/signalr": "^10.0.0",
 		"fabric": "^7.1.0",
 		"pdfjs-dist": "^5.4.530"
+	},
+	"overrides": {
+		"cookie": "^0.7.0"
 	}
 }

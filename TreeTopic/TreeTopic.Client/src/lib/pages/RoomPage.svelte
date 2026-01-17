@@ -38,6 +38,7 @@
   import FileUploadModal from '$lib/components/files/FileUploadModal.svelte';
   import PdfViewerModal from '$lib/components/documents/PdfViewerModal.svelte';
   import ImageEditorModal from '$lib/components/images/ImageEditorModal.svelte';
+  import UserSettingModal from '$lib/components/user/UserSettingModal.svelte';
   import { ui } from '$lib/stores/ui';
   import { api, getApiBaseUrl, getCurrentTenant } from '$lib/api/client';
 
@@ -232,9 +233,9 @@
       deleteTopic(topicId);
 
       // 親トピックがあればhasChildrenを更新
-      if (parentId) {
-        topics.refreshHasChildren(parentId);
-      }
+      // TODO: if (parentId) {
+      //   topics.refreshHasChildren(parentId);
+      // }
     });
 
     connection.onreconnected(async () => {
@@ -937,6 +938,7 @@
   <ImageEditorModal />
   <MessageEditModal />
   <MessageDeleteModal />
+  <UserSettingModal roomId={$currentRoom?.id?.toString() ?? ''} />
 {:else}
   <div class="flex items-center justify-center h-screen bg-gradient-to-br from-primary to-secondary">
     <div class="text-center text-white">

@@ -58,6 +58,30 @@ public class UsersController : ControllerBase
         return Ok(dto);
     }
 
+    [HttpGet("me")]
+    public async Task<ActionResult<ApplicationUserDto>> GetMe(CancellationToken cancellationToken)
+    {
+        var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (string.IsNullOrWhiteSpace(userId) || !Guid.TryParse(userId, out var guid))
+            return Unauthorized();
+
+        var user = await _userManager.FindByIdAsync(guid.ToString());
+        if (user == null)
+            return NotFound();
+
+        var dto = new ApplicationUserDto
+        {
+            Id = user.Id.ToString(),
+            UserName = user.UserName,
+            Email = user.Email,
+            DisplayName = user.DisplayName,
+            IconFileName = user.IconFileName,
+            IconUrl = _iconService.GetUserIconUrl(user)
+        };
+
+        return Ok(dto);
+    }
+
     [HttpPost("{userId}/roles")]
     public async Task<ActionResult<UserSummaryDto>> AddRole([FromRoute] MaskedGuid userId, [FromBody] RoleAssignmentRequest request)
     {
@@ -85,6 +109,42 @@ public class UsersController : ControllerBase
 
         var (user, roles) = result.Data!;
         var dto = UserToDto(user, roles);
+        return Ok(dto);
+    }
+
+   
+    [HttpPut("me")]
+    public async Task<ActionResult<ApplicationUserDto>> UpdateMe([FromBody] UpdateUserRequest request, CancellationToken cancellationToken)
+    {
+        var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (string.IsNullOrWhiteSpace(userId) || !Guid.TryParse(userId, out var guid))
+            return Unauthorized();
+
+        var user = await _userManager.FindByIdAsync(guid.ToString());
+        if (user == null)
+            return NotFound();
+
+        // 表示名の更新
+        if (!string.IsNullOrWhiteSpace(request.DisplayName))
+        {
+            user.DisplayName = request.DisplayName;
+            var result = await _userManager.UpdateAsync(user);
+            if (!result.Succeeded)
+            {
+                return BadRequest(new { message = "表示名の更新に失敗しました" });
+            }
+        }
+
+        var dto = new ApplicationUserDto
+        {
+            Id = user.Id.ToString(),
+            UserName = user.UserName,
+            Email = user.Email,
+            DisplayName = user.DisplayName,
+            IconFileName = user.IconFileName,
+            IconUrl = _iconService.GetUserIconUrl(user)
+        };
+
         return Ok(dto);
     }
 

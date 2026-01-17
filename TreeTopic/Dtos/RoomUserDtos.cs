@@ -32,9 +32,6 @@ public class CreateRoomUserRequest
     [Required]
     public MaskedGuid ApplicationUserId { get; set; }
 
-    [Required]
-    public MaskedGuid RoomPermissionId { get; set; }
-
     [StringLength(255)]
     public string? Name { get; set; }
 

@@ -580,6 +580,16 @@ public class Program
                 };
             });
 
+        // JSONシリアライザ設定 - 循環参照対策
+        mvcBuilder.AddJsonOptions(options =>
+        {
+            // 循環参照を無視する設定
+            options.JsonSerializerOptions.ReferenceHandler = ReferenceHandler.IgnoreCycles;
+
+            // 最大深度を設定（デフォルトは64）
+            options.JsonSerializerOptions.MaxDepth = 128;
+        });
+
         // MaskedUUID サービスを登録
         builder.Services.AddMaskedUUID();
         mvcBuilder.AddMaskedUUIDModelBinder();

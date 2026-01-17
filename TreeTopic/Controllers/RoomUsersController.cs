@@ -248,6 +248,52 @@ public class RoomUsersController : ControllerBase
         return Ok(new { iconUrl = _iconService.GetRoomUserIconUrl(roomUser) });
     }
 
+    [HttpPut("room/{roomId}/me")]
+    public async Task<IActionResult> UpdateMyRoomUser([FromRoute] MaskedGuid roomId, [FromBody] UpdateRoomUserRequest request, CancellationToken cancellationToken)
+    {
+        var roomUser = await _roomUserRepository.GetByRoomAndUserAsync((Guid)roomId, CurrentUserId, cancellationToken);
+        if (roomUser == null)
+            return NotFound();
+
+        // 表示名の更新
+        if (!string.IsNullOrWhiteSpace(request.DisplayName))
+        {
+            if (RoomUserNameHelper.IsSyncName(request.DisplayName))
+            {
+                roomUser.UseMainName = true;
+                roomUser.Name = RoomUserNameHelper.DefaultUserToken;
+            }
+            else
+            {
+                roomUser.UseMainName = request.UseMainName ?? false;
+                roomUser.Name = request.DisplayName;
+            }
+        }
+
+        // メイン名/メインアイコンの使用設定を更新
+        if (request.UseMainName.HasValue)
+            roomUser.UseMainName = request.UseMainName.Value;
+
+        if (request.UseMainIcon.HasValue)
+        {
+            roomUser.UseMainIcon = request.UseMainIcon.Value;
+            if (request.UseMainIcon.Value)
+                roomUser.IconFileName = null;
+        }
+
+        // デフォルトアイコンの生成が必要な場合
+        if (!roomUser.UseMainIcon && string.IsNullOrWhiteSpace(roomUser.IconFileName))
+        {
+            var seedName = RoomUserNameHelper.ResolveDisplayName(roomUser);
+            roomUser.IconFileName = await _iconService.EnsureDefaultRoomUserIconAsync(roomUser, seedName, cancellationToken);
+        }
+
+        _roomUserRepository.Update(roomUser);
+        await _roomUserRepository.SaveChangesAsync(cancellationToken);
+
+        return Ok(MapToDto(roomUser));
+    }
+
     [HttpPut("room/{roomId}/me/icon/use-main")]
     public async Task<IActionResult> SetUseMainIcon([FromRoute] MaskedGuid roomId, [FromBody] bool useMainIcon, CancellationToken cancellationToken)
     {
