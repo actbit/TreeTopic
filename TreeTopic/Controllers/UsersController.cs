@@ -107,7 +107,7 @@ public class UsersController : ControllerBase
         user.IconFileName = fileName;
         await _userManager.UpdateAsync(user);
 
-        return Ok(new { iconUrl = _iconService.GetUserIconUrl(user) });
+        return Ok(new { iconUrl = _iconService.GetUserIconUrl(user), iconFileName = fileName });
     }
 
     private UserSummaryDto UserToDto(ApplicationUser user, IList<string> roles)

@@ -20,3 +20,10 @@ public class RoleAssignmentRequest
     [Required]
     public string? RoleName { get; set; }
 }
+
+public class UpdateUserRequest
+{
+    [Required]
+    [StringLength(50, MinimumLength = 2)]
+    public string? DisplayName { get; set; }
+}

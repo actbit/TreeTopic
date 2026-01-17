@@ -627,6 +627,7 @@ public class Program
             });
         });
 
+        
         // ファイルアップロードのサイズ制限
         var maxFileSize = builder.Configuration.GetValue<long>("FileUpload:MaxFileSize", 31457280); // 30MB default
         builder.Services.Configure<FormOptions>(options =>
@@ -670,13 +671,7 @@ public class Program
                 var pendingMigrations = await tenantDbContext.Database.GetPendingMigrationsAsync();
                 if (pendingMigrations.Any())
                 {
-                    logger.LogInformation("Applying {Count} pending migrations to TenantCatalog database", pendingMigrations.Count());
                     await tenantDbContext.Database.MigrateAsync();
-                    logger.LogInformation("TenantCatalog database migration completed successfully");
-                }
-                else
-                {
-                    logger.LogInformation("TenantCatalog database is up to date");
                 }
             }
             catch (Exception ex)

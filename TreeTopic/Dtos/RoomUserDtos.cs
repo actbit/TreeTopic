@@ -50,3 +50,13 @@ public class JoinRoomUserRequest
 
     public bool? UseMainIcon { get; set; }
 }
+
+public class UpdateRoomUserRequest
+{
+    [StringLength(255, MinimumLength = 1)]
+    public string? DisplayName { get; set; }
+
+    public bool? UseMainName { get; set; }
+
+    public bool? UseMainIcon { get; set; }
+}
