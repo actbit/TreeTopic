@@ -580,6 +580,16 @@ public class Program
                 };
             });
 
+        // JSONシリアライザ設定 - 循環参照対策
+        mvcBuilder.AddJsonOptions(options =>
+        {
+            // 循環参照を無視する設定
+            options.JsonSerializerOptions.ReferenceHandler = ReferenceHandler.IgnoreCycles;
+
+            // 最大深度を設定（デフォルトは64）
+            options.JsonSerializerOptions.MaxDepth = 128;
+        });
+
         // MaskedUUID サービスを登録
         builder.Services.AddMaskedUUID();
         mvcBuilder.AddMaskedUUIDModelBinder();
@@ -627,6 +637,7 @@ public class Program
             });
         });
 
+        
         // ファイルアップロードのサイズ制限
         var maxFileSize = builder.Configuration.GetValue<long>("FileUpload:MaxFileSize", 31457280); // 30MB default
         builder.Services.Configure<FormOptions>(options =>
@@ -670,13 +681,7 @@ public class Program
                 var pendingMigrations = await tenantDbContext.Database.GetPendingMigrationsAsync();
                 if (pendingMigrations.Any())
                 {
-                    logger.LogInformation("Applying {Count} pending migrations to TenantCatalog database", pendingMigrations.Count());
                     await tenantDbContext.Database.MigrateAsync();
-                    logger.LogInformation("TenantCatalog database migration completed successfully");
-                }
-                else
-                {
-                    logger.LogInformation("TenantCatalog database is up to date");
                 }
             }
             catch (Exception ex)

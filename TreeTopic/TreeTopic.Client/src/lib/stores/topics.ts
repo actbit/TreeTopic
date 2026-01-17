@@ -410,7 +410,7 @@ export const topicTree = derived([topicList, expandedTopics], ([$topics, $expand
     const topicMap = new Map($topics.map((t) => [t.id, t]));
     const roots: TopicTreeNode[] = [];
 
-    const buildNode = (topic: Topic, level: number = 0, isProcessed: Set<string> = new Set()): TopicTreeNode => {
+    const buildNode = (topic: Topic, level: number = 0, isProcessed: Set<string> = new Set()): TopicTreeNode | null => {
       if (isProcessed.has(topic.id)) {
         return null;
       }
