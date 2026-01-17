@@ -316,3 +316,39 @@ export interface AnimationState {
   animationType?: 'slideIn' | 'fadeIn' | 'scaleIn';
   duration?: number;
 }
+
+/**
+ * ApplicationUser model for user settings
+ */
+export interface ApplicationUser {
+  id: string;
+  tenantId: string;
+  userName: string;
+  normalizedUserName: string;
+  email: string;
+  normalizedEmail: string;
+  emailConfirmed: boolean;
+  passwordHash: string;
+  securityStamp: string;
+  concurrencyStamp: string;
+  phoneNumber: string | null;
+  phoneNumberConfirmed: boolean;
+  twoFactorEnabled: boolean;
+  lockoutEnd: Date | null;
+  lockoutEnabled: boolean;
+  accessFailedCount: number;
+  displayName: string;
+  iconFileName: string | null;
+  sub: string | null;
+}
+
+/**
+ * ApplicationUser DTO - バックエンドから返される必要最小限の情報
+ */
+export interface ApplicationUserDto {
+  id: string;
+  userName: string;
+  email: string;
+  displayName: string;
+  iconFileName: string | null;
+}

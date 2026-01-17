@@ -1,11 +1,12 @@
 <script lang="ts">
   import Button from '../common/Button.svelte';
-  import { roomList, currentRoom, setCurrentRoom } from '$lib/stores/rooms';
-  import { ui } from '$lib/stores/ui';
+  import { roomList, currentRoom, setCurrentRoom, currentRoomUser } from '$lib/stores/rooms';
+  import { ui, modals } from '$lib/stores/ui';
   import type { ModalConfig } from '$lib/types/ui';
   import { get } from 'svelte/store';
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
+  import { currentUser } from '$lib/stores/auth';
 
   let isOpen = $state(false);
   let { navigateOnSelect = true }: { navigateOnSelect?: boolean } = $props();
@@ -49,10 +50,15 @@
     };
     ui.openModal(modal);
   }
+
+  function openUserSettings(roomId: string, e: Event) {
+    e.stopPropagation();
+    modals.open('user-setting', 'ユーザー設定', { roomId });
+  }
 </script>
 
-<div class="flex items-center justify-between room-selector-container">
-  <div class="relative w-full">
+<div class="flex items-center gap-md room-selector-container">
+  <div class="relative flex-1 room-selector-wrapper">
     <button
       onclick={() => (isOpen = !isOpen)}
       class="button button-primary w-full room-selector-button"
@@ -118,11 +124,72 @@
       </div>
     {/if}
   </div>
+
+  <!-- ユーザー設定ボタン -->
+  {#if $currentRoomUser}
+    <button
+      type="button"
+      class="user-settings-button"
+      onclick={(e) => openUserSettings($currentRoom?.id?.toString() ?? '', e)}
+      onkeydown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          openUserSettings($currentRoom?.id?.toString() ?? '', e);
+        }
+      }}
+      title="User Settings"
+      aria-label="Open User Settings"
+    >
+      {#if $currentRoomUser.iconUrl}
+        <img
+          src={$currentRoomUser.iconUrl}
+          alt={$currentRoomUser.displayName}
+          class="user-avatar"
+        />
+      {:else}
+        <div class="user-avatar-placeholder">
+          {$currentRoomUser.displayName?.charAt(0) ?? 'U'}
+        </div>
+      {/if}
+      <span class="user-display-name">{$currentRoomUser.displayName}</span>
+    </button>
+  {:else if $currentUser}
+    <button
+      type="button"
+      class="user-settings-button"
+      onclick={(e) => openUserSettings($currentRoom?.id?.toString() ?? '', e)}
+      onkeydown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          openUserSettings($currentRoom?.id?.toString() ?? '', e);
+        }
+      }}
+      title="User Settings"
+      aria-label="Open User Settings"
+    >
+      {#if $currentUser.avatar}
+        <img
+          src={$currentUser.avatar}
+          alt={$currentUser.displayName}
+          class="user-avatar"
+        />
+      {:else}
+        <div class="user-avatar-placeholder">
+          {$currentUser.displayName?.charAt(0) ?? 'U'}
+        </div>
+      {/if}
+      <span class="user-display-name">{$currentUser.displayName}</span>
+    </button>
+  {/if}
 </div>
 
 <style>
   .room-selector-container {
     width: 100%;
+  }
+
+  .room-selector-wrapper {
+    min-width: 0;
   }
 
   .room-selector-button {
@@ -165,5 +232,50 @@
     background-color: var(--color-error);
     background-color: color-mix(in srgb, var(--color-error) 10%, transparent);
     color: var(--color-error);
+  }
+
+  .user-settings-button {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    padding: var(--spacing-xs) var(--spacing-sm);
+    background: none;
+    border: none;
+    border-radius: var(--border-radius-md);
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+  }
+
+  .user-settings-button:hover {
+    background-color: var(--color-surface);
+  }
+
+  .user-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    object-fit: cover;
+  }
+
+  .user-avatar-placeholder {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background-color: var(--color-primary);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75rem;
+    font-weight: 600;
+  }
+
+  .user-display-name {
+    font-size: 0.875rem;
+    font-weight: 500;
+    max-width: 120px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 </style>
