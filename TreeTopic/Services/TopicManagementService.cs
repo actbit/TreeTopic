@@ -73,6 +73,7 @@ public class TopicManagementService : BaseService, ITopicManagementService
         {
             var topics = await _topicRepository.Query()
                 .Where(t => t.RoomId == roomId && t.ParentId == null)
+                .OrderByDescending(t => t.CreatedAt)
                 .ToListAsync(cancellationToken);
 
             var dtos = topics.Select(MapToDto).ToList();
@@ -86,6 +87,7 @@ public class TopicManagementService : BaseService, ITopicManagementService
         {
             var topics = await _topicRepository.Query()
                 .Where(t => t.ParentId == parentId)
+                .OrderByDescending(t => t.CreatedAt)
                 .ToListAsync(cancellationToken);
 
             var dtos = topics.Select(MapToDto).ToList();

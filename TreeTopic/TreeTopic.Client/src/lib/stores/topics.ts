@@ -71,14 +71,25 @@ function createTopicsStore() {
      * Set all topics
      */
     setTopics: (topics: Topic[]) => {
-      // Build childIds from parentId relationships
+      // Build childIds from parentId relationships, sorted by creation date (newest first)
+      const topicsWithDates = topics.map((t) => ({ id: t.id, parentId: t.parentId, createdAt: t.createdAt }));
       const childIdsMap = new Map<string, string[]>();
-      topics.forEach((t) => {
+
+      topicsWithDates.forEach((t) => {
         if (t.parentId) {
           const existing = childIdsMap.get(t.parentId) ?? [];
           existing.push(t.id);
           childIdsMap.set(t.parentId, existing);
         }
+      });
+
+      // Sort childIds by createdAt of the child topics (newest first)
+      childIdsMap.forEach((childIds, parentId) => {
+        const childTopics = childIds
+          .map((id) => topicsWithDates.find((t) => t.id === id))
+          .filter((t) => t !== undefined)
+          .sort((a, b) => (b!.createdAt as Date).getTime() - (a!.createdAt as Date).getTime());
+        childIdsMap.set(parentId, childTopics.map((t) => t!.id));
       });
 
       const topicsWithChildIds = topics.map((t) => ({
@@ -112,7 +123,8 @@ function createTopicsStore() {
      */
     addTopic: (topic: Topic) => {
       update((state) => {
-        const updatedTopics = [...state.topics, topic];
+        // Add to the beginning so URL-accessed topics appear first
+        const updatedTopics = [topic, ...state.topics];
 
         // If the new topic has a parent, add it to the parent's childIds
         if (topic.parentId) {
@@ -183,16 +195,18 @@ function createTopicsStore() {
           }
         }
 
-        // 親トピックのhasChildrenを維持
+        // 親トピックのchildIdsとhasChildrenを維持
         const updatedTopic = updatedTopics.find(t => t.id === topicId);
         if (updatedTopic && updatedTopic.parentId) {
           const parentIndex = updatedTopics.findIndex(t => t.id === updatedTopic.parentId);
           if (parentIndex !== -1) {
             const parent = updatedTopics[parentIndex];
-            // 親トピックのhasChildrenがfalseで、子トピックが存在する場合はtrueに設定
-            if (!parent.hasChildren && parent.childIds.length > 0) {
+            const shouldAddToChildIds = !parent.childIds.includes(topicId);
+            // 親のchildIdsにトピックIDを追加し、hasChildrenをtrueに設定
+            if (shouldAddToChildIds || !parent.hasChildren) {
               updatedTopics[parentIndex] = {
                 ...parent,
+                childIds: shouldAddToChildIds ? [...parent.childIds, topicId] : parent.childIds,
                 hasChildren: true,
               };
             }

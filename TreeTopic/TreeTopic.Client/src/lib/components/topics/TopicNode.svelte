@@ -109,17 +109,28 @@
       const response = await api.get<any[]>(`/${tenant}/api/Topic/parent/${node.id}`);
       const childTopics = Array.isArray(response) ? response.map(normalizeTopic) : [];
 
-      // Add child topics to store if not already present
+      // Collect child topic IDs
+      const childIds = childTopics.map((t) => t.id);
+
+      // Add child topics to store if not already present, or update if they exist
       childTopics.forEach((topic) => {
-        if (!$topicList.find((t) => t.id === topic.id)) {
+        const existing = $topicList.find((t) => t.id === topic.id);
+        if (!existing) {
           addTopic(topic);
+        } else {
+          // Update existing topic to ensure childIds and hasChildren are correct
+          updateTopic(topic.id, {
+            parentId: topic.parentId,
+            hasChildren: topic.hasChildren,
+          });
         }
       });
 
-      // Update hasChildren if child topics exist
-      if (childTopics.length > 0) {
-        updateTopic(node.id, { hasChildren: true });
-      }
+      // Update parent's childIds and hasChildren
+      updateTopic(node.id, {
+        childIds,
+        hasChildren: childTopics.length > 0,
+      });
     } catch (err) {
       console.error('Failed to fetch child topics:', err);
     } finally {
@@ -347,6 +358,7 @@
     padding: 0;
     padding-left: calc(var(--topic-level) * 8px);
     width: 100%;
+    max-width: 100%;
     box-sizing: border-box;
   }
 
@@ -366,6 +378,8 @@
     border-radius: var(--border-radius-sm);
     user-select: none;
     min-width: 0;
+    width: 200px;
+    flex-shrink: 0;
   }
 
   .topic-header:hover {

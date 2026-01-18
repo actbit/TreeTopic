@@ -23,7 +23,7 @@
   .app-sidebar {
     border-right: 1px solid var(--color-border);
     transition: width var(--transition-normal), transform var(--transition-normal);
-    width: 256px;
+    width: 320px;
     background-color: var(--color-surface);
     min-height: 100%;
     position: relative;
@@ -35,7 +35,7 @@
   }
 
   .sidebar-desktop.sidebar-expanded {
-    width: 256px;
+    width: 320px;
   }
 
   .sidebar-mobile {
