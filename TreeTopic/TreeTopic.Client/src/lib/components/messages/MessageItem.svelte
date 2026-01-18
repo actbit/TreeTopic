@@ -143,9 +143,6 @@
       data: {
         parentId,
         prefillTitle: getSuggestedTopicTitle(),
-        prefillDescription: (message.content ?? '').trim(),
-        autoNavigate: true,
-        transferHistory: true,
         sourceMessageId: message.id,
       },
     };

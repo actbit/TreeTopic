@@ -169,8 +169,17 @@
       if (!$currentRoom || normalized.roomId !== $currentRoom.id) return;
       const exists = $topicList.some((t) => t.id === normalized.id);
       if (exists) {
-        // 既存の場合はトピックを更新
-        updateTopic(normalized.id, normalized);
+        // 既存の場合はトピックを更新 (childIdsは除外してローカルの状態を維持)
+        updateTopic(normalized.id, {
+          parentId: normalized.parentId,
+          roomId: normalized.roomId,
+          title: normalized.title,
+          description: normalized.description,
+          hasChildren: normalized.hasChildren,
+          sourceMessageId: normalized.sourceMessageId,
+          createdAt: normalized.createdAt,
+          updatedAt: normalized.updatedAt,
+        });
         return;
       }
 
@@ -393,6 +402,7 @@
     let cursorId: string | null = topicId;
     const visited = new Set<string>();
 
+    // 選択されたトピックとその祖先を取得
     while (cursorId && !visited.has(cursorId)) {
       visited.add(cursorId);
       const raw = await api.get<any>(`/${tenant}/api/Topic/${cursorId}`);
@@ -403,6 +413,7 @@
 
     chain.reverse(); // root -> leaf
 
+    // 各トピックとその兄弟（同じ親を持つトピック）を読み込む
     for (const t of chain) {
       const existing = $topicList.find((x) => x.id === t.id);
       if (!existing) {
@@ -417,6 +428,59 @@
           updatedAt: t.updatedAt,
           sourceMessageId: t.sourceMessageId ?? null,
         });
+      }
+
+      // 親トピックの子（兄弟トピック）を読み込む
+      if (t.parentId) {
+        try {
+          const siblingsRaw = await api.get<any[]>(`/${tenant}/api/Topic/parent/${t.parentId}`);
+          const siblings = Array.isArray(siblingsRaw) ? siblingsRaw.map(normalizeTopic) : [];
+          for (const sibling of siblings) {
+            const existingSibling = $topicList.find((x) => x.id === sibling.id);
+            if (!existingSibling) {
+              addTopic(sibling);
+            } else {
+              updateTopic(sibling.id, {
+                title: sibling.title,
+                description: sibling.description,
+                parentId: sibling.parentId,
+                roomId: sibling.roomId,
+                hasChildren: sibling.hasChildren,
+                updatedAt: sibling.updatedAt,
+                sourceMessageId: sibling.sourceMessageId ?? null,
+              });
+            }
+          }
+        } catch (err) {
+          console.error('Failed to load sibling topics:', err);
+        }
+      }
+    }
+
+    // 選択されたトピックの子トピックも読み込む
+    const selectedTopic = chain[chain.length - 1];
+    if (selectedTopic && selectedTopic.hasChildren) {
+      try {
+        const childrenRaw = await api.get<any[]>(`/${tenant}/api/Topic/parent/${selectedTopic.id}`);
+        const children = Array.isArray(childrenRaw) ? childrenRaw.map(normalizeTopic) : [];
+        for (const child of children) {
+          const existingChild = $topicList.find((x) => x.id === child.id);
+          if (!existingChild) {
+            addTopic(child);
+          } else {
+            updateTopic(child.id, {
+              title: child.title,
+              description: child.description,
+              parentId: child.parentId,
+              roomId: child.roomId,
+              hasChildren: child.hasChildren,
+              updatedAt: child.updatedAt,
+              sourceMessageId: child.sourceMessageId ?? null,
+            });
+          }
+        }
+      } catch (err) {
+        console.error('Failed to load child topics:', err);
       }
     }
 

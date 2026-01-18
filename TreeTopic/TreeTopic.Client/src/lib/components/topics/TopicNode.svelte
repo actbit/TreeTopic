@@ -115,6 +115,11 @@
           addTopic(topic);
         }
       });
+
+      // Update hasChildren if child topics exist
+      if (childTopics.length > 0) {
+        updateTopic(node.id, { hasChildren: true });
+      }
     } catch (err) {
       console.error('Failed to fetch child topics:', err);
     } finally {
@@ -124,10 +129,8 @@
 
   async function toggleExpand() {
     if (!node.isExpanded) {
-      // Expanding - load child topics from backend
-      if (node.hasChildren) {
-        await fetchChildTopics();
-      }
+      // Expanding - always try to load child topics from backend
+      await fetchChildTopics();
     }
 
     toggleTopicExpansion(node.id);
@@ -342,12 +345,14 @@
   .topic-item {
     margin: 0;
     padding: 0;
-    padding-left: calc(var(--topic-level) * 16px);
+    padding-left: calc(var(--topic-level) * 8px);
+    width: 100%;
+    box-sizing: border-box;
   }
 
   .topic-children {
-    margin-left: 8px;
-    padding-left: 8px;
+    margin-left: 2px;
+    padding-left: 4px;
     border-left: 1px solid var(--color-border);
   }
 
@@ -360,7 +365,7 @@
     transition: background-color var(--transition-fast);
     border-radius: var(--border-radius-sm);
     user-select: none;
-    min-width: max-content;
+    min-width: 0;
   }
 
   .topic-header:hover {

@@ -122,8 +122,8 @@
 
   .topic-tree-list {
     min-height: 100%;
-    min-width: 220px;
-    width: max-content;
+    width: 100%;
+    max-width: 100%;
   }
 
   .topic-root-drop {

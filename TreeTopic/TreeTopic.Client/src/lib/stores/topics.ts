@@ -71,9 +71,24 @@ function createTopicsStore() {
      * Set all topics
      */
     setTopics: (topics: Topic[]) => {
+      // Build childIds from parentId relationships
+      const childIdsMap = new Map<string, string[]>();
+      topics.forEach((t) => {
+        if (t.parentId) {
+          const existing = childIdsMap.get(t.parentId) ?? [];
+          existing.push(t.id);
+          childIdsMap.set(t.parentId, existing);
+        }
+      });
+
+      const topicsWithChildIds = topics.map((t) => ({
+        ...t,
+        childIds: childIdsMap.get(t.id) ?? [],
+      }));
+
       update((state) => ({
         ...state,
-        topics,
+        topics: topicsWithChildIds,
         error: null,
         lastUpdated: Date.now(),
       }));

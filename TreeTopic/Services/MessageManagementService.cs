@@ -709,8 +709,7 @@ public class MessageManagementService : BaseService, IMessageManagementService
         foreach (var message in messages)
         {
             message.TopicId = targetTopicId;
-            message.UpdatedAt = DateTime.UtcNow;
-            _messageRepository.Update(message);
+            // Note: UpdatedAt is not changed because moving a message is not an edit
         }
 
         await _messageRepository.SaveChangesAsync(cancellationToken);
@@ -776,8 +775,7 @@ public class MessageManagementService : BaseService, IMessageManagementService
         foreach (var message in messages)
         {
             message.TopicId = targetTopicId;
-            message.UpdatedAt = DateTime.UtcNow;
-            _messageRepository.Update(message);
+            // Note: UpdatedAt is not changed because moving a message is not an edit
         }
 
         await _messageRepository.SaveChangesAsync(cancellationToken);
