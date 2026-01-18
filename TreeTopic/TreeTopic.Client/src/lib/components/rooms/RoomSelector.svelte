@@ -1,15 +1,22 @@
 <script lang="ts">
   import Button from '../common/Button.svelte';
-  import { roomList, currentRoom, setCurrentRoom, currentRoomUser } from '$lib/stores/rooms';
+  import { roomList, currentRoom, setCurrentRoom, currentRoomUser, rooms } from '$lib/stores/rooms';
   import { ui, modals } from '$lib/stores/ui';
   import type { ModalConfig } from '$lib/types/ui';
   import { get } from 'svelte/store';
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
   import { currentUser } from '$lib/stores/auth';
+  import { api, getCurrentTenant } from '$lib/api/client';
 
   let isOpen = $state(false);
   let { navigateOnSelect = true }: { navigateOnSelect?: boolean } = $props();
+
+  $effect(() => {
+    if ($currentRoom && !$currentRoomUser) {
+      void refreshRoomUser();
+    }
+  });
 
   function openCreateModal() {
     const modal: ModalConfig = {
@@ -38,6 +45,31 @@
     const target = `/${tenant}/room/${roomId}`;
     if ($page.url.pathname !== target) {
       goto(target, { replaceState: false, keepFocus: true, noScroll: true });
+    }
+  }
+
+  async function refreshRoomUser() {
+    const tenant = $page.params.tenant ?? getCurrentTenant();
+    if (!tenant || !$currentRoom?.id) return;
+
+    try {
+      const roomUserData = await api.get<any>(`/${tenant}/api/RoomUsers/room/${$currentRoom.id}/me`);
+      if (roomUserData) {
+        const roomUser = {
+          id: roomUserData.id ?? roomUserData.Id ?? '',
+          displayName: roomUserData.displayName ?? roomUserData.DisplayName ?? '',
+          iconUrl: roomUserData.iconUrl ?? roomUserData.IconUrl,
+          useMainIcon: roomUserData.useMainIcon ?? roomUserData.UseMainIcon ?? false,
+        };
+        rooms.setCurrentRoomUser(roomUser);
+      }
+    } catch (err) {
+      if (err instanceof api.ApiError && err.status === 404) {
+        console.warn('RoomUser not found, using fallback');
+        // RoomUserが見つからない場合はnullのまま（グローバルユーザー情報を使用）
+        return;
+      }
+      console.error('Failed to fetch RoomUser:', err);
     }
   }
 
@@ -154,32 +186,59 @@
       <span class="user-display-name">{$currentRoomUser.displayName}</span>
     </button>
   {:else if $currentUser}
-    <button
-      type="button"
-      class="user-settings-button"
-      onclick={(e) => openUserSettings($currentRoom?.id?.toString() ?? '', e)}
-      onkeydown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
+    <!-- currentRoomUserがnullの場合は再取得を試みる -->
+    {#if $currentRoom && !$currentRoomUser}
+      <button
+        type="button"
+        class="user-settings-button"
+        onclick={async (e) => {
           e.preventDefault();
+          await refreshRoomUser();
           openUserSettings($currentRoom?.id?.toString() ?? '', e);
-        }
-      }}
-      title="User Settings"
-      aria-label="Open User Settings"
-    >
-      {#if $currentUser.avatar}
-        <img
-          src={$currentUser.avatar}
-          alt={$currentUser.displayName}
-          class="user-avatar"
-        />
-      {:else}
-        <div class="user-avatar-placeholder">
-          {$currentUser.displayName?.charAt(0) ?? 'U'}
+        }}
+        onkeydown={async (e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            await refreshRoomUser();
+            openUserSettings($currentRoom?.id?.toString() ?? '', e);
+          }
+        }}
+        title="User Settings (click to load)"
+        aria-label="Open User Settings"
+      >
+        <div class="user-avatar-placeholder loading">
+          Loading...
         </div>
-      {/if}
-      <span class="user-display-name">{$currentUser.displayName}</span>
-    </button>
+        <span class="user-display-name">Loading...</span>
+      </button>
+    {:else}
+      <button
+        type="button"
+        class="user-settings-button"
+        onclick={(e) => openUserSettings($currentRoom?.id?.toString() ?? '', e)}
+        onkeydown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            openUserSettings($currentRoom?.id?.toString() ?? '', e);
+          }
+        }}
+        title="User Settings"
+        aria-label="Open User Settings"
+      >
+        {#if $currentUser.avatar}
+          <img
+            src={$currentUser.avatar}
+            alt={$currentUser.displayName}
+            class="user-avatar"
+          />
+        {:else}
+          <div class="user-avatar-placeholder">
+            {$currentUser.displayName?.charAt(0) ?? 'U'}
+          </div>
+        {/if}
+        <span class="user-display-name">{$currentUser.displayName}</span>
+      </button>
+    {/if}
   {/if}
 </div>
 
@@ -278,4 +337,19 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
+
+  .user-avatar-placeholder.loading {
+    opacity: 0.6;
+    animation: pulse 1.5s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% {
+      opacity: 0.6;
+    }
+    50% {
+      opacity: 1;
+    }
+  }
 </style>
+

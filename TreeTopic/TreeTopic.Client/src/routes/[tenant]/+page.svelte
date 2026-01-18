@@ -71,6 +71,8 @@
   function enterRoom(roomId: string) {
     const tenant = $page.params.tenant ?? getCurrentTenant();
     if (!tenant) return;
+    // roomListが初期化されているか確認
+    if (!$roomList || $roomList.length === 0) return;
     const room = $roomList.find((r) => r.id === roomId);
     if (room) {
       setCurrentRoom(room);

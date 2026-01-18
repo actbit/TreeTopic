@@ -153,13 +153,42 @@
     showContextMenu = false;
   }
 
-  function navigateToChildTopic(topic: Topic) {
+  async function navigateToChildTopic(topic: Topic) {
     const tenant = ($page.params as any)?.tenant ?? getCurrentTenant();
     if (!tenant) return;
-    goto(`/${tenant}/room/${topic.roomId}/topic/${topic.id}`, {
-      keepFocus: true,
-      noScroll: true,
-    });
+
+    // RoomIdが空の場合はAPIを呼び出して取得
+    if (!topic.roomId || topic.roomId === '') {
+      try {
+        const response = await api.get<any>(`/${tenant}/api/Topic/${topic.id}`);
+        const topicData = response?.data ?? response;
+        if (topicData?.roomId) {
+          // 取得したRoomIdをトピックオブジェクトに更新（UIにも反映されるように）
+          childTopics = childTopics.map(t =>
+            t.id === topic.id ? { ...t, roomId: topicData.roomId } : t
+          );
+          goto(`/${tenant}/room/${topicData.roomId}/topic/${topic.id}`, {
+            keepFocus: true,
+            noScroll: true,
+          });
+        } else {
+          throw new Error('RoomId not found in topic data');
+        }
+      } catch (error) {
+        console.error('Failed to fetch topic RoomId:', error);
+        ui.addNotification({
+          type: 'error',
+          message: 'Failed to navigate to topic. Please try again.'
+        });
+        return;
+      }
+    } else {
+      // RoomIdがある場合は通常通り遷移
+      goto(`/${tenant}/room/${topic.roomId}/topic/${topic.id}`, {
+        keepFocus: true,
+        noScroll: true,
+      });
+    }
   }
 
   async function openChildTopicPreview(child: Topic) {
