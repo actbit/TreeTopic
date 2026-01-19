@@ -245,8 +245,6 @@ cd TreeTopic/TreeTopic.Client
 # 依存関係のインストール
 npm install
 
-# TypeScript定義の生成
-npm run openapi:generate
 
 # 開発サーバーの起動
 npm run dev
