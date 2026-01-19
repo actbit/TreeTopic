@@ -157,6 +157,39 @@ Role --< RoomPermission >-- Room
 - **データベース**: 読み取り複製対応
 - **キャッシュ**: 分散キャッシュの準備中
 
+## 主要エンティティ関係
+
+```mermaid
+graph TB
+    User --< RoomUser >-- Room
+    Room
+    Room
+    Room --> Topic --< Message
+    Message --> File
+    Message
+    Room
+    ShareItem
+    Role --< RoomPermission >-- Room
+
+    subgraph "エンティティ"
+        User["User\n(ユーザー)"]
+        RoomUser["RoomUser\n(ルームユーザー)"]
+        Room["Room\n(ルーム)\n議論の空間"]
+        Topic["Topic\n(トピック)\nメッセージの集まり"]
+        Message["Message\n(メッセージ)\n発信内容"]
+        File["File\n(ファイル)\n添付ファイル"]
+        ShareItem["ShareItem\n(共有アイテム)\n外部共有"]
+        Role["Role\n(役割)\n権限レベル"]
+        RoomPermission["RoomPermission\n(ルーム権限)"]
+    end
+
+    style User fill:#fff3e0
+    style Room fill:#e3f2fd
+    style Topic fill:#f3e5f5
+    style Message fill:#fce4ec
+    style Role fill:#e0f2f1
+```
+
 ## セキュリティ対策
 
 ### 認証・認可

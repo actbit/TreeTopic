@@ -10,57 +10,160 @@ TreeTopicはマルチテナントを基盤とする議論プラットフォー�
 
 ```mermaid
 graph TB
-    subgraph "テナント"
-        Tenant["Tenant\n(テナント)\n複数のRoomを管理"]
+    subgraph "主要エンティティ関係"
+        User --< RoomUser >-- Room
+        Room
+        Room
+        Room --> Topic --< Message
+        Message --> File
+        Message
+        Room
+        ShareItem
+        Role --< RoomPermission >-- Room
     end
 
-    subgraph "ルーム"
-        Room["Room\n(部屋)\n議論の空間\n複数のTopicを持つ"]
-    end
-
-    subgraph "ユーザー"
-        User["User\n(ユーザー)\n認証された利用者"]
-        UserRole["Role\n(役割)\n権限レベル"]
-    end
-
-    subgraph "話題"
-        Topic["Topic\n(話題)\nメッセージの集まり\n階層構造"]
-    end
-
-    subgraph "メッセージ"
-        Message["Message\n(メッセージ)\n発信された内容"]
+    subgraph "エンティティ詳細"
+        User["User\n(ユーザー)"]
+        RoomUser["RoomUser\n(ルームユーザー)\n1:N関連"]
+        Room["Room\n(ルーム)\n議論の空間"]
+        Topic["Topic\n(トピック)\nメッセージの集まり"]
+        Message["Message\n(メッセージ)\n発信内容"]
         File["File\n(ファイル)\n添付ファイル"]
+        ShareItem["ShareItem\n(共有アイテム)\n外部共有"]
+        Role["Role\n(役割)\n権限レベル"]
+        RoomPermission["RoomPermission\n(ルーム権限)\n1:1関連"]
     end
 
-    subgraph "権限"
-        Permission["Permission\n(パーミッション)\nアクセス制御"]
-        RoomUser["RoomUser\n(ルームユーザー)\n所属情報"]
-    end
-
-    subgraph "その他"
-        Share["ShareItem\n(共有アイテム)\n外部共有用"]
-        Brain["BrainBoard/BrainIdea\n(ブレインストーミング)"]
-    end
-
-    Tenant --> Room
-    User --> RoomUser
-    RoomUser --> Room
-    RoomUser --> UserRole
-    Room --> RoomUser
-    Room --> Topic
-    Topic --> Message
-    Message --> File
-    Room --> Permission
-    Permission --> RoomUser
-    Topic --> Share
-    Room --> Brain
-
-    style Tenant fill:#e8f5e9
-    style Room fill:#e3f2fd
     style User fill:#fff3e0
+    style Room fill:#e3f2fd
     style Topic fill:#f3e5f5
     style Message fill:#fce4ec
-    style Permission fill:#e0f2f1
+    style Role fill:#e0f2f1
+```
+
+## データモデル詳細
+
+### 主要テーブルの定義
+
+```mermaid
+erDiagram
+    TENANT ||--o{ ROOM : "管理"
+    ROOM ||--o{ TOPIC : "包含"
+    ROOM ||--|{ ROOM_USER : "所属"
+    ROOM_USER ||--|| USER : "参照"
+    ROOM_USER ||--|| ROLE : "権限"
+
+    TOPIC ||--o{ MESSAGE : "包含"
+    TOPIC ||--o{ SHARE_ITEM : "共有"
+    MESSAGE ||--o{ FILE : "添付"
+    MESSAGE ||--o{ MESSAGE : "返信"
+    ROOM ||--o{ BRAIN_BOARD : "包含"
+    BRAIN_BOARD ||--o{ BRAIN_IDEA : "包含"
+    BRAIN_IDEA ||--o{ BRAIN_IDEA_VOTE : "投票"
+
+    USER {
+        string Id PK "マスクUUID"
+        string Email "メールアドレス"
+        string DisplayName "表示名"
+        string IconUrl "アイコンURL"
+        datetime Created "作成日時"
+        datetime LastLogin "最終ログイン"
+    }
+
+    ROOM {
+        string Id PK "マスクUUID"
+        string Name "ルーム名"
+        string Description "説明文"
+        boolean IsPublic "公開設定"
+        datetime Created "作成日時"
+        string CreatedBy "作成者ID"
+    }
+
+    TOPIC {
+        string Id PK "マスクUUID"
+        string RoomId FK "ルームID"
+        string Header "ヘッダー"
+        text Body "本文"
+        string ReplyId FK "返信先トピック"
+        string MessageId FK "代表メッセージ"
+        string CreatedBy "作成者ID"
+        boolean IsRoot "ルートか"
+    }
+
+    MESSAGE {
+        string Id PK "マスクUUID"
+        string TopicId FK "トピックID"
+        string Header "メッセージタイトル"
+        text Body "本文"
+        string ReplyId FK "返信先メッセージ"
+        string CreatedBy "作成者ID"
+        datetime Created "作成日時"
+        datetime Updated "更新日時"
+    }
+
+    FILE {
+        string Id PK "マスクUUID"
+        string MessageId FK "メッセージID"
+        string OriginalName "元のファイル名"
+        string StoredName "保存ファイル名"
+        integer FileSize "ファイルサイズ"
+        string MimeType "MIMEタイプ"
+        string FileUrl "アクセスURL"
+    }
+
+    ROOM_USER {
+        string RoomId FK "ルームID"
+        string UserId FK "ユーザーID"
+        string Role "役割"
+        datetime Added "追加日時"
+    }
+
+    BRAIN_BOARD {
+        string Id PK "マスクUUID"
+        string RoomId FK "ルームID"
+        string Title "タイトル"
+        string Description "説明"
+        string CreatedBy "作成者ID"
+    }
+
+    BRAIN_IDEA {
+        string Id PK "マスクUUID"
+        string BrainBoardId FK "ブレインボードID"
+        string Content "内容"
+        string CreatedBy "作成者ID"
+        datetime Created "作成日時"
+    }
+
+    BRAIN_IDEA_VOTE {
+        string Id PK "マスクUUID"
+        string BrainIdeaId FK "アイデアID"
+        string UserId FK "ユーザーID"
+        integer Score "スコア"
+        datetime Created "投票日時"
+    }
+```
+
+### 索引定義
+
+```mermaid
+graph LR
+    subgraph "主要な索引"
+        A[room_name_idx] --> A1("Room.Name")
+        B[topic_room_idx] --> B1("Topic.RoomId")
+        C[message_topic_idx] --> C1("Message.TopicId")
+        D[file_message_idx] --> D1("File.MessageId")
+        E[room_user_room_idx] --> E1("RoomUser.RoomId")
+        F[room_user_user_idx] --> F1("RoomUser.UserId")
+    end
+
+    subgraph "パフォーマンス影響"
+        A --> A2("検索速度向上")
+        B --> B2("ルーム内トピック検索")
+        C --> C2("トピック内メッセージ検索")
+        D --> D2("ファイル一覧取得")
+        E --> E2("ユーザールーム一覧")
+        F --> F2("ルームユーザー一覧")
+    end
 ```
 
 ## 用語集
@@ -346,6 +449,19 @@ stateDiagram-v2
 | ユーザーセッション | 10,000/テナント | 5,000/テナント |
 | データベース接続 | 100 | 50 |
 | SignalR接続 | 5,000 | 2,000 |
+
+### テナントあたりのユーザー数
+| 項目 | 制限 | 説明 |
+|------|------|------|
+| **推奨最大** | 1,000ユーザー | パフォーマンスを考慮した推奨値 |
+| **技術的制限** | 10,000ユーザー | データベースパフォーマンスの限界値 |
+| **アカウント制限** | 制限なし | ユーザーアカウント数自体に制限はありません |
+| **アクティブユーザー** | 100ユーザー | 同時アクティブユーザーの推奨値 |
+
+**注意点**:
+- 大量のユーザーの場合、データベースのパーティショニングを検討
+- キャッシュの最適化が必須
+- インデックスの設計がパフォーマンスに影響
 
 ## セキュリティ特性
 
