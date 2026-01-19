@@ -64,7 +64,59 @@ flowchart TD
 Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
 
 # 必要なツールをインストール
-choco install -y git nodejs postgresql docker-desktop visualstudio2022community
+choco install -y git nodejs postgresql docker-desktop
+
+# Visual Studio 2022 Communityのインストール
+# 工作负荷と個別コンポーネントを指定
+choco install -y visualstudio2022community --params "--locale ja-JP" --package-parameters "--add Microsoft.VisualStudio.Workload.NetWeb --add Microsoft.VisualStudio.Workload.NetCoreTools --add Microsoft.VisualStudio.Component.Windows10SDK.22000 --add Microsoft.VisualStudio.Component.SQL.DataTools --includeOptional"
+
+# Visual Studio Codeのインストール（オプション）
+choco install -y vscode --params="/NoDesktopIcon"
+```
+
+#### Visual Studio 2022の工作负荷とコンポーネント
+
+```markdown
+# 推奨する工作负荷（Workloads）
+- **ASP.NETとWeb開発**
+  - .NET 6.0以降のASP.NET Core開発に必要
+  - Webアプリケーション開発用のテンプレートとツール
+- **.NET デスクトップ開発**
+  - マルチテナント管理ツールの開発に必要
+  - Windows FormsやWPF開発用のツール
+
+# 必須コンポーネント
+- **.NET 10 SDK**
+  - TreeTopicの開発に必須
+  - 最新のC#言語機能とAPI
+- **SQL Server Data Tools**
+  - データベース開発とマイグレーション
+  - Entity Frameworkのデザインタイム機能
+- **Windows 10 SDK**
+  - プラットフォーム互換性のサポート
+- **JavaScript/TypeScript**
+  - フロントエンド開発用のツールとランタイム
+
+# コマンドラインでのインストール確認
+# PowerShellを管理者権限で実行
+Get-Command vswhere.exe
+vswhere.exe -latest -property installationPath
+```
+
+#### Visual Studioのバージョン管理
+
+```powershell
+# インストールされているVisual Studioのバージョン確認
+vswhere.exe -all -property displayName -property installationVersion
+
+# 特定のバージョンのVisual Studioを起動
+vswhere.exe -latest -products * -requires Microsoft.VisualStudio.Workload.NetWeb -property installationPath | ForEach-Object { & "$_\Common7\IDE\devenv.exe" }
+
+# Visual Studioの修復
+choco upgrade visualstudio2022community --params "--locale ja-JP"
+
+# Visual Studioのアンインストール（不要になった場合）
+# choco uninstall visualstudio2022community
 ```
 
 #### Ubuntu / Debian
