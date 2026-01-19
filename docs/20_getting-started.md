@@ -368,7 +368,134 @@ sudo systemctl start postgresql
 Encryptionキーが32バイトであることを確認
 ```
 
-## Dockerでの開発
+## Aspireを使った開発環境構築
+
+### Aspireとは？
+Aspireは.NETのマイクロサービス開発ツールキットで、複数のサービスを容易に開発、デプロイ、管理できます。TreeTopicではPostgreSQL、Web API、Redisなどのサービスを連携させることができます。
+
+### 前提条件
+- .NET 10 SDK
+- Docker Desktop
+- Visual Studio 2022（推奨）
+
+### Aspire AppHostの起動
+
+#### 方法1: Visual Studio 2022で起動
+1. `TreeTopic.AppHost.sln` をVisual Studio 2022で開く
+2. `TreeTopic.AppHost` をスタートアッププロジェクトに設定
+3. `F5` キーでデバッグ実行
+4. Aspire Dashboardが自動的に開く（http://localhost:18888）
+
+#### 方法2: コマンドラインで起動
+```bash
+# ルートディレクトリに移動
+cd C:\Users\Binary_number\source\repos\TreeTopic
+
+# Aspire AppHostのビルドと実行
+cd TreeTopic.AppHost
+dotnet run
+
+# 別のターミナルでWeb APIにアクセス
+curl http://localhost:8080/health
+```
+
+### Aspire Dashboard
+
+Aspire Dashboardはマイクロサービスの状態を可視化するツールです。
+
+```mermaid
+flowchart TB
+    subgraph "Aspire Dashboard"
+        A[リソース一覧] --> B[サービス状態]
+        A --> C[依存関係]
+        A --> D[ログ]
+        A --> E[メトリクス]
+    end
+
+    subgraph "TreeTopicサービス"
+        F[AppHost] --> G[PostgreSQL]
+        F --> H[Web API]
+        F --> I[Redis]
+    end
+
+    D --> F
+    C --> F
+    B --> F
+```
+
+### サービス構成
+
+#### PostgreSQLの自動プロビジョニング
+Aspireは開発時にPostgreSQLを自動で起動します。
+
+```yaml
+# TreeTopic.AppHost/Resources/manifests/postgres/postgres.yaml
+resources:
+  - name: postgres
+    type: postgres
+    connection: postgres
+    parameters:
+      image: postgres:16
+    env:
+      POSTGRES_DB: treetopic
+      POSTGRES_USER: treetopic
+      POSTGRES_PASSWORD: treetopic
+```
+
+#### Web APIの自動検出
+```yaml
+# TreeTopic.AppHost/Resources/manifests/web/web.yaml
+resources:
+  - name: web
+    type: project
+    project: ../TreeTopic/TreeTopic.csproj
+    connection: http
+    env:
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__DefaultConnection: postgres://postgres@postgres/treetopic
+      Encryption__Key: your-32-byte-encryption-key-here
+```
+
+### 環境変数の設定
+
+#### Aspire AppHost用環境変数
+```bash
+# .envファイル作成
+cat > .env << EOF
+# PostgreSQL接続文字列（Aspireが自動生成）
+CONNECTIONSTRINGS__DEFAULTCONNECTION=Host=localhost;Port=5432;Database=treetopic;Username=treetopic;Password=treetopic
+
+# 暗号化キー
+ENCRYPTION__KEY=your-32-byte-encryption-key-here-please-make-it-long-enough
+
+# テナント設定
+TENANT__BASEHOST=localhost:8080
+EOF
+```
+
+### サービスの確認
+
+#### アプリケーションの状態確認
+```bash
+# ヘルスチェック
+curl http://localhost:8080/health
+
+# APIテスト
+curl http://localhost:8080/api/rooms
+
+# Swagger UI
+open http://localhost:8080/swagger
+```
+
+#### ログの確認
+```bash
+# Aspire Dashboardからログ確認
+# または直接コンテナのログを確認
+docker logs aspire-dashboard-1
+docker logs postgres-1
+```
+
+### Dockerでの開発
 
 ### Docker Composeを使った環境構築
 ```yaml
