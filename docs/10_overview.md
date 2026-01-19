@@ -130,14 +130,137 @@ graph TB
 
 ## データモデル
 
+```mermaid
+erDiagram
+    TENANT ||--o{ ROOM : "管理"
+    ROOM ||--o{ TOPIC : "包含"
+    ROOM ||--|{ ROOM_USER : "所属"
+    ROOM_USER ||--|| USER : "参照"
+    ROOM_USER ||--|| ROLE : "権限"
+
+    TOPIC ||--o{ MESSAGE : "包含"
+    TOPIC ||--o{ SHARE_ITEM : "共有"
+    MESSAGE ||--o{ FILE : "添付"
+    MESSAGE ||--o{ MESSAGE : "返信"
+    MESSAGE ||--o{ BRAIN_IDEA : "関連"
+    ROOM ||--o{ BRAIN_BOARD : "包含"
+    BRAIN_BOARD ||--o{ BRAIN_IDEA : "包含"
+    BRAIN_IDEA ||--o{ BRAIN_IDEA_VOTE : "投票"
+
+    USER {
+        string Id PK "マスクUUID"
+        string Email "メールアドレス"
+        string DisplayName "表示名"
+        string IconUrl "アイコンURL"
+        datetime Created "作成日時"
+        datetime LastLogin "最終ログイン"
+    }
+
+    ROOM {
+        string Id PK "マスクUUID"
+        string Name "ルーム名"
+        string Description "説明文"
+        boolean IsPublic "公開設定"
+        datetime Created "作成日時"
+        string CreatedBy "作成者"
+    }
+
+    TOPIC {
+        string Id PK "マスクUUID"
+        string RoomId FK "ルームID"
+        string Header "ヘッダー"
+        text Body "本文"
+        string ReplyId FK "返信先トピック"
+        string MessageId FK "代表メッセージ"
+        string CreatedBy "作成者"
+        boolean IsRoot "ルートか"
+    }
+
+    MESSAGE {
+        string Id PK "マスクUUID"
+        string TopicId FK "トピックID"
+        string Header "メッセージタイトル"
+        text Body "本文"
+        string ReplyId FK "返信先メッセージ"
+        string CreatedBy "作成者"
+        datetime Created "作成日時"
+        datetime Updated "更新日時"
+    }
+
+    FILE {
+        string Id PK "マスクUUID"
+        string MessageId FK "メッセージID"
+        string OriginalName "元のファイル名"
+        string StoredName "保存ファイル名"
+        integer FileSize "ファイルサイズ"
+        string MimeType "MIMEタイプ"
+        string FileUrl "URL"
+    }
+
+    ROOM_USER {
+        string RoomId FK "ルームID"
+        string UserId FK "ユーザーID"
+        datetime Added "追加日時"
+    }
+
+    ROOM_PERMISSION {
+        string RoomId FK "ルームID"
+        string UserId FK "ユーザーID"
+        string Role "役割"
+        datetime Added "追加日時"
+    }
+
+    SHARE_ITEM {
+        string Id PK "マスクUUID"
+        string ItemType "アイテム種別"
+        string ItemId FK "アイテムID"
+        string ShareCode "共有コード"
+        string Password "パスワード"
+        datetime Expires "期限"
+    }
+
+    ROLE {
+        enum Role "権限レベル"
+        Owner
+        Admin
+        Member
+        Guest
+    }
+
+    BRAIN_BOARD {
+        string Id PK "マスクUUID"
+        string RoomId FK "ルームID"
+        string Title "タイトル"
+        string Description "説明"
+        string CreatedBy "作成者"
+    }
+
+    BRAIN_IDEA {
+        string Id PK "マスクUUID"
+        string BrainBoardId FK "ブレインボードID"
+        string Content "内容"
+        string CreatedBy "作成者"
+        datetime Created "作成日時"
+    }
+
+    BRAIN_IDEA_VOTE {
+        string Id PK "マスクUUID"
+        string BrainIdeaId FK "アイデアID"
+        string UserId FK "ユーザーID"
+        integer Score "スコア"
+        datetime Created "投票日時"
+    }
+
+    %% リレーションシップの説明
+    ROOM_USER ||--o| USER : "参加"
+    ROOM_USER ||--|| ROLE : "権限付与"
+    MESSAGE ||--o| USER : "投稿"
+    FILE ||--|| USER : "所有"
+    BRAIN_IDEA ||--o| USER : "作成"
+    BRAIN_IDEA_VOTE ||--o| USER : "投票"
+```
+
 ### 主要エンティティ関係
-```
-User --< RoomUser >-- Room
-                           |-- Topic --< Message
-                           |           |-- File
-                           |-- ShareItem
-Role --< RoomPermission >-- Room
-```
 
 ### 規模
 - **ユーザー**: 1テナントあたり最大10,000ユーザー
@@ -248,6 +371,148 @@ dotnet run
 - **開発サーバー**: Kestrel
 - **ホットリロード**: 両方の環境でサポート
 - **デバッグ**: IntelliTrace / .NETデバッガー
+
+## データモデル
+
+```mermaid
+erDiagram
+    APPLICATION_USER ||--o{ ROOM_USER : "参加"
+    APPLICATION_USER ||--o{ MESSAGE : "投稿"
+    APPLICATION_USER ||--o{ FILE : "所有"
+
+    ROOM ||--o{ TOPIC : "包含"
+    ROOM ||--|{ ROOM_USER : "所属"
+    ROOM ||--|{ ROOM_PERMISSION : "権限"
+
+    TOPIC ||--o{ MESSAGE : "包含"
+    TOPIC ||--o{ SHARE_ITEM : "共有"
+
+    MESSAGE ||--o{ FILE : "添付"
+    MESSAGE ||--o{ MESSAGE : "返信"
+
+    ROOM_PERMISSION ||--|| ROLE : "参照"
+
+    APPLICATION_USER {
+        string Id PK "UUID"
+        string Email "メールアドレス"
+        string DisplayName "表示名"
+        string IconUrl "アイコンURL"
+        datetime Created "作成日時"
+        datetime LastLogin "最終ログイン"
+    }
+
+    ROOM {
+        string Id PK "UUID"
+        string Name "ルーム名"
+        string Description "説明文"
+        boolean IsPublic "公開設定"
+        datetime Created "作成日時"
+        string CreatedBy "作成者"
+    }
+
+    TOPIC {
+        string Id PK "UUID"
+        string RoomId FK "ルームID"
+        string Header "ヘッダー"
+        text Body "本文"
+        string ReplyId FK "返信先"
+        string MessageId FK "代表メッセージ"
+        string CreatedBy "作成者"
+        boolean IsRoot "ルートか"
+    }
+
+    MESSAGE {
+        string Id PK "UUID"
+        string TopicId FK "トピックID"
+        string Header "タイトル"
+        text Body "本文"
+        string ReplyId FK "返信先"
+        string CreatedBy "作成者"
+        datetime Created "作成日時"
+        datetime Updated "更新日時"
+    }
+
+    FILE {
+        string Id PK "UUID"
+        string MessageId FK "メッセージID"
+        string OriginalName "元の名前"
+        string StoredName "保存名"
+        integer FileSize "サイズ"
+        string MimeType "MIMEタイプ"
+        string FileUrl "URL"
+    }
+
+    ROOM_USER {
+        string RoomId FK "ルームID"
+        string UserId FK "ユーザーID"
+        datetime Added "追加日時"
+    }
+
+    ROOM_PERMISSION {
+        string RoomId FK "ルームID"
+        string UserId FK "ユーザーID"
+        string Role "役割"
+        datetime Added "追加日時"
+    }
+
+    ROLE {
+        enum Role "権限レベル"
+        Owner
+        Admin
+        Member
+        Guest
+    }
+```
+
+### 主要エンティティ関係
+
+```mermaid
+graph TB
+    User --< RoomUser >-- Room
+    Room
+    Room
+    Room
+    Room --> Topic --< Message
+    Message --> File
+    Message
+    Room
+    ShareItem
+    Role --< RoomPermission >-- Room
+
+    subgraph "エンティティ"
+        User["User\n(ユーザー)"]
+        RoomUser["RoomUser\n(ルームユーザー)"]
+        Room["Room\n(ルーム)"]
+        Topic["Topic\n(トピック)"]
+        Message["Message\n(メッセージ)"]
+        File["File\n(ファイル)"]
+        ShareItem["ShareItem\n(共有アイテム)"]
+        Role["Role\n(役割)"]
+        RoomPermission["RoomPermission\n(ルーム権限)"]
+    end
+
+    Room
+    Room --> Topic
+    Topic --< Message
+    Message --> File
+    Room
+    Room --> ShareItem
+    Role --< RoomPermission >-- Room
+```
+
+    subgraph "関係の説明"
+        User -- RoomUser -->|1:N| Room
+        Room --> Topic -->|1:N| Message -->|1:N| File
+        Room --> ShareItem
+        Role -- RoomPermission -->|1:1| Room
+    end
+
+    style User fill:#e8f5e9
+    style Room fill:#e3f2fd
+    style Topic fill:#f3e5f5
+    style Message fill:#fce4ec
+    style Role fill:#e0f2f1
+```
 
 ## アーキテクチャパターン
 
