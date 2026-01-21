@@ -13,6 +13,7 @@ using Microsoft.AspNetCore.SignalR;
 using MaskedUUID.AspNetCore.Services;
 using TreeTopic.Hubs;
 using FileModel = TreeTopic.Models.File;
+using TreeTopic;
 
 namespace TreeTopic.Services;
 
@@ -42,6 +43,8 @@ public class MessageManagementService : BaseService, IMessageManagementService
     private readonly IHubContext<MessageHub, IMessageHubClient> _messageHub;
     private readonly IHubContext<RoomTopicHub, IRoomTopicHubClient> _roomTopicHub;
     private readonly IMaskedUUIDService _maskedUuidService;
+    private readonly IPushService _pushService;
+    private readonly ApplicationDbContext _dbContext;
 
     public MessageManagementService(
         IMessageRepository messageRepository,
@@ -55,6 +58,8 @@ public class MessageManagementService : BaseService, IMessageManagementService
         IHubContext<MessageHub, IMessageHubClient> messageHub,
         IHubContext<RoomTopicHub, IRoomTopicHubClient> roomTopicHub,
         IMaskedUUIDService maskedUuidService,
+        IPushService pushService,
+        ApplicationDbContext dbContext,
         ILogger<MessageManagementService> logger) : base(logger)
     {
         _messageRepository = messageRepository;
@@ -68,6 +73,8 @@ public class MessageManagementService : BaseService, IMessageManagementService
         _messageHub = messageHub;
         _roomTopicHub = roomTopicHub;
         _maskedUuidService = maskedUuidService;
+        _pushService = pushService;
+        _dbContext = dbContext;
     }
 
     private string? CurrentTenantId => _tenantAccessor.MultiTenantContext?.TenantInfo?.Id;
@@ -548,6 +555,19 @@ public class MessageManagementService : BaseService, IMessageManagementService
                 Logger.LogError(ex, "Failed to broadcast message created for message {MessageId}", message.Id);
             }
 
+            // プッシュ通知を送信（awaitせずfire-and-forget）
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await SendPushNotificationsAsync(message, roomUser, dto);
+                }
+                catch (Exception ex)
+                {
+                    Logger.LogError(ex, "Failed to send push notifications for message {MessageId}", message.Id);
+                }
+            });
+
             return Result<MessageDto>.Success(dto, 201);
         }, nameof(CreateMessageAsync));
     }
@@ -951,5 +971,83 @@ public class MessageManagementService : BaseService, IMessageManagementService
                 };
             }).ToList()
         };
+    }
+
+    /// <summary>
+    /// プッシュ通知を送信（fire-and-forgetで実行）
+    /// </summary>
+    private async Task SendPushNotificationsAsync(Message message, RoomUser senderRoomUser, MessageDto messageDto)
+    {
+        try
+        {
+            // 同じトピックを閲覧可能なユーザーのPushSubscriptionを取得
+            // 今回は簡易実装として、メッセージ送信者以外の全購読者に送信
+            var topic = await _topicRepository.GetByIdAsync(message.TopicId);
+            if (topic == null) return;
+
+            // Roomの全ユーザーを取得（今後はここで閲覧権限チェックを追加）
+            var roomUserIds = await _dbContext.RoomUsers
+                .Where(ru => ru.RoomId == topic.RoomId)
+                .Select(ru => ru.ApplicationUserId)
+                .Distinct()
+                .ToListAsync();
+
+            // メッセージ送信者を除外
+            roomUserIds.Remove(senderRoomUser.ApplicationUserId);
+
+            if (roomUserIds.Count == 0) return;
+
+            // 該当ユーザーのPushSubscriptionを取得
+            var pushSubscriptions = await _dbContext.PushSubscriptions
+                .Where(ps => roomUserIds.Contains(ps.UserId))
+                .ToListAsync();
+
+            foreach (var subscription in pushSubscriptions)
+            {
+                try
+                {
+                    var notification = new PushNotificationRequest
+                    {
+                        Title = $"{RoomUserNameHelper.ResolveDisplayName(senderRoomUser)}: {messageDto.Header?.Truncate(50) ?? "New message"}",
+                        Body = messageDto.Body?.Truncate(200) ?? "",
+                        Icon = "/pwa-192x192.png"
+                    };
+
+                    var subscriptionDto = new PushSubscriptionDto
+                    {
+                        Endpoint = subscription.Endpoint,
+                        Keys = new PushSubscriptionKeys
+                        {
+                            P256dh = subscription.P256dhKey,
+                            Auth = subscription.AuthKey
+                        }
+                    };
+
+                    await _pushService.SendNotificationAsync(subscriptionDto, notification);
+
+                    // LastUsedAtを更新
+                    subscription.LastUsedAt = DateTime.UtcNow;
+                }
+                catch (Exception ex)
+                {
+                    Logger.LogError(ex, "Failed to send push notification to subscription {Endpoint}", subscription.Endpoint);
+                }
+            }
+
+            await _dbContext.SaveChangesAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to send push notifications for message {MessageId}", message.Id);
+        }
+    }
+}
+
+public static class StringExtensions
+{
+    public static string? Truncate(this string? value, int maxLength)
+    {
+        if (string.IsNullOrEmpty(value)) return value;
+        return value.Length <= maxLength ? value : value.Substring(0, maxLength);
     }
 }

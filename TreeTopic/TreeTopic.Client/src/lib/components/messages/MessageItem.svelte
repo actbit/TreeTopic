@@ -661,4 +661,16 @@
     background-color: var(--color-surface);
     border-radius: var(--border-radius-sm);
   }
+
+  .message-link {
+    color: var(--color-primary);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  .message-link:hover {
+    color: var(--color-primary-dark, color-mix(in srgb, var(--color-primary) 80%, black));
+  }
 </style>

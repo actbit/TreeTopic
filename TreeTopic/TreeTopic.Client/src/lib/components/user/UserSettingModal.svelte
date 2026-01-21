@@ -8,6 +8,7 @@
   import Button from '$lib/components/common/Button.svelte';
   import Input from '$lib/components/common/Input.svelte';
   import Modal from '$lib/components/common/Modal.svelte';
+  import PushNotificationSettings from '$lib/components/push/PushNotificationSettings.svelte';
 
   // APIレスポンスの型
   interface ApiResponse<T> {
@@ -492,6 +493,10 @@
                 </div>
               </div>
               <p class="help-text">アプリ全体で使用するアイコンです</p>
+            </div>
+
+            <div class="form-section">
+              <PushNotificationSettings />
             </div>
           </div>
         {/if}

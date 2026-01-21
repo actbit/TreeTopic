@@ -549,6 +549,13 @@ public class Program
         // Brainstorm管理サービスを登録
         builder.Services.AddScoped<IBrainstormManagementService, BrainstormManagementService>();
 
+        // HttpClientを登録
+        builder.Services.AddHttpClient();
+
+        // Push通知サービスを登録（TenantCatalogDbContextを使用するためScoped）
+        builder.Services.AddScoped<IVapidService, VapidService>();
+        builder.Services.AddScoped<IPushService, PushService>();
+
         // メモリキャッシュを登録
         builder.Services.AddMemoryCache();
 
