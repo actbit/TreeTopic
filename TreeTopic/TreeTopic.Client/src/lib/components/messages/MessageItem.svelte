@@ -388,7 +388,7 @@
         <div class="message-child-topics">
           <span class="text-small text-light">Started child topic</span>
           <div class="child-topic-list">
-            {#each childTopics as child (child.id)}
+            {#each childTopics.filter(c => c?.id) as child (child.id)}
               <div class="child-topic-entry">
                 <button
                   type="button"
@@ -413,7 +413,7 @@
       {#if message.attachments.length > 0}
         <div class="divider margin-top-sm margin-bottom-sm"></div>
         <div class="spacing-xs">
-          {#each message.attachments as attachment (attachment.id)}
+          {#each message.attachments.filter(a => a?.id) as attachment (attachment.id)}
             <a
               href={attachment.url}
               class="flex items-center spacing-sm text-small text-primary hoverable"
@@ -430,7 +430,7 @@
 
       {#if message.reactions && message.reactions.length > 0}
         <div class="flex flex-wrap spacing-xs margin-top-sm">
-          {#each message.reactions as reaction (reaction.emoji)}
+          {#each message.reactions.filter(r => r?.emoji) as reaction (reaction.emoji)}
             <button
               class="badge badge-primary clickable"
               style="padding: var(--spacing-xs) var(--spacing-sm); display: flex; align-items: center; gap: var(--spacing-xs);"
@@ -483,7 +483,7 @@
         <p class="text-small text-light">No messages yet in this child topic.</p>
       {:else}
         <div class="preview-message-list">
-          {#each previewMessages as msg (msg.id)}
+          {#each previewMessages.filter(m => m?.id) as msg (msg.id)}
             <div class="card hoverable">
               <div class="flex items-start gap-3">
                 {#if msg.userAvatar}

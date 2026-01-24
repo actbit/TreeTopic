@@ -128,7 +128,11 @@ public class Program
                 {
                     OnRedirectToLogin = ctx =>
                     {
-                        if (IsApiRequest(ctx.Request))
+                        var isApi = IsApiRequest(ctx.Request);
+                        var logger = ctx.HttpContext.RequestServices.GetRequiredService<ILogger<Program>>();
+                        logger.LogDebug("[OnRedirectToLogin] Path: {Path}, IsApi: {IsApi}", ctx.Request.Path, isApi);
+
+                        if (isApi)
                         {
                             ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
                             return Task.CompletedTask;
@@ -857,6 +861,7 @@ public class Program
         app.MapControllers();
         app.MapHub<MessageHub>("/{tenant}/hubs/messages").RequireAuthorization();
         app.MapHub<RoomTopicHub>("/{tenant}/hubs/rooms").RequireAuthorization();
+        app.MapHub<RoomUserSyncHub>("/{tenant}/hubs/roomusersync").RequireAuthorization();
 
         // Serve static files (SPA) after API routes
         app.UseDefaultFiles();

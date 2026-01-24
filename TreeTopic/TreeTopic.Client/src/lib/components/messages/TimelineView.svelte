@@ -12,7 +12,7 @@
 
   let topicMessages = $derived.by(() => {
     if (!$selectedTopic) return [];
-    const messages = $messageList.filter((m) => m.topicId === $selectedTopic.id);
+    const messages = ($messageList || []).filter((m) => m?.id && m.topicId === $selectedTopic.id);
     // Sort by creation date (newest first)
     return [...messages].sort(
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
@@ -73,7 +73,7 @@
         </div>
 
         <div class="space-y-3">
-          {#each messages as message (message.id)}
+          {#each messages.filter(m => m?.id) as message (message.id)}
             <MessageItem {message} />
           {/each}
         </div>

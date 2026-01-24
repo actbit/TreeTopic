@@ -1,7 +1,5 @@
 using System.Text;
 using System.Text.Json;
-using Finbuckle.MultiTenant;
-using Finbuckle.MultiTenant.Abstractions;
 using Lib.Net.Http.WebPush;
 using Lib.Net.Http.WebPush.Authentication;
 using TreeTopic.Dtos;
@@ -14,22 +12,33 @@ public interface IPushService
     Task SendNotificationAsync(PushSubscriptionDto subscription, string title, string? body = null);
 }
 
+/// <summary>
+/// 購読が無効であることを示す例外
+/// </summary>
+public class SubscriptionExpiredException : Exception
+{
+    public string Endpoint { get; }
+
+    public SubscriptionExpiredException(string endpoint)
+        : base($"Push subscription has expired: {endpoint}")
+    {
+        Endpoint = endpoint;
+    }
+}
+
 public class PushService : IPushService
 {
     private readonly PushServiceClient _pushClient;
     private readonly IVapidService _vapidService;
-    private readonly IMultiTenantContextAccessor _multiTenantContextAccessor;
     private readonly ILogger<PushService> _logger;
 
     public PushService(
         HttpClient httpClient,
         IVapidService vapidService,
-        IMultiTenantContextAccessor multiTenantContextAccessor,
         ILogger<PushService> logger)
     {
         _pushClient = new PushServiceClient(httpClient);
         _vapidService = vapidService;
-        _multiTenantContextAccessor = multiTenantContextAccessor;
         _logger = logger;
     }
 
@@ -37,12 +46,8 @@ public class PushService : IPushService
     {
         try
         {
-            // 現在のテナントIDを取得
-            var tenantId = _multiTenantContextAccessor.MultiTenantContext?.TenantInfo?.Id
-                ?? throw new InvalidOperationException("No tenant context available");
-
-            // VAPIDキーを取得
-            var (publicKey, privateKey) = await _vapidService.GetOrCreateKeysAsync(tenantId);
+            // グローバルなVAPIDキーを取得
+            var (publicKey, privateKey) = await _vapidService.GetOrCreateKeysAsync();
 
             // VAPID認証情報を設定
             var vapidAuth = new VapidAuthentication(publicKey, privateKey)
@@ -82,6 +87,22 @@ public class PushService : IPushService
             await _pushClient.RequestPushMessageDeliveryAsync(pushSubscription, pushMessage, vapidAuth);
 
             _logger.LogInformation("Push notification sent successfully: {Title}", notification.Title);
+        }
+        catch (Lib.Net.Http.WebPush.PushServiceClientException ex)
+        {
+            // 購読が無効（410 Goneまたは403 Forbidden）の場合
+            // 410: 購読が期限切れ
+            // 403: VAPIDキーが無効（キーが再生成された場合など）
+            bool isGone = ex.Message?.Contains("Gone") == true || ex.ToString().Contains("Gone") == true;
+            bool isForbidden = ex.Message?.Contains("Forbidden") == true || ex.ToString().Contains("Forbidden") == true;
+
+            if (isGone || isForbidden)
+            {
+                _logger.LogWarning("Push subscription is invalid ({Status}): {Endpoint}", isGone ? "Gone" : "Forbidden", subscription.Endpoint);
+                throw new SubscriptionExpiredException(subscription.Endpoint);
+            }
+            _logger.LogError(ex, "Failed to send push notification: {Title}", notification.Title);
+            throw;
         }
         catch (Exception ex)
         {

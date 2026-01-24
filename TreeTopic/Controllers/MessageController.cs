@@ -33,7 +33,7 @@ public class MessageController : ControllerBase
     [HttpGet("topic/{topicId}")]
     public async Task<IActionResult> GetByTopic([FromRoute] MaskedGuid topicId, CancellationToken cancellationToken)
     {
-        var result = await _messageManagementService.GetMessagesByTopicAsync((Guid)topicId, cancellationToken);
+        var result = await _messageManagementService.GetMessagesByTopicAsync((Guid)topicId, CurrentUserId, cancellationToken);
         return result.ToApiResult();
     }
 
@@ -118,6 +118,13 @@ public class MessageController : ControllerBase
     public async Task<IActionResult> Delete([FromRoute] MaskedGuid messageId, CancellationToken cancellationToken)
     {
         var result = await _messageManagementService.DeleteMessageAsync(messageId, CurrentUserId, cancellationToken);
+        return result.ToApiResult();
+    }
+
+    [HttpPost("topic/{topicId}/markAsRead")]
+    public async Task<IActionResult> MarkTopicAsRead([FromRoute] MaskedGuid topicId, CancellationToken cancellationToken)
+    {
+        var result = await _messageManagementService.MarkTopicAsReadAsync((Guid)topicId, CurrentUserId, cancellationToken);
         return result.ToApiResult();
     }
 

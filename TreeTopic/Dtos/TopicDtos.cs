@@ -16,6 +16,16 @@ public class TopicDto : BaseDto
     public string? Description { get; set; }
 
     public bool HasChildren { get; set; }
+
+    /// <summary>
+    /// 未読メッセージ数
+    /// </summary>
+    public int UnreadCount { get; set; }
+
+    /// <summary>
+    /// 最後に読んだメッセージID
+    /// </summary>
+    public MaskedGuid? LastReadMessageId { get; set; }
 }
 
 public class CreateTopicRequest : BaseCreateRequest

@@ -4,6 +4,7 @@ using MaskedUUID.AspNetCore.Types;
 using TreeTopic.Common;
 using TreeTopic.Dtos;
 using TreeTopic.Services;
+using System.Security.Claims;
 
 namespace TreeTopic.Controllers;
 
@@ -19,6 +20,17 @@ public class TopicController : ControllerBase
         _topicManagementService = topicManagementService;
     }
 
+    private Guid? CurrentUserId
+    {
+        get
+        {
+            var userIdStr = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (Guid.TryParse(userIdStr, out var userId))
+                return userId;
+            return null;
+        }
+    }
+
     [HttpGet]
     public async Task<IActionResult> GetAll([FromQuery] MaskedGuid? roomId, CancellationToken cancellationToken)
     {
@@ -27,35 +39,35 @@ public class TopicController : ControllerBase
             return BadRequest(new { message = "roomId is required. Use /{tenant}/api/Topic/room/{roomId} or /{tenant}/api/Topic?roomId=..." });
         }
 
-        var result = await _topicManagementService.GetTopicsByRoomAsync((Guid)roomId.Value, cancellationToken);
+        var result = await _topicManagementService.GetTopicsByRoomAsync((Guid)roomId.Value, CurrentUserId, cancellationToken);
         return result.ToApiResult();
     }
 
     [HttpGet("room/{roomId}")]
     public async Task<IActionResult> GetByRoom([FromRoute] MaskedGuid roomId, CancellationToken cancellationToken)
     {
-        var result = await _topicManagementService.GetTopicsByRoomAsync((Guid)roomId, cancellationToken);
+        var result = await _topicManagementService.GetTopicsByRoomAsync((Guid)roomId, CurrentUserId, cancellationToken);
         return result.ToApiResult();
     }
 
     [HttpGet("room/{roomId}/root")]
     public async Task<IActionResult> GetRootByRoom([FromRoute] MaskedGuid roomId, CancellationToken cancellationToken)
     {
-        var result = await _topicManagementService.GetRootTopicsByRoomAsync((Guid)roomId, cancellationToken);
+        var result = await _topicManagementService.GetRootTopicsByRoomAsync((Guid)roomId, CurrentUserId, cancellationToken);
         return result.ToApiResult();
     }
 
     [HttpGet("parent/{parentId}")]
     public async Task<IActionResult> GetByParent([FromRoute] MaskedGuid parentId, CancellationToken cancellationToken)
     {
-        var result = await _topicManagementService.GetTopicsByParentAsync((Guid)parentId, cancellationToken);
+        var result = await _topicManagementService.GetTopicsByParentAsync((Guid)parentId, CurrentUserId, cancellationToken);
         return result.ToApiResult();
     }
 
     [HttpGet("{topicId}")]
     public async Task<IActionResult> GetById([FromRoute] MaskedGuid topicId, CancellationToken cancellationToken)
     {
-        var result = await _topicManagementService.GetTopicByIdAsync((Guid)topicId, cancellationToken);
+        var result = await _topicManagementService.GetTopicByIdAsync((Guid)topicId, CurrentUserId, cancellationToken);
         return result.ToApiResult();
     }
 

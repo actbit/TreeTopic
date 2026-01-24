@@ -55,6 +55,12 @@
 
   function normalizeMessage(raw: any) {
     const id = raw?.id ?? raw?.Id ?? '';
+
+    // IDが空文字列の場合はエラーとして扱う（デバッグ用）
+    if (!id) {
+      console.error('Message ID is empty:', raw);
+      throw new Error('Invalid message ID: ID is empty');
+    }
     const createdAt = raw?.createdAt ?? raw?.CreatedAt ?? null;
     const updatedAt = raw?.updatedAt ?? raw?.UpdatedAt ?? null;
 
@@ -189,8 +195,8 @@
 
   $effect(() => {
     recentHistoryMessages = $selectedTopic
-      ? $messageList
-          .filter((m) => m.topicId === $selectedTopic.id)
+      ? ($messageList || [])
+          .filter((m) => m?.id && m.topicId === $selectedTopic.id)
           .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
           .slice(0, 20)
       : [];
@@ -301,11 +307,28 @@
       }
       const childTopicIdFromResponse =
         response?.childTopicId ?? response?.ChildTopicId ?? null;
-      addMessage({
+      const newMessage = {
         ...normalizeMessage(response),
         subject: trimmedSubject,
         content: trimmedContent,
-      });
+      };
+
+      // 重複チェックを行ってから追加（念の為に複数チェック）
+      const exists = $messageList.some((m) => m.id === newMessage.id);
+      const stillExistsAfterDelay = setTimeout(() => {
+        const doubleCheck = $messageList.some((m) => m.id === newMessage.id);
+        if (!doubleCheck) {
+          console.warn(`Message ${newMessage.id} was not added after delay, retrying...`);
+          addMessage(newMessage);
+        }
+      }, 100);
+
+      if (!exists) {
+        addMessage(newMessage);
+        // 遅延チェックをクリーンアップ
+      } else {
+        clearTimeout(stillExistsAfterDelay);
+      }
       subject = '';
       content = '';
       cancelReply();
@@ -543,7 +566,7 @@
 
     {#if selectedFiles.length > 0}
       <div class="selected-files">
-        {#each selectedFiles as file (fileKey(file))}
+        {#each selectedFiles.filter(f => f) as file (fileKey(file))}
           <div class="selected-file">
             <span class="selected-file__name">{file.name}</span>
             <button
@@ -612,7 +635,7 @@
           </button>
         </div>
         <div class="child-topic-history__list">
-          {#each recentHistoryMessages as history (history.id)}
+          {#each recentHistoryMessages.filter(h => h?.id) as history (history.id)}
             <label class="child-topic-history__item">
               <input
                 type="checkbox"

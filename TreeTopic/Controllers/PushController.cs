@@ -6,8 +6,7 @@ using TreeTopic.Models;
 using TreeTopic.Services;
 using System.Security.Claims;
 using MaskedUUID.AspNetCore.Types;
-using Finbuckle.MultiTenant.Abstractions;
-using TreeTopic;
+using Npgsql;
 
 namespace TreeTopic.Controllers;
 
@@ -17,18 +16,15 @@ namespace TreeTopic.Controllers;
 public class PushController : ControllerBase
 {
     private readonly IVapidService _vapidService;
-    private readonly IMultiTenantContextAccessor _multiTenantContextAccessor;
     private readonly ApplicationDbContext _dbContext;
     private readonly ILogger<PushController> _logger;
 
     public PushController(
         IVapidService vapidService,
-        IMultiTenantContextAccessor multiTenantContextAccessor,
         ApplicationDbContext dbContext,
         ILogger<PushController> logger)
     {
         _vapidService = vapidService;
-        _multiTenantContextAccessor = multiTenantContextAccessor;
         _dbContext = dbContext;
         _logger = logger;
     }
@@ -40,10 +36,8 @@ public class PushController : ControllerBase
     {
         try
         {
-            var tenantId = _multiTenantContextAccessor.MultiTenantContext?.TenantInfo?.Id
-                ?? throw new InvalidOperationException("No tenant context available");
-
-            var (publicKey, _) = await _vapidService.GetOrCreateKeysAsync(tenantId);
+            // グローバルなVAPIDキーを取得
+            var (publicKey, _) = await _vapidService.GetOrCreateKeysAsync();
             return Ok(new { publicKey });
         }
         catch (InvalidOperationException ex)
@@ -70,27 +64,36 @@ public class PushController : ControllerBase
                 existing.P256dhKey = subscriptionDto.Keys.P256dh;
                 existing.AuthKey = subscriptionDto.Keys.Auth;
                 existing.LastUsedAt = DateTime.UtcNow;
+                await _dbContext.SaveChangesAsync();
+                _logger.LogInformation("User {UserId} push subscription updated: {Endpoint}", userId, subscriptionDto.Endpoint);
+                return Ok(new { success = true, updated = true });
             }
-            else
+
+            // 新規購読を追加
+            var subscription = new PushSubscription
             {
-                // 新規購読を追加
-                var subscription = new PushSubscription
-                {
-                    Id = Guid.NewGuid(),
-                    UserId = userId,
-                    Endpoint = subscriptionDto.Endpoint,
-                    P256dhKey = subscriptionDto.Keys.P256dh,
-                    AuthKey = subscriptionDto.Keys.Auth,
-                    CreatedAt = DateTime.UtcNow,
-                    LastUsedAt = DateTime.UtcNow
-                };
-                _dbContext.PushSubscriptions.Add(subscription);
+                Id = Guid.NewGuid(),
+                UserId = userId,
+                Endpoint = subscriptionDto.Endpoint,
+                P256dhKey = subscriptionDto.Keys.P256dh,
+                AuthKey = subscriptionDto.Keys.Auth,
+                CreatedAt = DateTime.UtcNow,
+                LastUsedAt = DateTime.UtcNow
+            };
+            _dbContext.PushSubscriptions.Add(subscription);
+
+            try
+            {
+                await _dbContext.SaveChangesAsync();
+                _logger.LogInformation("User {UserId} subscribed to push notifications: {Endpoint}", userId, subscriptionDto.Endpoint);
+                return Ok(new { success = true, updated = false });
             }
-
-            await _dbContext.SaveChangesAsync();
-
-            _logger.LogInformation("User {UserId} subscribed to push notifications: {Endpoint}", userId, subscriptionDto.Endpoint);
-            return Ok(new { success = true });
+            catch (DbUpdateException ex) when (ex.InnerException is PostgresException pgEx && pgEx.SqlState == "23505")
+            {
+                // ユニーク制約違反（競合状態で既に登録された場合）
+                _logger.LogWarning("Push subscription already exists (race condition): {Endpoint}", subscriptionDto.Endpoint);
+                return Ok(new { success = true, updated = false, existed = true });
+            }
         }
         catch (Exception ex)
         {
@@ -122,6 +125,25 @@ public class PushController : ControllerBase
         {
             _logger.LogError(ex, "Failed to unsubscribe from push notifications");
             return StatusCode(500, new { error = "Failed to unsubscribe" });
+        }
+    }
+
+    [HttpGet("subscription-status")]
+    public async Task<IActionResult> GetSubscriptionStatus([FromQuery] string endpoint)
+    {
+        try
+        {
+            var userId = CurrentUserId;
+
+            var subscription = await _dbContext.PushSubscriptions
+                .FirstOrDefaultAsync(ps => ps.UserId == userId && ps.Endpoint == endpoint);
+
+            return Ok(new { exists = subscription != null });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to check subscription status");
+            return StatusCode(500, new { error = "Failed to check subscription status" });
         }
     }
 }

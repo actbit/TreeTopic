@@ -559,7 +559,9 @@ namespace TreeTopic.Migrations.Application
 
                     b.HasKey("Id");
 
-                    b.HasIndex("UserId", "Endpoint")
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("TenantId", "UserId", "Endpoint")
                         .IsUnique();
 
                     b.ToTable("PushSubscriptions");
@@ -829,6 +831,50 @@ namespace TreeTopic.Migrations.Application
                     b.HasIndex("SourceMessageId");
 
                     b.ToTable("Topics");
+
+                    b.HasAnnotation("Finbuckle:MultiTenant", true);
+                });
+
+            modelBuilder.Entity("TreeTopic.Models.UserTopic", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool?>("IsAccessible")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("LastAccessAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("LastReadMessageId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("TenantId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<Guid>("TopicId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TopicId");
+
+                    b.HasIndex("UserId", "TopicId")
+                        .IsUnique();
+
+                    b.ToTable("UserTopics");
 
                     b.HasAnnotation("Finbuckle:MultiTenant", true);
                 });
@@ -1138,6 +1184,17 @@ namespace TreeTopic.Migrations.Application
                     b.Navigation("Room");
 
                     b.Navigation("SourceMessage");
+                });
+
+            modelBuilder.Entity("TreeTopic.Models.UserTopic", b =>
+                {
+                    b.HasOne("TreeTopic.Models.Topic", "Topic")
+                        .WithMany()
+                        .HasForeignKey("TopicId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Topic");
                 });
 
             modelBuilder.Entity("TreeTopic.Models.ApplicationRole", b =>

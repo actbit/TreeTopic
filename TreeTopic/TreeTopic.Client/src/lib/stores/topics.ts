@@ -104,10 +104,11 @@ function createTopicsStore() {
           const parentIndex = updatedTopics.findIndex((t) => t.id === topic.parentId);
           if (parentIndex !== -1) {
             const parent = updatedTopics[parentIndex];
-            if (!parent.childIds.includes(topic.id)) {
+            const parentChildIds = parent.childIds ?? [];
+            if (!parentChildIds.includes(topic.id)) {
               updatedTopics[parentIndex] = {
                 ...parent,
-                childIds: [...parent.childIds, topic.id],
+                childIds: [...parentChildIds, topic.id],
                 hasChildren: true,
               };
             }
@@ -125,9 +126,18 @@ function createTopicsStore() {
      */
     updateTopic: (topicId: string, updates: Partial<Topic>) => {
       update((state) => {
-        // Update the specific topic
+        if (!state) return state;
+
+        // Update the specific topic (filter out undefined values from updates)
+        const definedUpdates: Partial<Topic> = {};
+        for (const [key, value] of Object.entries(updates)) {
+          if (value !== undefined) {
+            (definedUpdates as any)[key] = value;
+          }
+        }
+
         const updatedTopics = state.topics.map((t) =>
-          t.id === topicId ? { ...t, ...updates } : t
+          t.id === topicId ? { ...t, ...definedUpdates } : t
         );
 
         // If parent ID changed, update old and new parent's hasChildren flags
@@ -139,7 +149,7 @@ function createTopicsStore() {
             if (oldParentIndex !== -1) {
               const oldParent = updatedTopics[oldParentIndex];
               if (oldParent) {
-                const nextChildIds = (oldParent.childIds || []).filter(id => id !== topicId);
+                const nextChildIds = (oldParent.childIds ?? []).filter(id => id !== topicId);
                 updatedTopics[oldParentIndex] = {
                   ...oldParent,
                   childIds: nextChildIds,
@@ -155,9 +165,10 @@ function createTopicsStore() {
             if (newParentIndex !== -1) {
               const newParent = updatedTopics[newParentIndex];
               if (newParent) {
-                const nextChildIds = (newParent.childIds || []).includes(topicId)
-                  ? newParent.childIds
-                  : [...(newParent.childIds || []), topicId];
+                const parentChildIds = newParent.childIds ?? [];
+                const nextChildIds = parentChildIds.includes(topicId)
+                  ? parentChildIds
+                  : [...parentChildIds, topicId];
                 updatedTopics[newParentIndex] = {
                   ...newParent,
                   childIds: nextChildIds,
@@ -174,8 +185,9 @@ function createTopicsStore() {
           const parentIndex = updatedTopics.findIndex(t => t.id === updatedTopic.parentId);
           if (parentIndex !== -1) {
             const parent = updatedTopics[parentIndex];
+            const parentChildIds = parent.childIds ?? [];
             // 親トピックのhasChildrenがfalseで、子トピックが存在する場合はtrueに設定
-            if (!parent.hasChildren && parent.childIds.length > 0) {
+            if (!parent.hasChildren && parentChildIds.length > 0) {
               updatedTopics[parentIndex] = {
                 ...parent,
                 hasChildren: true,
@@ -189,7 +201,7 @@ function createTopicsStore() {
           topics: updatedTopics,
           selectedTopic:
             state.selectedTopic?.id === topicId
-              ? { ...state.selectedTopic, ...updates }
+              ? { ...state.selectedTopic, ...definedUpdates }
               : state.selectedTopic,
         };
       });
@@ -234,9 +246,10 @@ function createTopicsStore() {
           const newParentIndex = topics.findIndex((t) => t.id === newParentId);
           if (newParentIndex !== -1) {
             const newParent = topics[newParentIndex];
-            const nextChildIds = newParent.childIds?.includes(topicId)
-              ? newParent.childIds
-              : [...(newParent.childIds ?? []), topicId];
+            const parentChildIds = newParent.childIds ?? [];
+            const nextChildIds = parentChildIds.includes(topicId)
+              ? parentChildIds
+              : [...parentChildIds, topicId];
             topics[newParentIndex] = {
               ...newParent,
               childIds: nextChildIds,
@@ -379,10 +392,10 @@ export const topics = createTopicsStore();
 /**
  * Derived stores
  */
-export const topicList = derived(topics, ($topics) => $topics.topics);
+export const topicList = derived(topics, ($topics) => $topics?.topics ?? []);
 export const childTopicsBySourceMessage = derived(topicList, ($topics) => {
   const map = new Map<string, Topic[]>();
-  $topics.forEach((topic) => {
+  ($topics || []).forEach((topic) => {
     if (topic.sourceMessageId) {
       const existing = map.get(topic.sourceMessageId) ?? [];
       existing.push(topic);
@@ -391,22 +404,23 @@ export const childTopicsBySourceMessage = derived(topicList, ($topics) => {
   });
   return map;
 });
-export const selectedTopic = derived(topics, ($topics) => $topics.selectedTopic);
-export const topicsLoading = derived(topics, ($topics) => $topics.isLoading);
-export const topicsError = derived(topics, ($topics) => $topics.error);
-export const expandedTopics = derived(topics, ($topics) => $topics.expandedTopics);
+export const selectedTopic = derived(topics, ($topics) => $topics?.selectedTopic ?? null);
+export const topicsLoading = derived(topics, ($topics) => $topics?.isLoading ?? false);
+export const topicsError = derived(topics, ($topics) => $topics?.error ?? null);
+export const expandedTopics = derived(topics, ($topics) => $topics?.expandedTopics ?? new Set());
 
 /**
  * Get topic by ID
  */
 export const getTopicById = (topicId: string) =>
-  derived(topicList, ($topics) => $topics.find((t) => t.id === topicId));
+  derived(topicList, ($topics) => ($topics || []).find((t) => t?.id === topicId));
 
 /**
  * Build topic tree structure
  */
 export const topicTree = derived([topicList, expandedTopics], ([$topics, $expandedTopics]) => {
   const buildTree = (): TopicTreeNode[] => {
+    if (!$topics || $topics.length === 0) return [];
     const topicMap = new Map($topics.map((t) => [t.id, t]));
     const roots: TopicTreeNode[] = [];
 
@@ -434,7 +448,8 @@ export const topicTree = derived([topicList, expandedTopics], ([$topics, $expand
       };
 
       // Add child topics
-      topic.childIds.forEach((childId) => {
+      const validChildIds = (topic.childIds ?? []).filter((childId) => topicMap.has(childId));
+      validChildIds.forEach((childId) => {
         const childTopic = topicMap.get(childId);
         if (childTopic) {
           const childNode = buildNode(childTopic, level + 1, isProcessed);

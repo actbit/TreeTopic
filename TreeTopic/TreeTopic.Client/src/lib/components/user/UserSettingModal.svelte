@@ -80,9 +80,11 @@
   let applicationIconFile = $state<File | null>(null);
   let applicationPreviewUrl = $state<string | null>(null);
 
-  // ファイル入力の参照
-  let roomFileInput: HTMLInputElement;
-  let applicationFileInput: HTMLInputElement;
+  // ファイル入力の参照（DOM参照のため $state は不要）
+  // svelte-ignore <non_reactive_update>
+  let roomFileInputNode: HTMLInputElement;
+  // svelte-ignore <non_reactive_update>
+  let applicationFileInputNode: HTMLInputElement;
 
   // 元の設定を保存（復元用）
   let originalRoomUser = $state<(CurrentRoomUser & { useMainName: boolean }) | null>(null);
@@ -155,7 +157,7 @@
         originalApplicationUser = JSON.parse(JSON.stringify(userData));
       }
     } catch (err) {
-      error = 'データの読み込みに失敗しました';
+      error = 'Failed to load data';
       console.error(err);
     } finally {
       isLoading = false;
@@ -175,11 +177,11 @@
 
       const updatedRoomUser = await api.put(`/${tenant}/api/RoomUsers/room/${roomId}/me`, roomUser) as typeof roomUser;
 
-      success = '部屋のユーザー設定を保存しました';
+      success = 'Room user settings saved';
       // 元の設定を更新
       originalRoomUser = JSON.parse(JSON.stringify(updatedRoomUser));
     } catch (err) {
-      error = '保存に失敗しました';
+      error = 'Failed to save';
       console.error(err);
     } finally {
       isLoading = false;
@@ -199,12 +201,12 @@
 
       const updatedUser = await api.put(`/${tenant}/api/Users/me`, applicationUser) as typeof applicationUser;
 
-      success = 'ユーザー設定を保存しました';
+      success = 'User settings saved';
       // TODO: 認証ストアを更新
       // 元の設定を更新
       originalApplicationUser = JSON.parse(JSON.stringify(updatedUser));
     } catch (err) {
-      error = '保存に失敗しました';
+      error = 'Failed to save';
       console.error(err);
     } finally {
       isLoading = false;
@@ -234,9 +236,9 @@
         applicationUser.iconFileName = response.iconFileName;
       }
 
-      success = 'アイコンを更新しました';
+      success = 'Icon updated successfully';
     } catch (err) {
-      error = 'アイコンの更新に失敗しました';
+      error = 'Failed to update icon';
       console.error(err);
     } finally {
       isLoading = false;
@@ -266,9 +268,9 @@
         applicationUser.iconFileName = response.iconFileName;
       }
 
-      success = 'アイコンを更新しました';
+      success = 'Icon updated successfully';
     } catch (err) {
-      error = 'アイコンの更新に失敗しました';
+      error = 'Failed to update icon';
       console.error(err);
     } finally {
       isLoading = false;
@@ -311,10 +313,10 @@
       iconFile = null;
       previewUrl = null;
       // ファイル入力をリセット
-      if (roomFileInput) {
-        roomFileInput.value = '';
+      if (roomFileInputNode) {
+        roomFileInputNode.value = '';
       }
-      success = '元の設定に復元しました';
+      success = 'Original settings restored';
       // メッセージを3秒後に消す
       setTimeout(() => { success = ''; }, 3000);
     } else if (activeTab === 'application' && originalApplicationUser) {
@@ -323,10 +325,10 @@
       applicationIconFile = null;
       applicationPreviewUrl = null;
       // ファイル入力をリセット
-      if (applicationFileInput) {
-        applicationFileInput.value = '';
+      if (applicationFileInputNode) {
+        applicationFileInputNode.value = '';
       }
-      success = '元の設定に復元しました';
+      success = 'Original settings restored';
       // メッセージを3秒後に消す
       setTimeout(() => { success = ''; }, 3000);
     }
@@ -345,12 +347,12 @@
   // 現在のタブのコンポーネント
   let currentTabComponent = $derived(activeTab === 'room' ?
     {
-      title: '部屋のユーザー設定',
-      description: 'この部屋での表示名とアイコンを設定します'
+      title: 'Room User Settings',
+      description: 'Set display name and icon for this room'
     } :
     {
-      title: '全般ユーザー設定',
-      description: 'アカウント全般の設定を変更します'
+      title: 'General User Settings',
+      description: 'Change account-wide settings'
     });
 </script>
 
@@ -368,13 +370,13 @@
           class:tab-active={activeTab === 'room'}
           onclick={() => switchTab('room')}
         >
-          部屋のユーザー設定
+          Room User Settings
         </button>
         <button
           class:tab-active={activeTab === 'application'}
           onclick={() => switchTab('application')}
         >
-          全般ユーザー設定
+          General User Settings
         </button>
       </div>
 
@@ -384,26 +386,26 @@
           <!-- RoomUser 設定タブ -->
           <div class="room-user-tab">
             <div class="form-section">
-              <h3>表示名</h3>
+              <h3>Display Name</h3>
               <Input
                 bind:value={roomUser.displayName}
-                placeholder="表示名を入力"
+                placeholder="Enter display name"
                 required
                 disabled={roomUser.useMainName}
               />
-              <p class="help-text">この部屋での表示名です</p>
+              <p class="help-text">This is your display name in this room</p>
             </div>
 
             <div class="form-section">
-              <h3>アイコン</h3>
+              <h3>Icon</h3>
               <div class="icon-upload">
                 <div class="icon-preview">
                   {#if previewUrl}
-                    <img src={previewUrl} alt="プレビュー" />
+                    <img src={previewUrl} alt="Preview" />
                   {:else if roomUser.iconUrl}
-                    <img src={roomUser.iconUrl} alt="現在のアイコン" />
+                    <img src={roomUser.iconUrl} alt="Current icon" />
                   {:else}
-                    <div class="no-icon">アイコンなし</div>
+                    <div class="no-icon">No icon</div>
                   {/if}
                 </div>
                 <div class="icon-upload-controls">
@@ -412,7 +414,7 @@
                     accept="image/*"
                     onchange={handleFileChange}
                     disabled={isLoading || roomUser.useMainIcon}
-                    bind:this={roomFileInput}
+                    bind:this={roomFileInputNode}
                   />
                   {#if iconFile}
                     <Button
@@ -420,7 +422,7 @@
                       onclick={handleIconUpload}
                       disabled={isLoading || roomUser.useMainIcon}
                     >
-                      アイコンを更新
+                      Update Icon
                     </Button>
                   {/if}
                 </div>
@@ -428,21 +430,21 @@
             </div>
 
             <div class="form-section">
-              <h3>設定オプション</h3>
+              <h3>Settings Options</h3>
               <div class="options-list">
                 <label class="checkbox-label">
                   <input
                     type="checkbox"
                     bind:checked={roomUser.useMainName}
                   />
-                  メインの表示名を使用
+                  Use main display name
                 </label>
                 <label class="checkbox-label">
                   <input
                     type="checkbox"
                     bind:checked={roomUser.useMainIcon}
                   />
-                  メインのアイコンを使用
+                  Use main icon
                 </label>
               </div>
             </div>
@@ -455,22 +457,22 @@
               <h3>表示名</h3>
               <Input
                 bind:value={applicationUser.displayName}
-                placeholder="表示名を入力"
+                placeholder="Enter display name"
                 required
               />
-              <p class="help-text">アプリ全体での表示名です</p>
+              <p class="help-text">This is your display name across the entire application</p>
             </div>
 
             <div class="form-section">
-              <h3>アイコン</h3>
+              <h3>Icon</h3>
               <div class="icon-upload">
                 <div class="icon-preview">
                   {#if applicationPreviewUrl}
-                    <img src={applicationPreviewUrl} alt="プレビュー" />
+                    <img src={applicationPreviewUrl} alt="Preview" />
                   {:else if applicationUser.iconUrl}
-                    <img src={applicationUser.iconUrl} alt="現在のアイコン" />
+                    <img src={applicationUser.iconUrl} alt="Current icon" />
                   {:else}
-                    <div class="no-icon">アイコンなし</div>
+                    <div class="no-icon">No icon</div>
                   {/if}
                 </div>
                 <div class="icon-upload-controls">
@@ -479,7 +481,7 @@
                     accept="image/*"
                     onchange={handleApplicationFileChange}
                     disabled={isLoading}
-                    bind:this={applicationFileInput}
+                    bind:this={applicationFileInputNode}
                   />
                   {#if applicationIconFile}
                     <Button
@@ -487,12 +489,12 @@
                       onclick={handleApplicationIconUpload}
                       disabled={isLoading}
                     >
-                      アイコンを更新
+                      Update Icon
                     </Button>
                   {/if}
                 </div>
               </div>
-              <p class="help-text">アプリ全体で使用するアイコンです</p>
+              <p class="help-text">This is your icon across the entire application</p>
             </div>
 
             <div class="form-section">
@@ -525,7 +527,7 @@
               onclick={restoreSettings}
               disabled={isLoading}
             >
-              元の設定に戻す
+              Restore Original Settings
             </Button>
           {/if}
           <Button
@@ -533,7 +535,7 @@
             onclick={saveRoomUserSettings}
             disabled={isLoading}
           >
-            保存
+            Save
           </Button>
         {:else if activeTab === 'application'}
           <!-- 復元ボタン（設定変更がある場合のみ表示） -->
@@ -543,7 +545,7 @@
               onclick={restoreSettings}
               disabled={isLoading}
             >
-              元の設定に戻す
+              Restore Original Settings
             </Button>
           {/if}
           <Button
@@ -551,11 +553,11 @@
             onclick={saveApplicationUserSettings}
             disabled={isLoading}
           >
-            保存
+            Save
           </Button>
         {/if}
         <Button onclick={closeModal} disabled={isLoading}>
-          キャンセル
+          Cancel
         </Button>
       </div>
     </div>

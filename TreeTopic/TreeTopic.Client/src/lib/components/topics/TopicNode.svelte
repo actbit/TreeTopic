@@ -249,80 +249,83 @@
   }
 </script>
 
-<div class="topic-item" style="--topic-level: {level}">
-  <div
-    class="topic-header {selectedTopicId === node.id ? 'topic-header-active' : ''} {isDragOver ? 'topic-header-drop' : ''} {isDraggingSelf ? 'topic-header-dragging' : ''}"
-    onclick={selectTopic}
-    oncontextmenu={handleContextMenu}
-    draggable={true}
-    ondragstart={handleDragStart}
-    ondragend={handleDragEnd}
-    ondragover={handleDragOver}
-    ondragleave={handleDragLeave}
-    ondrop={handleDrop}
-    onkeydown={(e) => {
-      if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault();
-        selectTopic();
-      }
-    }}
-    role="button"
-    tabindex="0"
-  >
-    {#if node.hasChildren}
+<div class="topic-node">
+  <div class="topic-row" style="--indent-level: {level}">
+    <div class="topic-spacer"></div>
+    <div
+      class="topic-header {selectedTopicId === node.id ? 'topic-header-active' : ''} {isDragOver ? 'topic-header-drop' : ''} {isDraggingSelf ? 'topic-header-dragging' : ''}"
+      onclick={selectTopic}
+      oncontextmenu={handleContextMenu}
+      draggable={true}
+      ondragstart={handleDragStart}
+      ondragend={handleDragEnd}
+      ondragover={handleDragOver}
+      ondragleave={handleDragLeave}
+      ondrop={handleDrop}
+      onkeydown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          selectTopic();
+        }
+      }}
+      role="button"
+      tabindex="0"
+    >
+      {#if node.hasChildren}
+        <button
+          onclick={(e) => {
+            e.stopPropagation();
+            toggleExpand();
+          }}
+          class="topic-toggle-button"
+          title={node.isExpanded ? 'Collapse' : 'Expand'}
+          aria-expanded={node.isExpanded}
+        >
+          <span class="toggle-icon {node.isExpanded ? 'toggle-icon-open' : ''}">▶</span>
+        </button>
+      {:else}
+        <div class="toggle-spacer"></div>
+      {/if}
+
+      <div class="topic-content">
+        <div class="text-small">
+          {node.title}
+        </div>
+      </div>
+
+      {#if node.unreadCount > 0}
+        <span class="badge badge-error">
+          {node.unreadCount}
+        </span>
+      {/if}
+
       <button
         onclick={(e) => {
           e.stopPropagation();
-          toggleExpand();
+          openCreateChildTopicModal();
         }}
-        class="topic-toggle-button"
-        title={node.isExpanded ? 'Collapse' : 'Expand'}
-        aria-expanded={node.isExpanded}
+        class="button clickable topic-add-button"
+        title="Add child topic"
       >
-        <span class="toggle-icon {node.isExpanded ? 'toggle-icon-open' : ''}">▶</span>
+        +
       </button>
-    {:else}
-      <div class="toggle-spacer"></div>
-    {/if}
 
-    <div class="topic-content">
-      <div class="text-small">
-        {node.title}
-      </div>
+      <button
+        onclick={(e) => {
+          e.stopPropagation();
+          handleContextMenu(e as unknown as MouseEvent);
+        }}
+        class="button clickable topic-options-button"
+        title="Options"
+      >
+        ⋮
+      </button>
     </div>
-
-    {#if node.unreadCount > 0}
-      <span class="badge badge-error">
-        {node.unreadCount}
-      </span>
-    {/if}
-
-    <button
-      onclick={(e) => {
-        e.stopPropagation();
-        openCreateChildTopicModal();
-      }}
-      class="button clickable topic-add-button"
-      title="Add child topic"
-    >
-      +
-    </button>
-
-    <button
-      onclick={(e) => {
-        e.stopPropagation();
-        handleContextMenu(e as unknown as MouseEvent);
-      }}
-      class="button clickable topic-options-button"
-      title="Options"
-    >
-      ⋮
-    </button>
   </div>
 
   {#if node.isExpanded && node.children.length > 0}
     <div class="topic-children">
-      {#each node.children as childNode (childNode.id)}
+      {#each node.children.filter(c => c?.id) as childNode (childNode.id)}
         <TopicNode node={childNode} level={level + 1} selectedTopicId={selectedTopicId} />
       {/each}
     </div>
@@ -339,16 +342,17 @@
 {/if}
 
 <style>
-  .topic-item {
-    margin: 0;
-    padding: 0;
-    padding-left: calc(var(--topic-level) * 16px);
+  .topic-node {
+    display: contents;
   }
 
-  .topic-children {
-    margin-left: 8px;
-    padding-left: 8px;
-    border-left: 1px solid var(--color-border);
+  .topic-row {
+    display: grid;
+    grid-template-columns: calc(var(--indent-level) * 8px) 1fr;
+  }
+
+  .topic-spacer {
+    flex-shrink: 0;
   }
 
   .topic-header {
@@ -360,7 +364,8 @@
     transition: background-color var(--transition-fast);
     border-radius: var(--border-radius-sm);
     user-select: none;
-    min-width: max-content;
+    width: 180px;  /* 固定幅 */
+    max-width: 180px;
   }
 
   .topic-header:hover {
@@ -453,5 +458,11 @@
   .topic-options-button:hover {
     color: var(--color-primary);
     background-color: var(--color-surface);
+  }
+
+  .topic-children {
+    margin-left: 8px;
+    padding-left: 8px;
+    border-left: 1px solid var(--color-border);
   }
 </style>

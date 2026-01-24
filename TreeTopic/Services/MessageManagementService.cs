@@ -1,26 +1,28 @@
+using Finbuckle.MultiTenant;
+using Finbuckle.MultiTenant.Abstractions;
+using MaskedUUID.AspNetCore.Services;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.SignalR;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using System.Linq;
+using System.Threading;
+using TreeTopic;
+using TreeTopic.Common;
 using TreeTopic.Dtos;
+using TreeTopic.Hubs;
 using TreeTopic.Hubs;
 using TreeTopic.Models;
 using TreeTopic.Repositories;
-using TreeTopic.Common;
-using Microsoft.AspNetCore.Identity;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.AspNetCore.Hosting;
-using Finbuckle.MultiTenant;
-using Finbuckle.MultiTenant.Abstractions;
-using Microsoft.AspNetCore.SignalR;
-using MaskedUUID.AspNetCore.Services;
-using TreeTopic.Hubs;
 using FileModel = TreeTopic.Models.File;
-using TreeTopic;
 
 namespace TreeTopic.Services;
 
 public interface IMessageManagementService
 {
     Task<Result<List<MessageDto>>> GetAllMessagesAsync(CancellationToken cancellationToken = default);
-    Task<Result<List<MessageDto>>> GetMessagesByTopicAsync(Guid topicId, CancellationToken cancellationToken = default);
+    Task<Result<List<MessageDto>>> GetMessagesByTopicAsync(Guid topicId, Guid userId, CancellationToken cancellationToken = default);
     Task<Result<List<MessageDto>>> GetMessagesAfterAsync(Guid topicId, Guid anchorMessageId, int take = 50, CancellationToken cancellationToken = default);
     Task<Result<List<MessageDto>>> GetMessagesBeforeAsync(Guid topicId, Guid anchorMessageId, int take = 50, CancellationToken cancellationToken = default);
     Task<Result<MessageDto>> GetMessageByIdAsync(Guid messageId, CancellationToken cancellationToken = default);
@@ -28,6 +30,7 @@ public interface IMessageManagementService
     Task<Result<MessageDto>> UpdateMessageAsync(Guid messageId, UpdateMessageRequest request, Guid userId, CancellationToken cancellationToken = default);
     Task<Result> DeleteMessageAsync(Guid messageId, Guid userId, CancellationToken cancellationToken = default);
     Task<Result<List<MessageDto>>> MoveMessagesBeforeAsync(Guid sourceTopicId, Guid targetTopicId, Guid anchorMessageId, bool includeAnchorMessage = false, bool includeEarlierMessages = true, CancellationToken cancellationToken = default);
+    Task<Result> MarkTopicAsReadAsync(Guid topicId, Guid userId, CancellationToken cancellationToken = default);
 }
 
 public class MessageManagementService : BaseService, IMessageManagementService
@@ -42,9 +45,11 @@ public class MessageManagementService : BaseService, IMessageManagementService
     private readonly IMultiTenantContextAccessor<ApplicationTenantInfo> _tenantAccessor;
     private readonly IHubContext<MessageHub, IMessageHubClient> _messageHub;
     private readonly IHubContext<RoomTopicHub, IRoomTopicHubClient> _roomTopicHub;
+    private readonly IHubContext<RoomUserSyncHub, IRoomUserSyncHubClient> _roomUserSyncHub;
     private readonly IMaskedUUIDService _maskedUuidService;
     private readonly IPushService _pushService;
     private readonly ApplicationDbContext _dbContext;
+    private readonly IServiceScopeFactory _serviceScopeFactory;
 
     public MessageManagementService(
         IMessageRepository messageRepository,
@@ -57,9 +62,11 @@ public class MessageManagementService : BaseService, IMessageManagementService
         IMultiTenantContextAccessor<ApplicationTenantInfo> tenantAccessor,
         IHubContext<MessageHub, IMessageHubClient> messageHub,
         IHubContext<RoomTopicHub, IRoomTopicHubClient> roomTopicHub,
+        IHubContext<RoomUserSyncHub, IRoomUserSyncHubClient> roomUserSyncHub,
         IMaskedUUIDService maskedUuidService,
         IPushService pushService,
         ApplicationDbContext dbContext,
+        IServiceScopeFactory serviceScopeFactory,
         ILogger<MessageManagementService> logger) : base(logger)
     {
         _messageRepository = messageRepository;
@@ -72,9 +79,11 @@ public class MessageManagementService : BaseService, IMessageManagementService
         _tenantAccessor = tenantAccessor;
         _messageHub = messageHub;
         _roomTopicHub = roomTopicHub;
+        _roomUserSyncHub = roomUserSyncHub;
         _maskedUuidService = maskedUuidService;
         _pushService = pushService;
         _dbContext = dbContext;
+        _serviceScopeFactory = serviceScopeFactory;
     }
 
     private string? CurrentTenantId => _tenantAccessor.MultiTenantContext?.TenantInfo?.Id;
@@ -160,6 +169,43 @@ public class MessageManagementService : BaseService, IMessageManagementService
         return _messageHub.Clients.Group(groupName).MessageDeleted(payload);
     }
 
+    private async Task BroadcastTopicUnreadUpdatedAsync(Guid topicId, Guid userId, CancellationToken cancellationToken = default)
+    {
+        var topic = await _topicRepository.GetByIdAsync(topicId, cancellationToken);
+        if (topic == null) return;
+
+        // ユーザーの未読数を計算
+        var userTopic = await _dbContext.UserTopics
+            .FirstOrDefaultAsync(ut => ut.UserId == userId && ut.TopicId == topicId, cancellationToken);
+        int unreadCount = 0;
+        DateTime? lastReadAt = null;
+
+        if (userTopic != null && userTopic.LastReadMessageId.HasValue)
+        {
+            lastReadAt = userTopic.LastAccessAt;
+            unreadCount = await _dbContext.Messages
+                .CountAsync(m => m.TopicId == topicId && m.Id > userTopic.LastReadMessageId.Value, cancellationToken);
+        }
+        else
+        {
+            unreadCount = await _dbContext.Messages
+                .CountAsync(m => m.TopicId == topicId, cancellationToken);
+        }
+
+        var groupName = RoomUserSyncHubGroups.RoomUser(
+            _maskedUuidService.EncodeSynchronous(topic.RoomId),
+            _maskedUuidService.EncodeSynchronous(userId));
+
+        var payload = new TopicUnreadUpdateEvent(
+            _maskedUuidService.EncodeSynchronous(topic.RoomId),
+            _maskedUuidService.EncodeSynchronous(topicId),
+            unreadCount,
+            lastReadAt);
+
+        Logger.LogInformation("[RoomUserSyncHub] Broadcast TopicUnreadUpdated topic={TopicId} user={UserId} unread={UnreadCount} group={Group}", topicId, userId, unreadCount, groupName);
+        await _roomUserSyncHub.Clients.Group(groupName).TopicUnreadUpdated(payload);
+    }
+
     private TopicDto MapTopicDto(Topic topic)
     {
         var hasChildren = _topicRepository.Query().Any(t => t.ParentId == topic.Id);
@@ -200,6 +246,7 @@ public class MessageManagementService : BaseService, IMessageManagementService
             dto.Description,
             dto.HasChildren,
             maskedSource,
+            dto.UnreadCount,
             dto.CreatedAt,
             dto.UpdatedAt);
     }
@@ -289,7 +336,7 @@ public class MessageManagementService : BaseService, IMessageManagementService
         }, nameof(GetAllMessagesAsync));
     }
 
-    public async Task<Result<List<MessageDto>>> GetMessagesByTopicAsync(Guid topicId, CancellationToken cancellationToken = default)
+    public async Task<Result<List<MessageDto>>> GetMessagesByTopicAsync(Guid topicId, Guid userId, CancellationToken cancellationToken = default)
     {
         return await ExecuteAsync(async () =>
         {
@@ -306,6 +353,17 @@ public class MessageManagementService : BaseService, IMessageManagementService
                 var dto = await MapToDtoAsync(message, cancellationToken);
                 dtos.Add(dto);
             }
+
+            // 最新のメッセージIDでユーザーのLastReadMessageIdを更新
+            if (messages.Count > 0 && userId != Guid.Empty)
+            {
+                var latestMessageId = messages.Max(m => m.Id);
+                await UpdateUserTopicAccessAsync(topicId, userId, latestMessageId, cancellationToken);
+
+                // 未読数更新を通知
+                await BroadcastTopicUnreadUpdatedAsync(topicId, userId, cancellationToken);
+            }
+
             return Result<List<MessageDto>>.Success(dtos);
         }, nameof(GetMessagesByTopicAsync));
     }
@@ -555,18 +613,8 @@ public class MessageManagementService : BaseService, IMessageManagementService
                 Logger.LogError(ex, "Failed to broadcast message created for message {MessageId}", message.Id);
             }
 
-            // プッシュ通知を送信（awaitせずfire-and-forget）
-            _ = Task.Run(async () =>
-            {
-                try
-                {
-                    await SendPushNotificationsAsync(message, roomUser, dto);
-                }
-                catch (Exception ex)
-                {
-                    Logger.LogError(ex, "Failed to send push notifications for message {MessageId}", message.Id);
-                }
-            });
+            // プッシュ通知と未読カウント更新（fire-and-forget）
+            _ = SendPushNotificationsAsync(message, roomUser, dto);
 
             return Result<MessageDto>.Success(dto, 201);
         }, nameof(CreateMessageAsync));
@@ -667,6 +715,31 @@ public class MessageManagementService : BaseService, IMessageManagementService
                 includeEarlierMessages,
                 cancellationToken),
             nameof(MoveMessagesBeforeAsync));
+    }
+
+    public async Task<Result> MarkTopicAsReadAsync(Guid topicId, Guid userId, CancellationToken cancellationToken = default)
+    {
+        return await ExecuteAsync(async () =>
+        {
+            // トピックの最新メッセージIDを取得
+            var latestMessage = await _messageRepository.Query()
+                .Where(m => m.TopicId == topicId)
+                .OrderByDescending(m => m.CreatedAt)
+                .ThenByDescending(m => m.Id)
+                .Select(m => m.Id)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (latestMessage == Guid.Empty)
+                return Result.Success();
+
+            // ユーザーのLastReadMessageIdを更新
+            await UpdateUserTopicAccessAsync(topicId, userId, latestMessage, cancellationToken);
+
+            // 同じRoomの同じユーザーの他デバイスへ未読数更新を通知
+            await BroadcastTopicUnreadUpdatedAsync(topicId, userId, cancellationToken);
+
+            return Result.Success();
+        }, nameof(MarkTopicAsReadAsync));
     }
 
     private async Task<Result<List<MessageDto>>> MoveMessagesBeforeInternalAsync(
@@ -978,68 +1051,165 @@ public class MessageManagementService : BaseService, IMessageManagementService
     /// </summary>
     private async Task SendPushNotificationsAsync(Message message, RoomUser senderRoomUser, MessageDto messageDto)
     {
+        Logger.LogInformation("[SendPushNotificationsAsync] Starting for message {MessageId}", message.Id);
         try
         {
-            // 同じトピックを閲覧可能なユーザーのPushSubscriptionを取得
-            // 今回は簡易実装として、メッセージ送信者以外の全購読者に送信
-            var topic = await _topicRepository.GetByIdAsync(message.TopicId);
-            if (topic == null) return;
-
-            // Roomの全ユーザーを取得（今後はここで閲覧権限チェックを追加）
-            var roomUserIds = await _dbContext.RoomUsers
-                .Where(ru => ru.RoomId == topic.RoomId)
-                .Select(ru => ru.ApplicationUserId)
-                .Distinct()
-                .ToListAsync();
-
-            // メッセージ送信者を除外
-            roomUserIds.Remove(senderRoomUser.ApplicationUserId);
-
-            if (roomUserIds.Count == 0) return;
-
-            // 該当ユーザーのPushSubscriptionを取得
-            var pushSubscriptions = await _dbContext.PushSubscriptions
-                .Where(ps => roomUserIds.Contains(ps.UserId))
-                .ToListAsync();
-
-            foreach (var subscription in pushSubscriptions)
+            // 新しいスコープを作成してDbContextの破棄を防ぐ（すべてのDBアクセスをスコープ内で行う）
+            using (var scope = _serviceScopeFactory.CreateScope())
             {
-                try
-                {
-                    var notification = new PushNotificationRequest
-                    {
-                        Title = $"{RoomUserNameHelper.ResolveDisplayName(senderRoomUser)}: {messageDto.Header?.Truncate(50) ?? "New message"}",
-                        Body = messageDto.Body?.Truncate(200) ?? "",
-                        Icon = "/pwa-192x192.png"
-                    };
+                var topicRepo = scope.ServiceProvider.GetRequiredService<ITopicRepository>();
+                var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+                var pushService = scope.ServiceProvider.GetRequiredService<IPushService>();
 
-                    var subscriptionDto = new PushSubscriptionDto
+                var topic = await topicRepo.GetByIdAsync(message.TopicId);
+                if (topic == null) return;
+
+                // Roomの全ユーザーを取得（今後はここで閲覧権限チェックを追加）
+                var roomUserIds = await dbContext.RoomUsers
+                    .Where(ru => ru.RoomId == topic.RoomId)
+                    .Select(ru => ru.ApplicationUserId)
+                    .Distinct()
+                    .ToListAsync();
+
+                // メッセージ送信者を除外
+                roomUserIds.Remove(senderRoomUser.ApplicationUserId);
+
+                if (roomUserIds.Count == 0) return;
+
+                // 該当ユーザーのPushSubscriptionを取得
+                var pushSubscriptions = await dbContext.PushSubscriptions
+                    .Where(ps => roomUserIds.Contains(ps.UserId))
+                    .ToListAsync();
+
+                // テナント情報を取得
+                var multiTenantContextAccessor = scope.ServiceProvider.GetRequiredService<IMultiTenantContextAccessor<ApplicationTenantInfo>>();
+                var tenantId = multiTenantContextAccessor.MultiTenantContext?.TenantInfo?.Identifier ?? "";
+
+                foreach (var subscription in pushSubscriptions)
+                {
+                    try
                     {
-                        Endpoint = subscription.Endpoint,
-                        Keys = new PushSubscriptionKeys
+                        var notification = new PushNotificationRequest
                         {
-                            P256dh = subscription.P256dhKey,
-                            Auth = subscription.AuthKey
-                        }
-                    };
+                            Title = $"{RoomUserNameHelper.ResolveDisplayName(senderRoomUser)}: {messageDto.Header?.Truncate(50) ?? "New message"}",
+                            Body = messageDto.Body?.Truncate(200) ?? "",
+                            Icon = "/pwa-192x192.png",
+                            Data = System.Text.Json.JsonSerializer.Serialize(new { tenant = tenantId })
+                        };
 
-                    await _pushService.SendNotificationAsync(subscriptionDto, notification);
+                        var subscriptionDto = new PushSubscriptionDto
+                        {
+                            Endpoint = subscription.Endpoint,
+                            Keys = new PushSubscriptionKeys
+                            {
+                                P256dh = subscription.P256dhKey,
+                                Auth = subscription.AuthKey
+                            }
+                        };
 
-                    // LastUsedAtを更新
-                    subscription.LastUsedAt = DateTime.UtcNow;
+                        await pushService.SendNotificationAsync(subscriptionDto, notification);
+
+                        // LastUsedAtを更新
+                        subscription.LastUsedAt = DateTime.UtcNow;
+                    }
+                    catch (TreeTopic.Services.SubscriptionExpiredException)
+                    {
+                        // 購読が無効 - データベースから削除
+                        Logger.LogWarning("Invalid subscription {Endpoint}, removing from database", subscription.Endpoint);
+                        dbContext.PushSubscriptions.Remove(subscription);
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.LogError(ex, "Failed to send push notification to subscription {Endpoint}", subscription.Endpoint);
+                    }
                 }
-                catch (Exception ex)
+
+                await dbContext.SaveChangesAsync();
+
+                // 未読カウントを更新して通知（送信者以外のRoomUsers）
+                var roomUserSyncHub = scope.ServiceProvider.GetRequiredService<IHubContext<RoomUserSyncHub, IRoomUserSyncHubClient>>();
+                var maskedUuidService = scope.ServiceProvider.GetRequiredService<IMaskedUUIDService>();
+
+                var roomUsersForUnread = await dbContext.RoomUsers
+                    .Where(ru => ru.RoomId == topic.RoomId && ru.Id != senderRoomUser.Id)
+                    .ToListAsync();
+
+                foreach (var ru in roomUsersForUnread)
                 {
-                    Logger.LogError(ex, "Failed to send push notification to subscription {Endpoint}", subscription.Endpoint);
+                    try
+                    {
+                        // 未読数を計算
+                        var userTopic = await dbContext.UserTopics
+                            .FirstOrDefaultAsync(ut => ut.UserId == ru.ApplicationUserId && ut.TopicId == message.TopicId);
+                        int unreadCount = 0;
+                        DateTime? lastReadAt = null;
+
+                        if (userTopic != null && userTopic.LastReadMessageId.HasValue)
+                        {
+                            lastReadAt = userTopic.LastAccessAt;
+                            unreadCount = await dbContext.Messages
+                                .CountAsync(m => m.TopicId == message.TopicId && m.Id > userTopic.LastReadMessageId.Value);
+                        }
+                        else
+                        {
+                            unreadCount = await dbContext.Messages
+                                .CountAsync(m => m.TopicId == message.TopicId);
+                        }
+
+                        var groupName = RoomUserSyncHubGroups.RoomUser(
+                            maskedUuidService.EncodeSynchronous(topic.RoomId),
+                            maskedUuidService.EncodeSynchronous(ru.ApplicationUserId));
+
+                        var payload = new TopicUnreadUpdateEvent(
+                            maskedUuidService.EncodeSynchronous(topic.RoomId),
+                            maskedUuidService.EncodeSynchronous(message.TopicId),
+                            unreadCount,
+                            lastReadAt);
+
+                        await roomUserSyncHub.Clients.Group(groupName).TopicUnreadUpdated(payload);
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.LogError(ex, "Failed to broadcast unread update for user {UserId} topic {TopicId}", ru.ApplicationUserId, message.TopicId);
+                    }
                 }
             }
-
-            await _dbContext.SaveChangesAsync();
         }
         catch (Exception ex)
         {
             Logger.LogError(ex, "Failed to send push notifications for message {MessageId}", message.Id);
         }
+    }
+
+    /// <summary>
+    /// ユーザーがトピックにアクセスしたとき、UserTopicを更新
+    /// </summary>
+    private async Task UpdateUserTopicAccessAsync(Guid topicId, Guid userId, Guid? messageId, CancellationToken cancellationToken)
+    {
+        // UserTopicを取得または作成
+        var userTopic = await _dbContext.UserTopics
+            .FirstOrDefaultAsync(ut => ut.UserId == userId && ut.TopicId == topicId, cancellationToken);
+
+        if (userTopic != null)
+        {
+            userTopic.LastReadMessageId = messageId;
+            userTopic.LastAccessAt = DateTime.UtcNow;
+        }
+        else
+        {
+            userTopic = new UserTopic
+            {
+                Id = Guid.NewGuid(),
+                UserId = userId,
+                TopicId = topicId,
+                LastReadMessageId = messageId,
+                LastAccessAt = DateTime.UtcNow,
+                IsAccessible = null
+            };
+            _dbContext.UserTopics.Add(userTopic);
+        }
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
     }
 }
 

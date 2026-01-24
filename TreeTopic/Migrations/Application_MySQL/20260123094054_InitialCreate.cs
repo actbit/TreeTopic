@@ -234,6 +234,36 @@ namespace TreeTopic.Migrations.Application_MySQL
                 .Annotation("MySql:CharSet", "utf8mb4");
 
             migrationBuilder.CreateTable(
+                name: "PushSubscriptions",
+                columns: table => new
+                {
+                    Id = table.Column<byte[]>(type: "BINARY(16)", nullable: false),
+                    UserId = table.Column<byte[]>(type: "BINARY(16)", nullable: false),
+                    Endpoint = table.Column<string>(type: "varchar(255)", nullable: false)
+                        .Annotation("MySql:CharSet", "utf8mb4"),
+                    P256dhKey = table.Column<string>(type: "longtext", nullable: false)
+                        .Annotation("MySql:CharSet", "utf8mb4"),
+                    AuthKey = table.Column<string>(type: "longtext", nullable: false)
+                        .Annotation("MySql:CharSet", "utf8mb4"),
+                    CreatedAt = table.Column<DateTime>(type: "datetime(6)", nullable: false),
+                    LastUsedAt = table.Column<DateTime>(type: "datetime(6)", nullable: true),
+                    UpdatedAt = table.Column<DateTime>(type: "datetime(6)", nullable: false),
+                    TenantId = table.Column<string>(type: "varchar(64)", maxLength: 64, nullable: false)
+                        .Annotation("MySql:CharSet", "utf8mb4")
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_PushSubscriptions", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_PushSubscriptions_AspNetUsers_UserId",
+                        column: x => x.UserId,
+                        principalTable: "AspNetUsers",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                })
+                .Annotation("MySql:CharSet", "utf8mb4");
+
+            migrationBuilder.CreateTable(
                 name: "Rooms",
                 columns: table => new
                 {
@@ -295,40 +325,6 @@ namespace TreeTopic.Migrations.Application_MySQL
                 .Annotation("MySql:CharSet", "utf8mb4");
 
             migrationBuilder.CreateTable(
-                name: "Topics",
-                columns: table => new
-                {
-                    Id = table.Column<byte[]>(type: "BINARY(16)", nullable: false),
-                    RoomId = table.Column<byte[]>(type: "BINARY(16)", nullable: false),
-                    ParentId = table.Column<byte[]>(type: "BINARY(16)", nullable: true),
-                    Title = table.Column<string>(type: "longtext", nullable: false)
-                        .Annotation("MySql:CharSet", "utf8mb4"),
-                    Description = table.Column<string>(type: "longtext", nullable: true)
-                        .Annotation("MySql:CharSet", "utf8mb4"),
-                    CreatedAt = table.Column<DateTime>(type: "datetime(6)", nullable: false),
-                    UpdatedAt = table.Column<DateTime>(type: "datetime(6)", nullable: false),
-                    TenantId = table.Column<string>(type: "varchar(64)", maxLength: 64, nullable: false)
-                        .Annotation("MySql:CharSet", "utf8mb4")
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_Topics", x => x.Id);
-                    table.ForeignKey(
-                        name: "FK_Topics_Rooms_RoomId",
-                        column: x => x.RoomId,
-                        principalTable: "Rooms",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
-                    table.ForeignKey(
-                        name: "FK_Topics_Topics_ParentId",
-                        column: x => x.ParentId,
-                        principalTable: "Topics",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
-                })
-                .Annotation("MySql:CharSet", "utf8mb4");
-
-            migrationBuilder.CreateTable(
                 name: "RoomPermissions",
                 columns: table => new
                 {
@@ -370,53 +366,6 @@ namespace TreeTopic.Migrations.Application_MySQL
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_BrainBoards", x => x.Id);
-                    table.ForeignKey(
-                        name: "FK_BrainBoards_Topics_TopicId",
-                        column: x => x.TopicId,
-                        principalTable: "Topics",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
-                })
-                .Annotation("MySql:CharSet", "utf8mb4");
-
-            migrationBuilder.CreateTable(
-                name: "Messages",
-                columns: table => new
-                {
-                    Id = table.Column<byte[]>(type: "BINARY(16)", nullable: false),
-                    TopicId = table.Column<byte[]>(type: "BINARY(16)", nullable: false),
-                    RoomUserId = table.Column<byte[]>(type: "BINARY(16)", nullable: false),
-                    Header = table.Column<string>(type: "longtext", nullable: false)
-                        .Annotation("MySql:CharSet", "utf8mb4"),
-                    Body = table.Column<string>(type: "longtext", nullable: false)
-                        .Annotation("MySql:CharSet", "utf8mb4"),
-                    ReplyId = table.Column<byte[]>(type: "BINARY(16)", nullable: true),
-                    CreatedAt = table.Column<DateTime>(type: "datetime(6)", nullable: false),
-                    UpdatedAt = table.Column<DateTime>(type: "datetime(6)", nullable: false),
-                    TenantId = table.Column<string>(type: "varchar(64)", maxLength: 64, nullable: false)
-                        .Annotation("MySql:CharSet", "utf8mb4")
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_Messages", x => x.Id);
-                    table.ForeignKey(
-                        name: "FK_Messages_Messages_ReplyId",
-                        column: x => x.ReplyId,
-                        principalTable: "Messages",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.SetNull);
-                    table.ForeignKey(
-                        name: "FK_Messages_RoomUsers_RoomUserId",
-                        column: x => x.RoomUserId,
-                        principalTable: "RoomUsers",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Restrict);
-                    table.ForeignKey(
-                        name: "FK_Messages_Topics_TopicId",
-                        column: x => x.TopicId,
-                        principalTable: "Topics",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
                 })
                 .Annotation("MySql:CharSet", "utf8mb4");
 
@@ -452,49 +401,6 @@ namespace TreeTopic.Migrations.Application_MySQL
                         principalTable: "RoomUsers",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.SetNull);
-                    table.ForeignKey(
-                        name: "FK_BrainIdeas_Topics_TopicId",
-                        column: x => x.TopicId,
-                        principalTable: "Topics",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
-                })
-                .Annotation("MySql:CharSet", "utf8mb4");
-
-            migrationBuilder.CreateTable(
-                name: "Files",
-                columns: table => new
-                {
-                    Id = table.Column<byte[]>(type: "BINARY(16)", nullable: false),
-                    SourceFileId = table.Column<byte[]>(type: "BINARY(16)", nullable: true),
-                    MessageId = table.Column<byte[]>(type: "BINARY(16)", nullable: true),
-                    FileName = table.Column<string>(type: "longtext", nullable: false)
-                        .Annotation("MySql:CharSet", "utf8mb4"),
-                    SaveFileName = table.Column<string>(type: "longtext", nullable: false)
-                        .Annotation("MySql:CharSet", "utf8mb4"),
-                    FileType = table.Column<string>(type: "longtext", nullable: false)
-                        .Annotation("MySql:CharSet", "utf8mb4"),
-                    IsLatast = table.Column<bool>(type: "tinyint(1)", nullable: false),
-                    CreatedAt = table.Column<DateTime>(type: "datetime(6)", nullable: false),
-                    UpdatedAt = table.Column<DateTime>(type: "datetime(6)", nullable: false),
-                    TenantId = table.Column<string>(type: "varchar(64)", maxLength: 64, nullable: false)
-                        .Annotation("MySql:CharSet", "utf8mb4")
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_Files", x => x.Id);
-                    table.ForeignKey(
-                        name: "FK_Files_Files_SourceFileId",
-                        column: x => x.SourceFileId,
-                        principalTable: "Files",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.SetNull);
-                    table.ForeignKey(
-                        name: "FK_Files_Messages_MessageId",
-                        column: x => x.MessageId,
-                        principalTable: "Messages",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.SetNull);
                 })
                 .Annotation("MySql:CharSet", "utf8mb4");
 
@@ -528,6 +434,112 @@ namespace TreeTopic.Migrations.Application_MySQL
                         principalTable: "RoomUsers",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.SetNull);
+                })
+                .Annotation("MySql:CharSet", "utf8mb4");
+
+            migrationBuilder.CreateTable(
+                name: "Files",
+                columns: table => new
+                {
+                    Id = table.Column<byte[]>(type: "BINARY(16)", nullable: false),
+                    SourceFileId = table.Column<byte[]>(type: "BINARY(16)", nullable: true),
+                    MessageId = table.Column<byte[]>(type: "BINARY(16)", nullable: true),
+                    FileName = table.Column<string>(type: "longtext", nullable: false)
+                        .Annotation("MySql:CharSet", "utf8mb4"),
+                    SaveFileName = table.Column<string>(type: "longtext", nullable: false)
+                        .Annotation("MySql:CharSet", "utf8mb4"),
+                    FileType = table.Column<string>(type: "longtext", nullable: false)
+                        .Annotation("MySql:CharSet", "utf8mb4"),
+                    IsLatast = table.Column<bool>(type: "tinyint(1)", nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "datetime(6)", nullable: false),
+                    UpdatedAt = table.Column<DateTime>(type: "datetime(6)", nullable: false),
+                    TenantId = table.Column<string>(type: "varchar(64)", maxLength: 64, nullable: false)
+                        .Annotation("MySql:CharSet", "utf8mb4")
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_Files", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_Files_Files_SourceFileId",
+                        column: x => x.SourceFileId,
+                        principalTable: "Files",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.SetNull);
+                })
+                .Annotation("MySql:CharSet", "utf8mb4");
+
+            migrationBuilder.CreateTable(
+                name: "Messages",
+                columns: table => new
+                {
+                    Id = table.Column<byte[]>(type: "BINARY(16)", nullable: false),
+                    TopicId = table.Column<byte[]>(type: "BINARY(16)", nullable: false),
+                    RoomUserId = table.Column<byte[]>(type: "BINARY(16)", nullable: false),
+                    Header = table.Column<string>(type: "longtext", nullable: true)
+                        .Annotation("MySql:CharSet", "utf8mb4"),
+                    Body = table.Column<string>(type: "longtext", nullable: false)
+                        .Annotation("MySql:CharSet", "utf8mb4"),
+                    ReplyId = table.Column<byte[]>(type: "BINARY(16)", nullable: true),
+                    CreatedAt = table.Column<DateTime>(type: "datetime(6)", nullable: false),
+                    UpdatedAt = table.Column<DateTime>(type: "datetime(6)", nullable: false),
+                    TenantId = table.Column<string>(type: "varchar(64)", maxLength: 64, nullable: false)
+                        .Annotation("MySql:CharSet", "utf8mb4")
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_Messages", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_Messages_Messages_ReplyId",
+                        column: x => x.ReplyId,
+                        principalTable: "Messages",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.SetNull);
+                    table.ForeignKey(
+                        name: "FK_Messages_RoomUsers_RoomUserId",
+                        column: x => x.RoomUserId,
+                        principalTable: "RoomUsers",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Restrict);
+                })
+                .Annotation("MySql:CharSet", "utf8mb4");
+
+            migrationBuilder.CreateTable(
+                name: "Topics",
+                columns: table => new
+                {
+                    Id = table.Column<byte[]>(type: "BINARY(16)", nullable: false),
+                    RoomId = table.Column<byte[]>(type: "BINARY(16)", nullable: false),
+                    ParentId = table.Column<byte[]>(type: "BINARY(16)", nullable: true),
+                    SourceMessageId = table.Column<byte[]>(type: "BINARY(16)", nullable: true),
+                    Title = table.Column<string>(type: "longtext", nullable: false)
+                        .Annotation("MySql:CharSet", "utf8mb4"),
+                    Description = table.Column<string>(type: "longtext", nullable: true)
+                        .Annotation("MySql:CharSet", "utf8mb4"),
+                    CreatedAt = table.Column<DateTime>(type: "datetime(6)", nullable: false),
+                    UpdatedAt = table.Column<DateTime>(type: "datetime(6)", nullable: false),
+                    TenantId = table.Column<string>(type: "varchar(64)", maxLength: 64, nullable: false)
+                        .Annotation("MySql:CharSet", "utf8mb4")
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_Topics", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_Topics_Messages_SourceMessageId",
+                        column: x => x.SourceMessageId,
+                        principalTable: "Messages",
+                        principalColumn: "Id");
+                    table.ForeignKey(
+                        name: "FK_Topics_Rooms_RoomId",
+                        column: x => x.RoomId,
+                        principalTable: "Rooms",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "FK_Topics_Topics_ParentId",
+                        column: x => x.ParentId,
+                        principalTable: "Topics",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
                 })
                 .Annotation("MySql:CharSet", "utf8mb4");
 
@@ -599,6 +611,33 @@ namespace TreeTopic.Migrations.Application_MySQL
                         principalTable: "Topics",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.SetNull);
+                })
+                .Annotation("MySql:CharSet", "utf8mb4");
+
+            migrationBuilder.CreateTable(
+                name: "UserTopics",
+                columns: table => new
+                {
+                    Id = table.Column<byte[]>(type: "BINARY(16)", nullable: false),
+                    UserId = table.Column<byte[]>(type: "BINARY(16)", nullable: false),
+                    TopicId = table.Column<byte[]>(type: "BINARY(16)", nullable: false),
+                    LastReadMessageId = table.Column<byte[]>(type: "BINARY(16)", nullable: true),
+                    LastAccessAt = table.Column<DateTime>(type: "datetime(6)", nullable: true),
+                    IsAccessible = table.Column<bool>(type: "tinyint(1)", nullable: true),
+                    CreatedAt = table.Column<DateTime>(type: "datetime(6)", nullable: false),
+                    UpdatedAt = table.Column<DateTime>(type: "datetime(6)", nullable: false),
+                    TenantId = table.Column<string>(type: "varchar(64)", maxLength: 64, nullable: false)
+                        .Annotation("MySql:CharSet", "utf8mb4")
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_UserTopics", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_UserTopics_Topics_TopicId",
+                        column: x => x.TopicId,
+                        principalTable: "Topics",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
                 })
                 .Annotation("MySql:CharSet", "utf8mb4");
 
@@ -737,6 +776,17 @@ namespace TreeTopic.Migrations.Application_MySQL
                 column: "RoleId");
 
             migrationBuilder.CreateIndex(
+                name: "IX_PushSubscriptions_TenantId_UserId_Endpoint",
+                table: "PushSubscriptions",
+                columns: new[] { "TenantId", "UserId", "Endpoint" },
+                unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_PushSubscriptions_UserId",
+                table: "PushSubscriptions",
+                column: "UserId");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_RoomPermissions_RoomUserId",
                 table: "RoomPermissions",
                 column: "RoomUserId");
@@ -810,11 +860,71 @@ namespace TreeTopic.Migrations.Application_MySQL
                 name: "IX_Topics_RoomId",
                 table: "Topics",
                 column: "RoomId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Topics_SourceMessageId",
+                table: "Topics",
+                column: "SourceMessageId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_UserTopics_TopicId",
+                table: "UserTopics",
+                column: "TopicId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_UserTopics_UserId_TopicId",
+                table: "UserTopics",
+                columns: new[] { "UserId", "TopicId" },
+                unique: true);
+
+            migrationBuilder.AddForeignKey(
+                name: "FK_BrainBoards_Topics_TopicId",
+                table: "BrainBoards",
+                column: "TopicId",
+                principalTable: "Topics",
+                principalColumn: "Id",
+                onDelete: ReferentialAction.Cascade);
+
+            migrationBuilder.AddForeignKey(
+                name: "FK_BrainIdeas_Topics_TopicId",
+                table: "BrainIdeas",
+                column: "TopicId",
+                principalTable: "Topics",
+                principalColumn: "Id",
+                onDelete: ReferentialAction.Cascade);
+
+            migrationBuilder.AddForeignKey(
+                name: "FK_Files_Messages_MessageId",
+                table: "Files",
+                column: "MessageId",
+                principalTable: "Messages",
+                principalColumn: "Id",
+                onDelete: ReferentialAction.SetNull);
+
+            migrationBuilder.AddForeignKey(
+                name: "FK_Messages_Topics_TopicId",
+                table: "Messages",
+                column: "TopicId",
+                principalTable: "Topics",
+                principalColumn: "Id",
+                onDelete: ReferentialAction.Cascade);
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
+            migrationBuilder.DropForeignKey(
+                name: "FK_Rooms_AspNetUsers_CreatedUserId",
+                table: "Rooms");
+
+            migrationBuilder.DropForeignKey(
+                name: "FK_RoomUsers_AspNetUsers_ApplicationUserId",
+                table: "RoomUsers");
+
+            migrationBuilder.DropForeignKey(
+                name: "FK_Messages_Topics_TopicId",
+                table: "Messages");
+
             migrationBuilder.DropTable(
                 name: "AspNetRoleClaims");
 
@@ -837,10 +947,16 @@ namespace TreeTopic.Migrations.Application_MySQL
                 name: "Permissions");
 
             migrationBuilder.DropTable(
+                name: "PushSubscriptions");
+
+            migrationBuilder.DropTable(
                 name: "RoomPermissions");
 
             migrationBuilder.DropTable(
                 name: "ShareItemFiles");
+
+            migrationBuilder.DropTable(
+                name: "UserTopics");
 
             migrationBuilder.DropTable(
                 name: "BrainIdeas");
@@ -858,19 +974,19 @@ namespace TreeTopic.Migrations.Application_MySQL
                 name: "Files");
 
             migrationBuilder.DropTable(
+                name: "AspNetUsers");
+
+            migrationBuilder.DropTable(
+                name: "Topics");
+
+            migrationBuilder.DropTable(
                 name: "Messages");
 
             migrationBuilder.DropTable(
                 name: "RoomUsers");
 
             migrationBuilder.DropTable(
-                name: "Topics");
-
-            migrationBuilder.DropTable(
                 name: "Rooms");
-
-            migrationBuilder.DropTable(
-                name: "AspNetUsers");
         }
     }
 }

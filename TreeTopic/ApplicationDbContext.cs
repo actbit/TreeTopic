@@ -32,6 +32,7 @@ namespace TreeTopic
         public DbSet<ShareItem> ShareItems => Set<ShareItem>();
         public DbSet<ShareItemFile> ShareItemFiles => Set<ShareItemFile>();
         public DbSet<PushSubscription> PushSubscriptions => Set<PushSubscription>();
+        public DbSet<UserTopic> UserTopics => Set<UserTopic>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -209,13 +210,24 @@ namespace TreeTopic
 
             // PushSubscription リレーション
             modelBuilder.Entity<PushSubscription>()
-                .HasIndex(ps => new { ps.UserId, ps.Endpoint })
+                .HasIndex(ps => new { ps.TenantId, ps.UserId, ps.Endpoint })
                 .IsUnique();
 
             modelBuilder.Entity<PushSubscription>()
                 .HasOne<ApplicationUser>()
                 .WithMany()
                 .HasForeignKey(ps => ps.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // UserTopic リレーション
+            modelBuilder.Entity<UserTopic>()
+                .HasIndex(ut => new { ut.UserId, ut.TopicId })
+                .IsUnique();
+
+            modelBuilder.Entity<UserTopic>()
+                .HasOne(ut => ut.Topic)
+                .WithMany()
+                .HasForeignKey(ut => ut.TopicId)
                 .OnDelete(DeleteBehavior.Cascade);
 
             // DB プロバイダーに応じて Guid 型を最適化

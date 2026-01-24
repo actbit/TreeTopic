@@ -100,6 +100,13 @@ function createMessagesStore() {
      */
     addMessage: (message: Message) => {
       update((state) => {
+        // 重複チェック - 同じIDのメッセージが既に存在する場合は追加しない
+        const existingMessage = state.messages.find((m) => m.id === message.id);
+        if (existingMessage) {
+          console.warn(`Message with ID ${message.id} already exists, skipping duplicate`);
+          return state;
+        }
+
         const messagesByTopic = new Map(state.messagesByTopic);
         const topicMessages = messagesByTopic.get(message.topicId) || [];
         messagesByTopic.set(message.topicId, [...topicMessages, message.id]);
@@ -287,7 +294,7 @@ export const messages = createMessagesStore();
 /**
  * Derived stores
  */
-export const messageList = derived(messages, ($messages) => $messages.messages);
+export const messageList = derived(messages, ($messages) => $messages?.messages ?? []);
 export const messagesLoading = derived(messages, ($messages) => $messages.isLoading);
 export const messagesError = derived(messages, ($messages) => $messages.error);
 export const currentTopicId = derived(

@@ -465,7 +465,6 @@ namespace TreeTopic.Migrations.Application_MySQL
                         .HasColumnType("datetime(6)");
 
                     b.Property<string>("Header")
-                        .IsRequired()
                         .HasColumnType("longtext");
 
                     b.Property<byte[]>("ReplyId")
@@ -529,6 +528,54 @@ namespace TreeTopic.Migrations.Application_MySQL
                     b.HasIndex("RoleId");
 
                     b.ToTable("Permissions");
+
+                    b.HasAnnotation("Finbuckle:MultiTenant", true);
+                });
+
+            modelBuilder.Entity("TreeTopic.Models.PushSubscription", b =>
+                {
+                    b.Property<byte[]>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("BINARY(16)");
+
+                    b.Property<string>("AuthKey")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("Endpoint")
+                        .IsRequired()
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<DateTime?>("LastUsedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("P256dhKey")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("TenantId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<byte[]>("UserId")
+                        .IsRequired()
+                        .HasColumnType("BINARY(16)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("TenantId", "UserId", "Endpoint")
+                        .IsUnique();
+
+                    b.ToTable("PushSubscriptions");
 
                     b.HasAnnotation("Finbuckle:MultiTenant", true);
                 });
@@ -780,6 +827,9 @@ namespace TreeTopic.Migrations.Application_MySQL
                         .IsRequired()
                         .HasColumnType("BINARY(16)");
 
+                    b.Property<byte[]>("SourceMessageId")
+                        .HasColumnType("BINARY(16)");
+
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(64)
@@ -798,7 +848,55 @@ namespace TreeTopic.Migrations.Application_MySQL
 
                     b.HasIndex("RoomId");
 
+                    b.HasIndex("SourceMessageId");
+
                     b.ToTable("Topics");
+
+                    b.HasAnnotation("Finbuckle:MultiTenant", true);
+                });
+
+            modelBuilder.Entity("TreeTopic.Models.UserTopic", b =>
+                {
+                    b.Property<byte[]>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("BINARY(16)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<bool?>("IsAccessible")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<DateTime?>("LastAccessAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<byte[]>("LastReadMessageId")
+                        .HasColumnType("BINARY(16)");
+
+                    b.Property<string>("TenantId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<byte[]>("TopicId")
+                        .IsRequired()
+                        .HasColumnType("BINARY(16)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<byte[]>("UserId")
+                        .IsRequired()
+                        .HasColumnType("BINARY(16)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TopicId");
+
+                    b.HasIndex("UserId", "TopicId")
+                        .IsUnique();
+
+                    b.ToTable("UserTopics");
 
                     b.HasAnnotation("Finbuckle:MultiTenant", true);
                 });
@@ -963,6 +1061,15 @@ namespace TreeTopic.Migrations.Application_MySQL
                     b.Navigation("Role");
                 });
 
+            modelBuilder.Entity("TreeTopic.Models.PushSubscription", b =>
+                {
+                    b.HasOne("TreeTopic.Models.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("TreeTopic.Models.Room", b =>
                 {
                     b.HasOne("TreeTopic.Models.ApplicationUser", "CreatedUser")
@@ -1090,9 +1197,26 @@ namespace TreeTopic.Migrations.Application_MySQL
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("TreeTopic.Models.Message", "SourceMessage")
+                        .WithMany()
+                        .HasForeignKey("SourceMessageId");
+
                     b.Navigation("Parent");
 
                     b.Navigation("Room");
+
+                    b.Navigation("SourceMessage");
+                });
+
+            modelBuilder.Entity("TreeTopic.Models.UserTopic", b =>
+                {
+                    b.HasOne("TreeTopic.Models.Topic", "Topic")
+                        .WithMany()
+                        .HasForeignKey("TopicId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Topic");
                 });
 
             modelBuilder.Entity("TreeTopic.Models.ApplicationRole", b =>

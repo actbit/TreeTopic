@@ -1,6 +1,7 @@
 ﻿using Finbuckle.MultiTenant.Abstractions;
 using Finbuckle.MultiTenant;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using TreeTopic.Models;
 
 namespace TreeTopic.Services;
@@ -13,14 +14,17 @@ public class EFCoreMultiTenantStore : IMultiTenantStore<ApplicationTenantInfo>
 {
     private readonly TenantCatalogDbContext _dbContext;
     private readonly ILogger<EFCoreMultiTenantStore> _logger;
-    private readonly Dictionary<string, ApplicationTenantInfo?> _cache = new();
+    private readonly IMemoryCache _cache;
+    private static readonly TimeSpan CacheExpiration = TimeSpan.FromMinutes(5);
 
     public EFCoreMultiTenantStore(
         TenantCatalogDbContext dbContext,
-        ILogger<EFCoreMultiTenantStore> logger)
+        ILogger<EFCoreMultiTenantStore> logger,
+        IMemoryCache cache)
     {
         _dbContext = dbContext;
         _logger = logger;
+        _cache = cache;
     }
 
     public Task<bool> AddAsync(ApplicationTenantInfo tenantInfo)
@@ -53,9 +57,12 @@ public class EFCoreMultiTenantStore : IMultiTenantStore<ApplicationTenantInfo>
     /// </summary>
     public async Task<ApplicationTenantInfo?> TryGetAsync(string identifier)
     {
+        var cacheKey = $"tenant:id:{identifier}";
+
         // キャッシュをチェック
-        if (_cache.TryGetValue($"id:{identifier}", out var cached))
+        if (_cache.TryGetValue<ApplicationTenantInfo?>(cacheKey, out var cached))
         {
+            _logger.LogDebug("Tenant found in cache: {Identifier}", identifier);
             return cached;
         }
 
@@ -68,10 +75,12 @@ public class EFCoreMultiTenantStore : IMultiTenantStore<ApplicationTenantInfo>
             if (tenant == null)
             {
                 _logger.LogDebug("Tenant not found: {Identifier}", identifier);
+                return null;
             }
 
-            // キャッシュに保存
-            _cache[$"id:{identifier}"] = tenant;
+            // キャッシュに保存（5分間）
+            _cache.Set(cacheKey, tenant, CacheExpiration);
+            _logger.LogDebug("Tenant cached: {Identifier}", identifier);
 
             return tenant;
         }
@@ -95,11 +104,27 @@ public class EFCoreMultiTenantStore : IMultiTenantStore<ApplicationTenantInfo>
     /// </summary>
     public async Task<ApplicationTenantInfo?> TryGetByIdAsync(string id)
     {
+        var cacheKey = $"tenant:id-guid:{id}";
+
+        // キャッシュをチェック
+        if (_cache.TryGetValue<ApplicationTenantInfo?>(cacheKey, out var cached))
+        {
+            return cached;
+        }
+
         try
         {
-            return await _dbContext.Tenants
+            var tenant = await _dbContext.Tenants
                 .Include(t => t.Detail)
                 .FirstOrDefaultAsync(t => t.Id == id);
+
+            if (tenant != null)
+            {
+                // キャッシュに保存（5分間）
+                _cache.Set(cacheKey, tenant, CacheExpiration);
+            }
+
+            return tenant;
         }
         catch (Exception ex)
         {
