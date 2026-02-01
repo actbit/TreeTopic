@@ -1436,8 +1436,15 @@
                 <p class="text-sm text-text-light mt-1">{$selectedTopic.description}</p>
               {/if}
             </div>
-            <div class="pt-2 border-t border-border">
+            <div class="pt-2 border-t border-border flex items-center justify-between gap-4">
               <ViewModeSelector />
+              <a
+                href="/{$page.params.tenant}/room/{$page.params.roomId}/topic/{$selectedTopic.id}/settings"
+                class="text-text-light hover:text-primary transition-colors text-sm flex items-center gap-1"
+              >
+                <span>⚙</span>
+                <span>設定</span>
+              </a>
             </div>
           </div>
           <div class="room-messages-container">

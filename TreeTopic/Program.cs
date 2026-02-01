@@ -538,6 +538,14 @@ public class Program
         // パーミッション管理サービスを登録
         builder.Services.AddScoped<PermissionManagementService>();
 
+        // RoomRole/RoomUser管理サービスを登録
+        builder.Services.AddScoped<RoomRoleManager>();
+        builder.Services.AddScoped<RoomUserManager>();
+        builder.Services.AddScoped<RoomRoleManagementService>();
+
+        // Topic権限管理サービスを登録
+        builder.Services.AddScoped<TopicPermissionManager>();
+
         // Room管理サービスを登録
         builder.Services.AddScoped<IRoomManagementService, RoomManagementService>();
 
@@ -669,6 +677,7 @@ public class Program
         builder.Services.AddScoped<IFileRepository, FileRepository>();
         builder.Services.AddScoped<IRoomUserRepository, RoomUserRepository>();
         builder.Services.AddScoped<IRoomPermissionRepository, RoomPermissionRepository>();
+        builder.Services.AddScoped<IRoomRoleRepository, RoomRoleRepository>();
         builder.Services.AddScoped<IBrainBoardRepository, BrainBoardRepository>();
         builder.Services.AddScoped<IBrainIdeaRepository, BrainIdeaRepository>();
         builder.Services.AddScoped<IBrainIdeaVoteRepository, BrainIdeaVoteRepository>();

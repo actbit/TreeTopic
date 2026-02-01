@@ -9,10 +9,10 @@ using TreeTopic.Data;
 
 #nullable disable
 
-namespace TreeTopic.Migrations.Application_MySQL
+namespace TreeTopic.Migrations.Application.MySQL
 {
     [DbContext(typeof(ApplicationDbContextMySQL))]
-    [Migration("20260123094054_InitialCreate")]
+    [Migration("20260201132718_InitialCreate")]
     partial class InitialCreate
     {
         /// <inheritdoc />
@@ -651,6 +651,74 @@ namespace TreeTopic.Migrations.Application_MySQL
                     b.HasAnnotation("Finbuckle:MultiTenant", true);
                 });
 
+            modelBuilder.Entity("TreeTopic.Models.RoomRole", b =>
+                {
+                    b.Property<byte[]>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("BINARY(16)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("int");
+
+                    b.Property<string>("TenantId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("RoomRoles");
+
+                    b.HasAnnotation("Finbuckle:MultiTenant", true);
+                });
+
+            modelBuilder.Entity("TreeTopic.Models.RoomRolePermission", b =>
+                {
+                    b.Property<byte[]>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("BINARY(16)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("PermissionName")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<byte[]>("RoomRoleId")
+                        .IsRequired()
+                        .HasColumnType("BINARY(16)");
+
+                    b.Property<string>("TenantId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RoomRoleId");
+
+                    b.ToTable("RoomRolePermissions");
+
+                    b.HasAnnotation("Finbuckle:MultiTenant", true);
+                });
+
             modelBuilder.Entity("TreeTopic.Models.RoomUser", b =>
                 {
                     b.Property<byte[]>("Id")
@@ -674,6 +742,9 @@ namespace TreeTopic.Migrations.Application_MySQL
                         .IsRequired()
                         .HasColumnType("BINARY(16)");
 
+                    b.Property<byte[]>("RoomRoleId")
+                        .HasColumnType("BINARY(16)");
+
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(64)
@@ -693,6 +764,8 @@ namespace TreeTopic.Migrations.Application_MySQL
                     b.HasIndex("ApplicationUserId");
 
                     b.HasIndex("RoomId");
+
+                    b.HasIndex("RoomRoleId");
 
                     b.ToTable("RoomUsers");
 
@@ -854,6 +927,88 @@ namespace TreeTopic.Migrations.Application_MySQL
                     b.HasIndex("SourceMessageId");
 
                     b.ToTable("Topics");
+
+                    b.HasAnnotation("Finbuckle:MultiTenant", true);
+                });
+
+            modelBuilder.Entity("TreeTopic.Models.TopicRolePermission", b =>
+                {
+                    b.Property<byte[]>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("BINARY(16)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<byte[]>("RoomRoleId")
+                        .IsRequired()
+                        .HasColumnType("BINARY(16)");
+
+                    b.Property<string>("TenantId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<byte[]>("TopicId")
+                        .IsRequired()
+                        .HasColumnType("BINARY(16)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RoomRoleId");
+
+                    b.HasIndex("TopicId", "RoomRoleId", "Name")
+                        .IsUnique();
+
+                    b.ToTable("TopicRolePermissions");
+
+                    b.HasAnnotation("Finbuckle:MultiTenant", true);
+                });
+
+            modelBuilder.Entity("TreeTopic.Models.TopicUserPermission", b =>
+                {
+                    b.Property<byte[]>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("BINARY(16)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<byte[]>("RoomUserId")
+                        .IsRequired()
+                        .HasColumnType("BINARY(16)");
+
+                    b.Property<string>("TenantId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<byte[]>("TopicId")
+                        .IsRequired()
+                        .HasColumnType("BINARY(16)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RoomUserId");
+
+                    b.HasIndex("TopicId", "RoomUserId", "Name")
+                        .IsUnique();
+
+                    b.ToTable("TopicUserPermissions");
 
                     b.HasAnnotation("Finbuckle:MultiTenant", true);
                 });
@@ -1095,6 +1250,17 @@ namespace TreeTopic.Migrations.Application_MySQL
                     b.Navigation("RoomUser");
                 });
 
+            modelBuilder.Entity("TreeTopic.Models.RoomRolePermission", b =>
+                {
+                    b.HasOne("TreeTopic.Models.RoomRole", "RoomRole")
+                        .WithMany("Permissions")
+                        .HasForeignKey("RoomRoleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("RoomRole");
+                });
+
             modelBuilder.Entity("TreeTopic.Models.RoomUser", b =>
                 {
                     b.HasOne("TreeTopic.Models.ApplicationUser", "ApplicationUser")
@@ -1109,9 +1275,16 @@ namespace TreeTopic.Migrations.Application_MySQL
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("TreeTopic.Models.RoomRole", "RoomRole")
+                        .WithMany("RoomUsers")
+                        .HasForeignKey("RoomRoleId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.Navigation("ApplicationUser");
 
                     b.Navigation("Room");
+
+                    b.Navigation("RoomRole");
                 });
 
             modelBuilder.Entity("TreeTopic.Models.ShareItem", b =>
@@ -1211,6 +1384,44 @@ namespace TreeTopic.Migrations.Application_MySQL
                     b.Navigation("SourceMessage");
                 });
 
+            modelBuilder.Entity("TreeTopic.Models.TopicRolePermission", b =>
+                {
+                    b.HasOne("TreeTopic.Models.RoomRole", "RoomRole")
+                        .WithMany("TopicRolePermissions")
+                        .HasForeignKey("RoomRoleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("TreeTopic.Models.Topic", "Topic")
+                        .WithMany("TopicRolePermissions")
+                        .HasForeignKey("TopicId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("RoomRole");
+
+                    b.Navigation("Topic");
+                });
+
+            modelBuilder.Entity("TreeTopic.Models.TopicUserPermission", b =>
+                {
+                    b.HasOne("TreeTopic.Models.RoomUser", "RoomUser")
+                        .WithMany("TopicUserPermissions")
+                        .HasForeignKey("RoomUserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("TreeTopic.Models.Topic", "Topic")
+                        .WithMany("TopicUserPermissions")
+                        .HasForeignKey("TopicId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("RoomUser");
+
+                    b.Navigation("Topic");
+                });
+
             modelBuilder.Entity("TreeTopic.Models.UserTopic", b =>
                 {
                     b.HasOne("TreeTopic.Models.Topic", "Topic")
@@ -1263,9 +1474,20 @@ namespace TreeTopic.Migrations.Application_MySQL
                     b.Navigation("Topics");
                 });
 
+            modelBuilder.Entity("TreeTopic.Models.RoomRole", b =>
+                {
+                    b.Navigation("Permissions");
+
+                    b.Navigation("RoomUsers");
+
+                    b.Navigation("TopicRolePermissions");
+                });
+
             modelBuilder.Entity("TreeTopic.Models.RoomUser", b =>
                 {
                     b.Navigation("RoomPermission");
+
+                    b.Navigation("TopicUserPermissions");
                 });
 
             modelBuilder.Entity("TreeTopic.Models.Topic", b =>
@@ -1277,6 +1499,10 @@ namespace TreeTopic.Migrations.Application_MySQL
                     b.Navigation("ChildTopics");
 
                     b.Navigation("Messages");
+
+                    b.Navigation("TopicRolePermissions");
+
+                    b.Navigation("TopicUserPermissions");
                 });
 #pragma warning restore 612, 618
         }

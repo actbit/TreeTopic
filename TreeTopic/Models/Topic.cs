@@ -27,6 +27,15 @@ namespace TreeTopic.Models
         public List<Topic> ChildTopics { get; set; } = new List<Topic>();
         public List<BrainIdea> BrainIdeas { get; set; } = new List<BrainIdea>();
 
+        /// <summary>
+        /// このトピックのロール権限設定
+        /// </summary>
+        public List<TopicRolePermission> TopicRolePermissions { get; set; } = new();
+
+        /// <summary>
+        /// このトピックのユーザー権限設定
+        /// </summary>
+        public List<TopicUserPermission> TopicUserPermissions { get; set; } = new();
     }
 }
 

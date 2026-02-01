@@ -4,6 +4,8 @@ using MaskedUUID.AspNetCore.Types;
 using TreeTopic.Common;
 using TreeTopic.Dtos;
 using TreeTopic.Services;
+using TreeTopic.Filters;
+using TreeTopic.Permissions;
 using System.Security.Claims;
 
 namespace TreeTopic.Controllers;
@@ -24,6 +26,7 @@ public class RoomController : ControllerBase
     private Guid CurrentUserId => Guid.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? Guid.Empty.ToString());
 
     [HttpGet]
+    [RequirePermission(RoomPermissions.Read)]
     public async Task<IActionResult> GetAll(CancellationToken cancellationToken)
     {
         var result = await _roomManagementService.GetAllRoomsAsync(cancellationToken);
@@ -31,6 +34,7 @@ public class RoomController : ControllerBase
     }
 
     [HttpGet("{roomId}")]
+    [RequirePermission(RoomPermissions.Join)]
     public async Task<IActionResult> GetById([FromRoute] MaskedGuid roomId, CancellationToken cancellationToken)
     {
         var result = await _roomManagementService.GetRoomByIdAsync((Guid)roomId, cancellationToken);
@@ -38,6 +42,7 @@ public class RoomController : ControllerBase
     }
 
     [HttpPost]
+    [RequirePermission(RoomPermissions.Manage)]
     public async Task<IActionResult> Create([FromBody] CreateRoomRequest request, CancellationToken cancellationToken)
     {
         if (!ModelState.IsValid)
@@ -48,6 +53,7 @@ public class RoomController : ControllerBase
     }
 
     [HttpPut("{roomId}")]
+    [RequirePermission(RoomPermissions.Manage)]
     public async Task<IActionResult> Update([FromRoute] MaskedGuid roomId, [FromBody] UpdateRoomRequest request, CancellationToken cancellationToken)
     {
         if (!ModelState.IsValid)
@@ -58,6 +64,7 @@ public class RoomController : ControllerBase
     }
 
     [HttpDelete("{roomId}")]
+    [RequirePermission(RoomPermissions.Manage)]
     public async Task<IActionResult> Delete([FromRoute] MaskedGuid roomId, CancellationToken cancellationToken)
     {
         var result = await _roomManagementService.DeleteRoomAsync((Guid)roomId, cancellationToken);
