@@ -129,7 +129,8 @@ public class AuthController : ControllerBase
 
         var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         MaskedGuid? maskedUserId = null;
-        if (!string.IsNullOrEmpty(userId) && Guid.TryParse(userId, out var userGuid))
+        Guid userGuid = Guid.Empty;
+        if (!string.IsNullOrEmpty(userId) && Guid.TryParse(userId, out userGuid))
         {
             maskedUserId = userGuid;
         }
@@ -141,13 +142,15 @@ public class AuthController : ControllerBase
         string? userName = null;
         string? displayName = null;
         string? iconUrl = null;
-        if (!string.IsNullOrEmpty(userId))
+        if (!string.IsNullOrEmpty(userId) && userGuid != Guid.Empty)
         {
-            var list = _userManager.Users;
             var user = await _userManager.FindByIdAsync(userId);
-            userName = user?.UserName;
-            displayName = user?.DisplayName ?? user?.UserName;
-            iconUrl = _iconService.GetUserIconUrl(user);
+            if (user != null)
+            {
+                userName = user.UserName;
+                displayName = user.DisplayName ?? user.UserName;
+                iconUrl = _iconService.GetUserIconUrl(user);
+            }
         }
 
         return Ok(new

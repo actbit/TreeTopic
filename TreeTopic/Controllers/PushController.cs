@@ -29,7 +29,18 @@ public class PushController : ControllerBase
         _logger = logger;
     }
 
-    private Guid CurrentUserId => Guid.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? Guid.Empty.ToString());
+    private Guid? CurrentUserId
+    {
+        get
+        {
+            var userIdValue = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(userIdValue) || !Guid.TryParse(userIdValue, out var userId))
+            {
+                return null;
+            }
+            return userId;
+        }
+    }
 
     [HttpGet("vapid-public-key")]
     public async Task<IActionResult> GetVapidPublicKey()
@@ -53,10 +64,15 @@ public class PushController : ControllerBase
         try
         {
             var userId = CurrentUserId;
+            if (userId == null || userId == Guid.Empty)
+            {
+                _logger.LogWarning("Subscribe called without valid user ID");
+                return Unauthorized(new { error = "User not authenticated" });
+            }
 
             // 既存の購読を確認（同じEndpointの場合は更新）
             var existing = await _dbContext.PushSubscriptions
-                .FirstOrDefaultAsync(ps => ps.UserId == userId && ps.Endpoint == subscriptionDto.Endpoint);
+                .FirstOrDefaultAsync(ps => ps.UserId == userId.Value && ps.Endpoint == subscriptionDto.Endpoint);
 
             if (existing != null)
             {
@@ -73,7 +89,7 @@ public class PushController : ControllerBase
             var subscription = new PushSubscription
             {
                 Id = Guid.NewGuid(),
-                UserId = userId,
+                UserId = userId.Value,
                 Endpoint = subscriptionDto.Endpoint,
                 P256dhKey = subscriptionDto.Keys.P256dh,
                 AuthKey = subscriptionDto.Keys.Auth,
@@ -108,9 +124,14 @@ public class PushController : ControllerBase
         try
         {
             var userId = CurrentUserId;
+            if (userId == null || userId == Guid.Empty)
+            {
+                _logger.LogWarning("Unsubscribe called without valid user ID");
+                return Unauthorized(new { error = "User not authenticated" });
+            }
 
             var subscription = await _dbContext.PushSubscriptions
-                .FirstOrDefaultAsync(ps => ps.UserId == userId && ps.Endpoint == request.Endpoint);
+                .FirstOrDefaultAsync(ps => ps.UserId == userId.Value && ps.Endpoint == request.Endpoint);
 
             if (subscription != null)
             {
@@ -134,9 +155,14 @@ public class PushController : ControllerBase
         try
         {
             var userId = CurrentUserId;
+            if (userId == null || userId == Guid.Empty)
+            {
+                _logger.LogWarning("GetSubscriptionStatus called without valid user ID");
+                return Unauthorized(new { error = "User not authenticated" });
+            }
 
             var subscription = await _dbContext.PushSubscriptions
-                .FirstOrDefaultAsync(ps => ps.UserId == userId && ps.Endpoint == endpoint);
+                .FirstOrDefaultAsync(ps => ps.UserId == userId.Value && ps.Endpoint == endpoint);
 
             return Ok(new { exists = subscription != null });
         }
