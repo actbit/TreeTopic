@@ -1,7 +1,8 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
-  import { topicList, addTopic, toggleTopicExpansion, setSelectedTopic, createTopicParentId, moveTopicParent, updateTopic } from '$lib/stores/topics';
+  import { onMount } from 'svelte';
+  import { topicList, addTopic, toggleTopicExpansion, setSelectedTopic, createTopicParentId, moveTopicParent, updateTopic, expandedTopics } from '$lib/stores/topics';
   import { currentRoom } from '$lib/stores/rooms';
   import { ui } from '$lib/stores/ui';
   import { api, getCurrentTenant } from '$lib/api/client';
@@ -25,6 +26,7 @@
   let isLoadingChildren = $state(false);
   let isDragOver = $state(false);
   let isDraggingSelf = $state(false);
+  let hasUnreadChildrenState = $state(false);
 
 
   function normalizeTopic(raw: any) {
@@ -100,21 +102,37 @@
     if (newParentId) await refreshHasChildren(newParentId);
   }
 
+  // 指定したトピックIDの子トピックを取得
+  async function fetchChildrenByParentId(parentId: string): Promise<any[]> {
+    const tenant = getCurrentTenant();
+    const response = await api.get<any[]>(`/${tenant}/api/Topic/parent/${parentId}`);
+    const childTopics = Array.isArray(response) ? response.map(normalizeTopic) : [];
+
+    // Add child topics to store if not already present
+    childTopics.forEach((topic) => {
+      if (!$topicList.find((t) => t.id === topic.id)) {
+        addTopic(topic);
+      }
+    });
+
+    return childTopics;
+  }
+
   async function fetchChildTopics() {
     if (!$currentRoom || isLoadingChildren) return;
 
     isLoadingChildren = true;
     try {
-      const tenant = getCurrentTenant();
-      const response = await api.get<any[]>(`/${tenant}/api/Topic/parent/${node.id}`);
-      const childTopics = Array.isArray(response) ? response.map(normalizeTopic) : [];
+      // 子トピックを取得
+      const childTopics = await fetchChildrenByParentId(node.id);
 
-      // Add child topics to store if not already present
-      childTopics.forEach((topic) => {
-        if (!$topicList.find((t) => t.id === topic.id)) {
-          addTopic(topic);
-        }
-      });
+      // 子がいたらhasChildrenをtrueに更新
+      if (childTopics.length > 0) {
+        updateTopic(node.id, { hasChildren: true });
+      }
+
+      // 子トピックの未読状態を更新
+      await checkUnreadChildrenFromBackend();
     } catch (err) {
       console.error('Failed to fetch child topics:', err);
     } finally {
@@ -122,18 +140,34 @@
     }
   }
 
+  // バックエンドから子トピックの未読状態をチェック
+  async function checkUnreadChildrenFromBackend() {
+    if (!node.hasChildren) {
+      hasUnreadChildrenState = false;
+      return;
+    }
+
+    try {
+      const tenant = getCurrentTenant();
+      const response = await api.get<any[]>(`/${tenant}/api/Topic/parent/${node.id}`);
+      const childTopics = Array.isArray(response) ? response : [];
+      hasUnreadChildrenState = childTopics.some(child => (child.unreadCount ?? child.UnreadCount ?? 0) > 0);
+    } catch (err) {
+      console.error('Failed to check unread children:', err);
+      hasUnreadChildrenState = false;
+    }
+  }
+
   async function toggleExpand() {
     if (!node.isExpanded) {
-      // Expanding - load child topics from backend
-      if (node.hasChildren) {
-        await fetchChildTopics();
-      }
+      // Expanding - always load child topics from backend
+      await fetchChildTopics();
     }
 
     toggleTopicExpansion(node.id);
   }
 
-  function selectTopic() {
+  async function selectTopic() {
     if (!$currentRoom) return;
 
     const tenant = ($page.params as any)?.tenant ?? getCurrentTenant();
@@ -141,6 +175,17 @@
 
     // If already selected, keep selection (don't toggle off).
     if (selectedTopicId === node.id) return;
+
+    // 子トピックを持っている場合、子トピックを読み込んでおく
+    if (node.hasChildren) {
+      // topicListから子トピックをチェック
+      const childTopicsInList = $topicList.filter(t => t.parentId === node.id);
+      const needsLoad = childTopicsInList.length === 0 && !isLoadingChildren;
+
+      if (needsLoad) {
+        await fetchChildTopics();
+      }
+    }
 
     goto(`/${tenant}/room/${$currentRoom.id}/topic/${node.id}`, { keepFocus: true, noScroll: true });
   }
@@ -232,6 +277,30 @@
     ui.openModal(modal);
   }
 
+  // コンポーネントマウント時に子トピックの未読状態をチェック
+  onMount(async () => {
+    await checkUnreadChildrenFromBackend();
+  });
+
+  // ノードが展開状態のときに子トピックをロード
+  $effect(() => {
+    if (node.isExpanded && node.hasChildren) {
+      // 子トピックがロードされているかチェック
+      const childTopics = $topicList.filter(t => t.parentId === node.id);
+      if (childTopics.length === 0 && !isLoadingChildren) {
+        // 子トピックをロード（非同期処理はawaitせずに実行）
+        fetchChildTopics();
+      }
+    }
+  });
+
+  // 子トピックが変更されたときに未読状態を更新
+  $effect(() => {
+    if (node.children && node.children.length > 0) {
+      hasUnreadChildrenState = node.children.some(child => child.unreadCount > 0);
+    }
+  });
+
   function getContextMenuItems(): ContextMenuItem[] {
     return [
       {
@@ -296,6 +365,14 @@
       {#if node.unreadCount > 0}
         <span class="badge badge-error">
           {node.unreadCount}
+        </span>
+      {/if}
+
+      {#if node.hasChildren && hasUnreadChildrenState}
+        <span class="child-unread-badge">
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+            <circle cx="12" cy="12" r="8"/>
+          </svg>
         </span>
       {/if}
 
@@ -374,6 +451,25 @@
 
   .topic-header-active {
     background-color: color-mix(in srgb, var(--color-primary) 5%, var(--color-background));
+  }
+
+  .child-unread-badge {
+    background-color: var(--color-warning);
+    color: var(--color-background);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    padding: 2px;
+    min-width: 18px;
+    height: 18px;
+    font-size: 10px;
+    font-weight: bold;
+  }
+
+  .child-unread-badge svg {
+    width: 10px;
+    height: 10px;
   }
 
   .topic-header-drop {

@@ -55,11 +55,22 @@ export interface TopicsState {
  * Create topics store
  */
 function createTopicsStore() {
+  // localStorageからexpandedTopicsを復元
+  let savedExpandedTopics: string[] = [];
+  try {
+    const saved = localStorage.getItem('expanded_topics');
+    if (saved) {
+      savedExpandedTopics = JSON.parse(saved);
+    }
+  } catch (e) {
+    console.error('Failed to load expanded topics from localStorage:', e);
+  }
+
   const { subscribe, set, update } = writable<TopicsState>({
     topics: [],
     selectedTopicId: null,
     selectedTopic: null,
-    expandedTopics: new Set(),
+    expandedTopics: new Set(savedExpandedTopics),
     isLoading: false,
     error: null,
     lastUpdated: null,
@@ -291,6 +302,8 @@ function createTopicsStore() {
         } else {
           expanded.add(topicId);
         }
+        // localStorageに保存
+        localStorage.setItem('expanded_topics', JSON.stringify([...expanded]));
         return { ...state, expandedTopics: expanded };
       });
     },
@@ -447,11 +460,9 @@ export const topicTree = derived([topicList, expandedTopics], ([$topics, $expand
         canManagePermissions: topic.userPermission === 'admin',
       };
 
-      // Add child topics
-      const validChildIds = (topic.childIds ?? []).filter((childId) => topicMap.has(childId));
-      validChildIds.forEach((childId) => {
-        const childTopic = topicMap.get(childId);
-        if (childTopic) {
+      // Add child topics - dynamically find from topicList by parentId
+      $topics.forEach((childTopic) => {
+        if (childTopic.parentId === topic.id) {
           const childNode = buildNode(childTopic, level + 1, isProcessed);
           if (childNode) {
             node.children.push(childNode);

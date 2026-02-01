@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using System.Linq;
+using System.Security.Claims;
 using System.Threading;
 using TreeTopic;
 using TreeTopic.Common;
@@ -23,8 +24,8 @@ public interface IMessageManagementService
 {
     Task<Result<List<MessageDto>>> GetAllMessagesAsync(CancellationToken cancellationToken = default);
     Task<Result<List<MessageDto>>> GetMessagesByTopicAsync(Guid topicId, Guid userId, CancellationToken cancellationToken = default);
-    Task<Result<List<MessageDto>>> GetMessagesAfterAsync(Guid topicId, Guid anchorMessageId, int take = 50, CancellationToken cancellationToken = default);
-    Task<Result<List<MessageDto>>> GetMessagesBeforeAsync(Guid topicId, Guid anchorMessageId, int take = 50, CancellationToken cancellationToken = default);
+    Task<Result<List<MessageDto>>> GetMessagesAfterAsync(Guid topicId, Guid anchorMessageId, Guid userId, int take = 50, CancellationToken cancellationToken = default);
+    Task<Result<List<MessageDto>>> GetMessagesBeforeAsync(Guid topicId, Guid anchorMessageId, Guid userId, int take = 50, CancellationToken cancellationToken = default);
     Task<Result<MessageDto>> GetMessageByIdAsync(Guid messageId, CancellationToken cancellationToken = default);
     Task<Result<MessageDto>> CreateMessageAsync(CreateMessageRequest request, Guid userId, CancellationToken cancellationToken = default);
     Task<Result<MessageDto>> UpdateMessageAsync(Guid messageId, UpdateMessageRequest request, Guid userId, CancellationToken cancellationToken = default);
@@ -371,6 +372,7 @@ public class MessageManagementService : BaseService, IMessageManagementService
     public async Task<Result<List<MessageDto>>> GetMessagesAfterAsync(
         Guid topicId,
         Guid anchorMessageId,
+        Guid userId,
         int take = 50,
         CancellationToken cancellationToken = default)
     {
@@ -415,6 +417,15 @@ public class MessageManagementService : BaseService, IMessageManagementService
                 var dto = await MapToDtoAsync(message, cancellationToken);
                 dtos.Add(dto);
             }
+
+            // 未読更新処理
+            if (messages.Count > 0 && userId != Guid.Empty)
+            {
+                var latestMessageId = messages.Max(m => m.Id);
+                await UpdateUserTopicAccessAsync(topicId, userId, latestMessageId, cancellationToken);
+                await BroadcastTopicUnreadUpdatedAsync(topicId, userId, cancellationToken);
+            }
+
             return Result<List<MessageDto>>.Success(dtos);
         }, nameof(GetMessagesAfterAsync));
     }
@@ -422,6 +433,7 @@ public class MessageManagementService : BaseService, IMessageManagementService
     public async Task<Result<List<MessageDto>>> GetMessagesBeforeAsync(
         Guid topicId,
         Guid anchorMessageId,
+        Guid userId,
         int take = 50,
         CancellationToken cancellationToken = default)
     {
@@ -457,6 +469,15 @@ public class MessageManagementService : BaseService, IMessageManagementService
                 var dto = await MapToDtoAsync(message, cancellationToken);
                 dtos.Add(dto);
             }
+
+            // 未読更新処理
+            if (messages.Count > 0 && userId != Guid.Empty)
+            {
+                var latestMessageId = messages.Max(m => m.Id);
+                await UpdateUserTopicAccessAsync(topicId, userId, latestMessageId, cancellationToken);
+                await BroadcastTopicUnreadUpdatedAsync(topicId, userId, cancellationToken);
+            }
+
             return Result<List<MessageDto>>.Success(dtos);
         }, nameof(GetMessagesBeforeAsync));
     }
@@ -732,8 +753,34 @@ public class MessageManagementService : BaseService, IMessageManagementService
             if (latestMessage == Guid.Empty)
                 return Result.Success();
 
-            // ユーザーのLastReadMessageIdを更新
-            await UpdateUserTopicAccessAsync(topicId, userId, latestMessage, cancellationToken);
+            // 既にユーザーがこのメッセージより新しいものを読んでいる場合は何もしない
+            var existingUserTopic = await _dbContext.UserTopics
+                .FirstOrDefaultAsync(ut => ut.UserId == userId && ut.TopicId == topicId, cancellationToken);
+
+            if (existingUserTopic != null && existingUserTopic.LastReadMessageId >= latestMessage)
+            {
+                Logger.LogInformation("User {UserId} already has topic {TopicId} marked as read (LastReadMessageId: {LastRead} >= Latest: {Latest})",
+                    userId, topicId, existingUserTopic.LastReadMessageId, latestMessage);
+                return Result.Success();
+            }
+
+            using var transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
+            try
+            {
+                // ユーザーのLastReadMessageIdを更新
+                await UpdateUserTopicAccessAsync(topicId, userId, latestMessage, cancellationToken);
+
+                await transaction.CommitAsync(cancellationToken);
+
+                Logger.LogInformation("Successfully marked topic {TopicId} as read for user {UserId} (LastReadMessageId: {Latest})",
+                    topicId, userId, latestMessage);
+            }
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                Logger.LogError(ex, "Failed to mark topic as read for topic {TopicId}, user {UserId}", topicId, userId);
+                throw;
+            }
 
             // 同じRoomの同じユーザーの他デバイスへ未読数更新を通知
             await BroadcastTopicUnreadUpdatedAsync(topicId, userId, cancellationToken);
@@ -1186,30 +1233,41 @@ public class MessageManagementService : BaseService, IMessageManagementService
     /// </summary>
     private async Task UpdateUserTopicAccessAsync(Guid topicId, Guid userId, Guid? messageId, CancellationToken cancellationToken)
     {
-        // UserTopicを取得または作成
-        var userTopic = await _dbContext.UserTopics
-            .FirstOrDefaultAsync(ut => ut.UserId == userId && ut.TopicId == topicId, cancellationToken);
+        using var transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
+        try
+        {
+            // UserTopicを取得（追い出し可能ロックを使用）
+            var userTopic = await _dbContext.UserTopics
+                .FirstOrDefaultAsync(ut => ut.UserId == userId && ut.TopicId == topicId, cancellationToken);
 
-        if (userTopic != null)
-        {
-            userTopic.LastReadMessageId = messageId;
-            userTopic.LastAccessAt = DateTime.UtcNow;
-        }
-        else
-        {
-            userTopic = new UserTopic
+            if (userTopic != null)
             {
-                Id = Guid.NewGuid(),
-                UserId = userId,
-                TopicId = topicId,
-                LastReadMessageId = messageId,
-                LastAccessAt = DateTime.UtcNow,
-                IsAccessible = null
-            };
-            _dbContext.UserTopics.Add(userTopic);
-        }
+                userTopic.LastReadMessageId = messageId;
+                userTopic.LastAccessAt = DateTime.UtcNow;
+            }
+            else
+            {
+                userTopic = new UserTopic
+                {
+                    Id = Guid.NewGuid(),
+                    UserId = userId,
+                    TopicId = topicId,
+                    LastReadMessageId = messageId,
+                    LastAccessAt = DateTime.UtcNow,
+                    IsAccessible = null
+                };
+                _dbContext.UserTopics.Add(userTopic);
+            }
 
-        await _dbContext.SaveChangesAsync(cancellationToken);
+            await _dbContext.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            Logger.LogError(ex, "Failed to update UserTopic access for topic {TopicId}, user {UserId}", topicId, userId);
+            throw;
+        }
     }
 }
 

@@ -44,7 +44,7 @@ public class MessageController : ControllerBase
         [FromQuery] int take = 50,
         CancellationToken cancellationToken = default)
     {
-        var result = await _messageManagementService.GetMessagesAfterAsync((Guid)topicId, (Guid)messageId, take, cancellationToken);
+        var result = await _messageManagementService.GetMessagesAfterAsync((Guid)topicId, (Guid)messageId, CurrentUserId, take, cancellationToken);
         return result.ToApiResult();
     }
 
@@ -55,7 +55,7 @@ public class MessageController : ControllerBase
         [FromQuery] int take = 50,
         CancellationToken cancellationToken = default)
     {
-        var result = await _messageManagementService.GetMessagesBeforeAsync((Guid)topicId, (Guid)messageId, take, cancellationToken);
+        var result = await _messageManagementService.GetMessagesBeforeAsync((Guid)topicId, (Guid)messageId, CurrentUserId, take, cancellationToken);
         return result.ToApiResult();
     }
 

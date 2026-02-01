@@ -18,6 +18,11 @@ public class TopicDto : BaseDto
     public bool HasChildren { get; set; }
 
     /// <summary>
+    /// 子トピックのIDリスト
+    /// </summary>
+    public List<MaskedGuid> ChildIds { get; set; } = new();
+
+    /// <summary>
     /// 未読メッセージ数
     /// </summary>
     public int UnreadCount { get; set; }
@@ -57,4 +62,31 @@ public enum TopicDeleteStrategy
 {
     Cascade = 0,
     ReparentToParent = 1
+}
+
+/// <summary>
+/// 未読数などの統計情報を含むトピックDTO
+/// N+1問題を解決するために使用
+/// </summary>
+public class TopicWithStatsDto : TopicDto
+{
+    /// <summary>
+    /// トピック内の全メッセージ数
+    /// </summary>
+    public int TotalMessageCount { get; set; }
+
+    /// <summary>
+    /// 最終更新日時（メッセージの最新更新日時）
+    /// </summary>
+    public DateTime? LastMessageUpdatedAt { get; set; }
+
+    /// <summary>
+    /// 最終アクセス日時（UserTopicのLastAccessAt）
+    /// </summary>
+    public DateTime? LastAccessAt { get; set; }
+
+    /// <summary>
+    /// このトピックがアクセス可能かどうか
+    /// </summary>
+    public bool? IsAccessible { get; set; }
 }
