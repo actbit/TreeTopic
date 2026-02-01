@@ -11,6 +11,9 @@
   let isOpen = $state(false);
   let { navigateOnSelect = true }: { navigateOnSelect?: boolean } = $props();
 
+  // テナント名を取得
+  let tenantName = $derived($page.params.tenant || 'default');
+
   function openCreateModal() {
     const modal: ModalConfig = {
       id: 'room-create',
@@ -72,14 +75,16 @@
     {#if isOpen}
       <div class="card room-dropdown">
         <div class="panel-header sticky top-0">
-          <Button
-            onclick={openCreateModal}
-            variant="secondary"
-            size="small"
-            fullWidth
-          >
-            + New Room
-          </Button>
+          <div class="flex items-center justify-between">
+            <span class="text-small text-light">テナント: {tenantName}</span>
+            <Button
+              onclick={openCreateModal}
+              variant="secondary"
+              size="small"
+            >
+              + New Room
+            </Button>
+          </div>
         </div>
 
         <div class="list">
@@ -110,16 +115,30 @@
               </div>
 
               {#if room.canEdit}
-                <button
-                  onclick={(e) => openRoomSettings(room.id, e)}
+                <a
+                  href="/{$page.params.tenant}/room/{room.id}/settings"
+                  onclick={(e) => e.stopPropagation()}
                   class="button clickable room-settings-button"
                   title="Room settings"
                 >
                   ⚙
-                </button>
+                </a>
               {/if}
             </div>
           {/each}
+
+          {#if $currentRoom}
+            <div class="border-t border-border mt-2 pt-2">
+              <a
+                href="/{$page.params.tenant}/room/{$currentRoom.id}/settings"
+                class="list-item clickable hoverable flex items-center gap-2"
+                onclick={() => (isOpen = false)}
+              >
+                <span>⚙</span>
+                <span>ルーム設定</span>
+              </a>
+            </div>
+          {/if}
         </div>
       </div>
     {/if}

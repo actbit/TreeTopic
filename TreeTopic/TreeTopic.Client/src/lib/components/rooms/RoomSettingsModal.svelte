@@ -7,6 +7,8 @@
   import { currentRoom, updateRoom, deleteRoom as deleteRoomStore } from '$lib/stores/rooms';
   import { isRequired } from '$lib/utils/validation';
   import { api } from '$lib/api/client';
+  import { goto } from '$app/navigation';
+  import { page } from '$app/stores';
 
   const modalId = 'room-settings';
   let isOpen = $derived.by(() => $activeModals.some((m) => m.id === modalId));
@@ -147,6 +149,16 @@
       >
         Cancel
       </Button>
+    </div>
+
+    <div class="border-t border-border pt-8">
+      <a
+        href="/{$page.params.tenant}/room/{$currentRoom?.id}/settings"
+        class="block w-full text-center px-4 py-3 border border-primary text-primary rounded-lg hover:bg-primary hover:bg-opacity-10 transition-colors font-medium"
+        onclick={() => ui.closeModal(modalId)}
+      >
+        詳細設定（ロール・権限管理）
+      </a>
     </div>
 
     {#if $currentRoom?.canDelete}
