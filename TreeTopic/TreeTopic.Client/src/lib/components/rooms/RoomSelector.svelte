@@ -53,7 +53,7 @@
 
   function openUserSettings(roomId: string, e: Event) {
     e.stopPropagation();
-    modals.open('user-setting', 'ユーザー設定', { roomId });
+    modals.open('user-setting', 'User Settings', { roomId });
   }
 </script>
 
@@ -83,7 +83,7 @@
         </div>
 
         <div class="list">
-          {#each $roomList as room (room.id)}
+          {#each ($roomList || []).filter(r => r?.id) as room (room.id)}
             <div
               class="list-item clickable hoverable"
               role="button"
@@ -125,7 +125,7 @@
     {/if}
   </div>
 
-  <!-- ユーザー設定ボタン -->
+  <!-- User settings button -->
   {#if $currentRoomUser}
     <button
       type="button"

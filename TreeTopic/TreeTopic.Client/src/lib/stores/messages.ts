@@ -1,4 +1,7 @@
 import { writable, derived } from 'svelte/store';
+import { isCacheValid } from '$lib/utils/store';
+
+const MESSAGES_CACHE_TTL = 30 * 1000; // 30 seconds - messages change frequently
 
 /**
  * Message attachment
@@ -51,6 +54,7 @@ export interface MessagesState {
   error: string | null;
   lastUpdated: number | null;
   currentTopicId: string | null;
+  cacheExpiry: number;
 }
 
 /**
@@ -65,6 +69,7 @@ function createMessagesStore() {
     error: null,
     lastUpdated: null,
     currentTopicId: null,
+    cacheExpiry: 0,
   });
 
   return {
@@ -92,6 +97,7 @@ function createMessagesStore() {
           currentTopicId: topicId,
           error: null,
           lastUpdated: Date.now(),
+          cacheExpiry: Date.now() + MESSAGES_CACHE_TTL,
         };
       });
     },
@@ -100,6 +106,13 @@ function createMessagesStore() {
      */
     addMessage: (message: Message) => {
       update((state) => {
+        // 重複チェック - 同じIDのメッセージが既に存在する場合は追加しない
+        const existingMessage = state.messages.find((m) => m.id === message.id);
+        if (existingMessage) {
+          console.warn(`Message with ID ${message.id} already exists, skipping duplicate`);
+          return state;
+        }
+
         const messagesByTopic = new Map(state.messagesByTopic);
         const topicMessages = messagesByTopic.get(message.topicId) || [];
         messagesByTopic.set(message.topicId, [...topicMessages, message.id]);
@@ -277,6 +290,7 @@ function createMessagesStore() {
         error: null,
         lastUpdated: null,
         currentTopicId: null,
+        cacheExpiry: 0,
       });
     },
   };
@@ -287,7 +301,7 @@ export const messages = createMessagesStore();
 /**
  * Derived stores
  */
-export const messageList = derived(messages, ($messages) => $messages.messages);
+export const messageList = derived(messages, ($messages) => $messages?.messages ?? []);
 export const messagesLoading = derived(messages, ($messages) => $messages.isLoading);
 export const messagesError = derived(messages, ($messages) => $messages.error);
 export const currentTopicId = derived(

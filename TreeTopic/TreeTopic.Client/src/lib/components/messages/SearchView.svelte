@@ -12,7 +12,7 @@
 
   let topicMessages = $derived.by(() => {
     if (!$selectedTopic) return [];
-    return $messageList.filter((m) => m.topicId === $selectedTopic.id);
+    return ($messageList || []).filter((m) => m?.id && m.topicId === $selectedTopic.id);
   });
 
   let searchResults = $derived.by(() => {
@@ -104,7 +104,7 @@
       </div>
     {:else}
       <div class="space-y-3">
-        {#each searchResults as message (message.id)}
+        {#each searchResults.filter(m => m?.id) as message (message.id)}
           <div class="space-y-2">
             <div class="text-xs text-text-light">
               {new Date(message.createdAt).toLocaleString()}

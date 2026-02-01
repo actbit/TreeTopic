@@ -128,7 +128,11 @@ public class Program
                 {
                     OnRedirectToLogin = ctx =>
                     {
-                        if (IsApiRequest(ctx.Request))
+                        var isApi = IsApiRequest(ctx.Request);
+                        var logger = ctx.HttpContext.RequestServices.GetRequiredService<ILogger<Program>>();
+                        logger.LogDebug("[OnRedirectToLogin] Path: {Path}, IsApi: {IsApi}", ctx.Request.Path, isApi);
+
+                        if (isApi)
                         {
                             ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
                             return Task.CompletedTask;
@@ -549,6 +553,13 @@ public class Program
         // Brainstorm管理サービスを登録
         builder.Services.AddScoped<IBrainstormManagementService, BrainstormManagementService>();
 
+        // HttpClientを登録
+        builder.Services.AddHttpClient();
+
+        // Push通知サービスを登録（TenantCatalogDbContextを使用するためScoped）
+        builder.Services.AddScoped<IVapidService, VapidService>();
+        builder.Services.AddScoped<IPushService, PushService>();
+
         // メモリキャッシュを登録
         builder.Services.AddMemoryCache();
 
@@ -850,6 +861,7 @@ public class Program
         app.MapControllers();
         app.MapHub<MessageHub>("/{tenant}/hubs/messages").RequireAuthorization();
         app.MapHub<RoomTopicHub>("/{tenant}/hubs/rooms").RequireAuthorization();
+        app.MapHub<RoomUserSyncHub>("/{tenant}/hubs/roomusersync").RequireAuthorization();
 
         // Serve static files (SPA) after API routes
         app.UseDefaultFiles();

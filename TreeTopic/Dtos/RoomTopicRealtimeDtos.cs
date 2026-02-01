@@ -18,6 +18,7 @@ public record TopicRealtimeDto(
     string? Description,
     bool HasChildren,
     string? SourceMessageId,
+    int UnreadCount,
     DateTime CreatedAt,
     DateTime? UpdatedAt);
 

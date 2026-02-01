@@ -13,7 +13,7 @@
   let targetAnchorId = $derived(getMessageAnchorIdFromHash($page.url.hash));
   let topicMessages = $derived(
     $selectedTopic
-      ? $messageList.filter((m) => m.topicId === $selectedTopic.id)
+      ? ($messageList || []).filter((m) => m && typeof m === 'object' && m.id && m.topicId === $selectedTopic.id)
       : []
   );
 
@@ -82,7 +82,7 @@
       </div>
     </div>
   {:else}
-    {#each topicMessages as message (message.id)}
+    {#each topicMessages.filter(m => m?.id) as message (message.id)}
       <MessageItem {message} />
     {/each}
   {/if}

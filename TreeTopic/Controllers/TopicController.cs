@@ -4,6 +4,7 @@ using MaskedUUID.AspNetCore.Types;
 using TreeTopic.Common;
 using TreeTopic.Dtos;
 using TreeTopic.Services;
+using System.Security.Claims;
 
 namespace TreeTopic.Controllers;
 
@@ -19,6 +20,17 @@ public class TopicController : ControllerBase
         _topicManagementService = topicManagementService;
     }
 
+    private Guid? CurrentUserId
+    {
+        get
+        {
+            var userIdStr = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (Guid.TryParse(userIdStr, out var userId))
+                return userId;
+            return null;
+        }
+    }
+
     [HttpGet]
     public async Task<IActionResult> GetAll([FromQuery] MaskedGuid? roomId, CancellationToken cancellationToken)
     {
@@ -27,35 +39,35 @@ public class TopicController : ControllerBase
             return BadRequest(new { message = "roomId is required. Use /{tenant}/api/Topic/room/{roomId} or /{tenant}/api/Topic?roomId=..." });
         }
 
-        var result = await _topicManagementService.GetTopicsByRoomAsync((Guid)roomId.Value, cancellationToken);
+        var result = await _topicManagementService.GetTopicsByRoomAsync((Guid)roomId.Value, CurrentUserId, cancellationToken);
         return result.ToApiResult();
     }
 
     [HttpGet("room/{roomId}")]
     public async Task<IActionResult> GetByRoom([FromRoute] MaskedGuid roomId, CancellationToken cancellationToken)
     {
-        var result = await _topicManagementService.GetTopicsByRoomAsync((Guid)roomId, cancellationToken);
+        var result = await _topicManagementService.GetTopicsByRoomAsync((Guid)roomId, CurrentUserId, cancellationToken);
         return result.ToApiResult();
     }
 
     [HttpGet("room/{roomId}/root")]
     public async Task<IActionResult> GetRootByRoom([FromRoute] MaskedGuid roomId, CancellationToken cancellationToken)
     {
-        var result = await _topicManagementService.GetRootTopicsByRoomAsync((Guid)roomId, cancellationToken);
+        var result = await _topicManagementService.GetRootTopicsByRoomAsync((Guid)roomId, CurrentUserId, cancellationToken);
         return result.ToApiResult();
     }
 
     [HttpGet("parent/{parentId}")]
     public async Task<IActionResult> GetByParent([FromRoute] MaskedGuid parentId, CancellationToken cancellationToken)
     {
-        var result = await _topicManagementService.GetTopicsByParentAsync((Guid)parentId, cancellationToken);
+        var result = await _topicManagementService.GetTopicsByParentAsync((Guid)parentId, CurrentUserId, cancellationToken);
         return result.ToApiResult();
     }
 
     [HttpGet("{topicId}")]
     public async Task<IActionResult> GetById([FromRoute] MaskedGuid topicId, CancellationToken cancellationToken)
     {
-        var result = await _topicManagementService.GetTopicByIdAsync((Guid)topicId, cancellationToken);
+        var result = await _topicManagementService.GetTopicByIdAsync((Guid)topicId, CurrentUserId, cancellationToken);
         return result.ToApiResult();
     }
 
@@ -96,6 +108,77 @@ public class TopicController : ControllerBase
         }
 
         var result = await _topicManagementService.DeleteTopicAsync((Guid)topicId, deleteStrategy, cancellationToken);
+        return result.ToApiResult();
+    }
+
+    /// <summary>
+    /// 複数トピックの統計情報を一括取得（N+1問題を解決）
+    /// </summary>
+    [HttpGet("room/{roomId}/stats")]
+    public async Task<IActionResult> GetTopicsWithStats(
+        [FromRoute] MaskedGuid roomId,
+        CancellationToken cancellationToken)
+    {
+        var userId = CurrentUserId;
+        if (!userId.HasValue)
+            return Unauthorized();
+
+        var result = await _topicManagementService.GetTopicsWithStatsAsync((Guid)roomId, userId.Value, cancellationToken);
+        return result.ToApiResult();
+    }
+
+    /// <summary>
+    /// 単一トピックの統計情報を取得（N+1問題を解決）
+    /// </summary>
+    [HttpGet("{topicId}/stats")]
+    public async Task<IActionResult> GetTopicWithStats(
+        [FromRoute] MaskedGuid topicId,
+        CancellationToken cancellationToken)
+    {
+        var userId = CurrentUserId;
+        if (!userId.HasValue)
+            return Unauthorized();
+
+        var result = await _topicManagementService.GetTopicWithStatsByIdAsync((Guid)topicId, userId.Value, cancellationToken);
+        return result.ToApiResult();
+    }
+
+    /// <summary>
+    /// ルームのルートトピックに未読カウントを含めて取得（N+1問題を解決）
+    /// </summary>
+    [HttpGet("room/{roomId}/root-with-unread")]
+    public async Task<IActionResult> GetRootTopicsWithUnread(
+        [FromRoute] MaskedGuid roomId,
+        CancellationToken cancellationToken)
+    {
+        Console.WriteLine($"[TopicController] GetRootTopicsWithUnread START - roomId: {roomId}");
+        var userId = CurrentUserId;
+        Console.WriteLine($"[TopicController] GetRootTopicsWithUnread - userId: {userId}");
+
+        if (!userId.HasValue)
+        {
+            Console.WriteLine($"[TopicController] GetRootTopicsWithUnread - userId is null, returning Unauthorized");
+            return Unauthorized();
+        }
+
+        var result = await _topicManagementService.GetRootTopicsWithUnreadAsync((Guid)roomId, userId.Value, cancellationToken);
+        Console.WriteLine($"[TopicController] GetRootTopicsWithUnread END - result: {result.IsSuccess}, count: {result.Data?.Count ?? 0}");
+        return result.ToApiResult();
+    }
+
+    /// <summary>
+    /// ルーム内の全トピックを未読カウント付きで一括取得（N+1問題を解決）
+    /// </summary>
+    [HttpGet("room/{roomId}/all-with-unread")]
+    public async Task<IActionResult> GetAllTopicsWithUnread(
+        [FromRoute] MaskedGuid roomId,
+        CancellationToken cancellationToken)
+    {
+        var userId = CurrentUserId;
+        if (!userId.HasValue)
+            return Unauthorized();
+
+        var result = await _topicManagementService.GetAllTopicsWithUnreadAsync((Guid)roomId, userId.Value, cancellationToken);
         return result.ToApiResult();
     }
 

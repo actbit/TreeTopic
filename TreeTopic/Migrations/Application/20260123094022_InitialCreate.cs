@@ -190,6 +190,31 @@ namespace TreeTopic.Migrations.Application
                 });
 
             migrationBuilder.CreateTable(
+                name: "PushSubscriptions",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    UserId = table.Column<Guid>(type: "uuid", nullable: false),
+                    Endpoint = table.Column<string>(type: "text", nullable: false),
+                    P256dhKey = table.Column<string>(type: "text", nullable: false),
+                    AuthKey = table.Column<string>(type: "text", nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    LastUsedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    UpdatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    TenantId = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_PushSubscriptions", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_PushSubscriptions_AspNetUsers_UserId",
+                        column: x => x.UserId,
+                        principalTable: "AspNetUsers",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
                 name: "Rooms",
                 columns: table => new
                 {
@@ -244,36 +269,6 @@ namespace TreeTopic.Migrations.Application
                 });
 
             migrationBuilder.CreateTable(
-                name: "Topics",
-                columns: table => new
-                {
-                    Id = table.Column<Guid>(type: "uuid", nullable: false),
-                    RoomId = table.Column<Guid>(type: "uuid", nullable: false),
-                    ParentId = table.Column<Guid>(type: "uuid", nullable: true),
-                    Title = table.Column<string>(type: "text", nullable: false),
-                    Description = table.Column<string>(type: "text", nullable: true),
-                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    UpdatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    TenantId = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_Topics", x => x.Id);
-                    table.ForeignKey(
-                        name: "FK_Topics_Rooms_RoomId",
-                        column: x => x.RoomId,
-                        principalTable: "Rooms",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
-                    table.ForeignKey(
-                        name: "FK_Topics_Topics_ParentId",
-                        column: x => x.ParentId,
-                        principalTable: "Topics",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
-                });
-
-            migrationBuilder.CreateTable(
                 name: "RoomPermissions",
                 columns: table => new
                 {
@@ -310,49 +305,6 @@ namespace TreeTopic.Migrations.Application
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_BrainBoards", x => x.Id);
-                    table.ForeignKey(
-                        name: "FK_BrainBoards_Topics_TopicId",
-                        column: x => x.TopicId,
-                        principalTable: "Topics",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
-                });
-
-            migrationBuilder.CreateTable(
-                name: "Messages",
-                columns: table => new
-                {
-                    Id = table.Column<Guid>(type: "uuid", nullable: false),
-                    TopicId = table.Column<Guid>(type: "uuid", nullable: false),
-                    RoomUserId = table.Column<Guid>(type: "uuid", nullable: false),
-                    Header = table.Column<string>(type: "text", nullable: false),
-                    Body = table.Column<string>(type: "text", nullable: false),
-                    ReplyId = table.Column<Guid>(type: "uuid", nullable: true),
-                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    UpdatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    TenantId = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_Messages", x => x.Id);
-                    table.ForeignKey(
-                        name: "FK_Messages_Messages_ReplyId",
-                        column: x => x.ReplyId,
-                        principalTable: "Messages",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.SetNull);
-                    table.ForeignKey(
-                        name: "FK_Messages_RoomUsers_RoomUserId",
-                        column: x => x.RoomUserId,
-                        principalTable: "RoomUsers",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Restrict);
-                    table.ForeignKey(
-                        name: "FK_Messages_Topics_TopicId",
-                        column: x => x.TopicId,
-                        principalTable: "Topics",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
                 });
 
             migrationBuilder.CreateTable(
@@ -385,44 +337,6 @@ namespace TreeTopic.Migrations.Application
                         principalTable: "RoomUsers",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.SetNull);
-                    table.ForeignKey(
-                        name: "FK_BrainIdeas_Topics_TopicId",
-                        column: x => x.TopicId,
-                        principalTable: "Topics",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
-                });
-
-            migrationBuilder.CreateTable(
-                name: "Files",
-                columns: table => new
-                {
-                    Id = table.Column<Guid>(type: "uuid", nullable: false),
-                    SourceFileId = table.Column<Guid>(type: "uuid", nullable: true),
-                    MessageId = table.Column<Guid>(type: "uuid", nullable: true),
-                    FileName = table.Column<string>(type: "text", nullable: false),
-                    SaveFileName = table.Column<string>(type: "text", nullable: false),
-                    FileType = table.Column<string>(type: "text", nullable: false),
-                    IsLatast = table.Column<bool>(type: "boolean", nullable: false),
-                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    UpdatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    TenantId = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_Files", x => x.Id);
-                    table.ForeignKey(
-                        name: "FK_Files_Files_SourceFileId",
-                        column: x => x.SourceFileId,
-                        principalTable: "Files",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.SetNull);
-                    table.ForeignKey(
-                        name: "FK_Files_Messages_MessageId",
-                        column: x => x.MessageId,
-                        principalTable: "Messages",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.SetNull);
                 });
 
             migrationBuilder.CreateTable(
@@ -453,6 +367,99 @@ namespace TreeTopic.Migrations.Application
                         principalTable: "RoomUsers",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.SetNull);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "Files",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    SourceFileId = table.Column<Guid>(type: "uuid", nullable: true),
+                    MessageId = table.Column<Guid>(type: "uuid", nullable: true),
+                    FileName = table.Column<string>(type: "text", nullable: false),
+                    SaveFileName = table.Column<string>(type: "text", nullable: false),
+                    FileType = table.Column<string>(type: "text", nullable: false),
+                    IsLatast = table.Column<bool>(type: "boolean", nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    UpdatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    TenantId = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_Files", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_Files_Files_SourceFileId",
+                        column: x => x.SourceFileId,
+                        principalTable: "Files",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.SetNull);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "Messages",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    TopicId = table.Column<Guid>(type: "uuid", nullable: false),
+                    RoomUserId = table.Column<Guid>(type: "uuid", nullable: false),
+                    Header = table.Column<string>(type: "text", nullable: true),
+                    Body = table.Column<string>(type: "text", nullable: false),
+                    ReplyId = table.Column<Guid>(type: "uuid", nullable: true),
+                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    UpdatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    TenantId = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_Messages", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_Messages_Messages_ReplyId",
+                        column: x => x.ReplyId,
+                        principalTable: "Messages",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.SetNull);
+                    table.ForeignKey(
+                        name: "FK_Messages_RoomUsers_RoomUserId",
+                        column: x => x.RoomUserId,
+                        principalTable: "RoomUsers",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Restrict);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "Topics",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    RoomId = table.Column<Guid>(type: "uuid", nullable: false),
+                    ParentId = table.Column<Guid>(type: "uuid", nullable: true),
+                    SourceMessageId = table.Column<Guid>(type: "uuid", nullable: true),
+                    Title = table.Column<string>(type: "text", nullable: false),
+                    Description = table.Column<string>(type: "text", nullable: true),
+                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    UpdatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    TenantId = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_Topics", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_Topics_Messages_SourceMessageId",
+                        column: x => x.SourceMessageId,
+                        principalTable: "Messages",
+                        principalColumn: "Id");
+                    table.ForeignKey(
+                        name: "FK_Topics_Rooms_RoomId",
+                        column: x => x.RoomId,
+                        principalTable: "Rooms",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "FK_Topics_Topics_ParentId",
+                        column: x => x.ParentId,
+                        principalTable: "Topics",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
                 });
 
             migrationBuilder.CreateTable(
@@ -519,6 +526,31 @@ namespace TreeTopic.Migrations.Application
                         principalTable: "Topics",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.SetNull);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "UserTopics",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    UserId = table.Column<Guid>(type: "uuid", nullable: false),
+                    TopicId = table.Column<Guid>(type: "uuid", nullable: false),
+                    LastReadMessageId = table.Column<Guid>(type: "uuid", nullable: true),
+                    LastAccessAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    IsAccessible = table.Column<bool>(type: "boolean", nullable: true),
+                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    UpdatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    TenantId = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_UserTopics", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_UserTopics_Topics_TopicId",
+                        column: x => x.TopicId,
+                        principalTable: "Topics",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
                 });
 
             migrationBuilder.CreateTable(
@@ -654,6 +686,17 @@ namespace TreeTopic.Migrations.Application
                 column: "RoleId");
 
             migrationBuilder.CreateIndex(
+                name: "IX_PushSubscriptions_TenantId_UserId_Endpoint",
+                table: "PushSubscriptions",
+                columns: new[] { "TenantId", "UserId", "Endpoint" },
+                unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_PushSubscriptions_UserId",
+                table: "PushSubscriptions",
+                column: "UserId");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_RoomPermissions_RoomUserId",
                 table: "RoomPermissions",
                 column: "RoomUserId");
@@ -727,11 +770,71 @@ namespace TreeTopic.Migrations.Application
                 name: "IX_Topics_RoomId",
                 table: "Topics",
                 column: "RoomId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Topics_SourceMessageId",
+                table: "Topics",
+                column: "SourceMessageId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_UserTopics_TopicId",
+                table: "UserTopics",
+                column: "TopicId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_UserTopics_UserId_TopicId",
+                table: "UserTopics",
+                columns: new[] { "UserId", "TopicId" },
+                unique: true);
+
+            migrationBuilder.AddForeignKey(
+                name: "FK_BrainBoards_Topics_TopicId",
+                table: "BrainBoards",
+                column: "TopicId",
+                principalTable: "Topics",
+                principalColumn: "Id",
+                onDelete: ReferentialAction.Cascade);
+
+            migrationBuilder.AddForeignKey(
+                name: "FK_BrainIdeas_Topics_TopicId",
+                table: "BrainIdeas",
+                column: "TopicId",
+                principalTable: "Topics",
+                principalColumn: "Id",
+                onDelete: ReferentialAction.Cascade);
+
+            migrationBuilder.AddForeignKey(
+                name: "FK_Files_Messages_MessageId",
+                table: "Files",
+                column: "MessageId",
+                principalTable: "Messages",
+                principalColumn: "Id",
+                onDelete: ReferentialAction.SetNull);
+
+            migrationBuilder.AddForeignKey(
+                name: "FK_Messages_Topics_TopicId",
+                table: "Messages",
+                column: "TopicId",
+                principalTable: "Topics",
+                principalColumn: "Id",
+                onDelete: ReferentialAction.Cascade);
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
+            migrationBuilder.DropForeignKey(
+                name: "FK_Rooms_AspNetUsers_CreatedUserId",
+                table: "Rooms");
+
+            migrationBuilder.DropForeignKey(
+                name: "FK_RoomUsers_AspNetUsers_ApplicationUserId",
+                table: "RoomUsers");
+
+            migrationBuilder.DropForeignKey(
+                name: "FK_Messages_Topics_TopicId",
+                table: "Messages");
+
             migrationBuilder.DropTable(
                 name: "AspNetRoleClaims");
 
@@ -754,10 +857,16 @@ namespace TreeTopic.Migrations.Application
                 name: "Permissions");
 
             migrationBuilder.DropTable(
+                name: "PushSubscriptions");
+
+            migrationBuilder.DropTable(
                 name: "RoomPermissions");
 
             migrationBuilder.DropTable(
                 name: "ShareItemFiles");
+
+            migrationBuilder.DropTable(
+                name: "UserTopics");
 
             migrationBuilder.DropTable(
                 name: "BrainIdeas");
@@ -775,19 +884,19 @@ namespace TreeTopic.Migrations.Application
                 name: "Files");
 
             migrationBuilder.DropTable(
+                name: "AspNetUsers");
+
+            migrationBuilder.DropTable(
+                name: "Topics");
+
+            migrationBuilder.DropTable(
                 name: "Messages");
 
             migrationBuilder.DropTable(
                 name: "RoomUsers");
 
             migrationBuilder.DropTable(
-                name: "Topics");
-
-            migrationBuilder.DropTable(
                 name: "Rooms");
-
-            migrationBuilder.DropTable(
-                name: "AspNetUsers");
         }
     }
 }

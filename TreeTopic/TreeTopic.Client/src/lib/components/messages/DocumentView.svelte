@@ -13,7 +13,7 @@
 
   let topicMessages = $derived.by(() => {
     if (!$selectedTopic) return [];
-    return $messageList.filter((m) => m.topicId === $selectedTopic.id);
+    return ($messageList || []).filter((m) => m?.id && m.topicId === $selectedTopic.id);
   });
 
   let messagesWithDocuments = $derived.by(() => {
@@ -118,7 +118,7 @@
       </div>
 
       <div class="flex-1 overflow-y-auto p-4 space-y-3">
-        {#each filteredMessages as message (message.id)}
+        {#each filteredMessages.filter(m => m?.id) as message (message.id)}
           <MessageItem {message} />
         {/each}
       </div>
