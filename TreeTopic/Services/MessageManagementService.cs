@@ -31,7 +31,7 @@ public interface IMessageManagementService
     Task<Result<MessageDto>> UpdateMessageAsync(Guid messageId, UpdateMessageRequest request, Guid userId, CancellationToken cancellationToken = default);
     Task<Result> DeleteMessageAsync(Guid messageId, Guid userId, CancellationToken cancellationToken = default);
     Task<Result<List<MessageDto>>> MoveMessagesBeforeAsync(Guid sourceTopicId, Guid targetTopicId, Guid anchorMessageId, bool includeAnchorMessage = false, bool includeEarlierMessages = true, CancellationToken cancellationToken = default);
-    Task<Result> MarkTopicAsReadAsync(Guid topicId, Guid userId, CancellationToken cancellationToken = default);
+    Task<Result<int>> MarkTopicAsReadAsync(Guid topicId, Guid userId, CancellationToken cancellationToken = default);
 }
 
 public class MessageManagementService : BaseService, IMessageManagementService
@@ -738,7 +738,7 @@ public class MessageManagementService : BaseService, IMessageManagementService
             nameof(MoveMessagesBeforeAsync));
     }
 
-    public async Task<Result> MarkTopicAsReadAsync(Guid topicId, Guid userId, CancellationToken cancellationToken = default)
+    public async Task<Result<int>> MarkTopicAsReadAsync(Guid topicId, Guid userId, CancellationToken cancellationToken = default)
     {
         return await ExecuteAsync(async () =>
         {
@@ -751,41 +751,33 @@ public class MessageManagementService : BaseService, IMessageManagementService
                 .FirstOrDefaultAsync(cancellationToken);
 
             if (latestMessage == Guid.Empty)
-                return Result.Success();
+                return Result<int>.Success(0);
 
-            // 既にユーザーがこのメッセージより新しいものを読んでいる場合は何もしない
+            // 既にユーザーがこのメッセージより新しいものを読んでいる場合は未読数を返す
             var existingUserTopic = await _dbContext.UserTopics
                 .FirstOrDefaultAsync(ut => ut.UserId == userId && ut.TopicId == topicId, cancellationToken);
 
             if (existingUserTopic != null && existingUserTopic.LastReadMessageId >= latestMessage)
             {
-                Logger.LogInformation("User {UserId} already has topic {TopicId} marked as read (LastReadMessageId: {LastRead} >= Latest: {Latest})",
-                    userId, topicId, existingUserTopic.LastReadMessageId, latestMessage);
-                return Result.Success();
+                // 未読数を計算
+                var unreadCount = await _dbContext.Messages
+                    .CountAsync(m => m.TopicId == topicId && m.Id > existingUserTopic.LastReadMessageId, cancellationToken);
+                Logger.LogInformation("User {UserId} already has topic {TopicId} marked as read (LastReadMessageId: {LastRead} >= Latest: {Latest}), unread: {Unread}",
+                    userId, topicId, existingUserTopic.LastReadMessageId, latestMessage, unreadCount);
+                return Result<int>.Success(unreadCount);
             }
 
-            using var transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
-            try
-            {
-                // ユーザーのLastReadMessageIdを更新
-                await UpdateUserTopicAccessAsync(topicId, userId, latestMessage, cancellationToken);
+            // ユーザーのLastReadMessageIdを更新（内部でトランザクションを使用）
+            await UpdateUserTopicAccessAsync(topicId, userId, latestMessage, cancellationToken);
 
-                await transaction.CommitAsync(cancellationToken);
-
-                Logger.LogInformation("Successfully marked topic {TopicId} as read for user {UserId} (LastReadMessageId: {Latest})",
-                    topicId, userId, latestMessage);
-            }
-            catch (Exception ex)
-            {
-                await transaction.RollbackAsync(cancellationToken);
-                Logger.LogError(ex, "Failed to mark topic as read for topic {TopicId}, user {UserId}", topicId, userId);
-                throw;
-            }
+            Logger.LogInformation("Successfully marked topic {TopicId} as read for user {UserId} (LastReadMessageId: {Latest})",
+                topicId, userId, latestMessage);
 
             // 同じRoomの同じユーザーの他デバイスへ未読数更新を通知
             await BroadcastTopicUnreadUpdatedAsync(topicId, userId, cancellationToken);
 
-            return Result.Success();
+            // 既読にしたので未読数は0
+            return Result<int>.Success(0);
         }, nameof(MarkTopicAsReadAsync));
     }
 

@@ -151,11 +151,34 @@ public class TopicController : ControllerBase
         [FromRoute] MaskedGuid roomId,
         CancellationToken cancellationToken)
     {
+        Console.WriteLine($"[TopicController] GetRootTopicsWithUnread START - roomId: {roomId}");
+        var userId = CurrentUserId;
+        Console.WriteLine($"[TopicController] GetRootTopicsWithUnread - userId: {userId}");
+
+        if (!userId.HasValue)
+        {
+            Console.WriteLine($"[TopicController] GetRootTopicsWithUnread - userId is null, returning Unauthorized");
+            return Unauthorized();
+        }
+
+        var result = await _topicManagementService.GetRootTopicsWithUnreadAsync((Guid)roomId, userId.Value, cancellationToken);
+        Console.WriteLine($"[TopicController] GetRootTopicsWithUnread END - result: {result.IsSuccess}, count: {result.Data?.Count ?? 0}");
+        return result.ToApiResult();
+    }
+
+    /// <summary>
+    /// ルーム内の全トピックを未読カウント付きで一括取得（N+1問題を解決）
+    /// </summary>
+    [HttpGet("room/{roomId}/all-with-unread")]
+    public async Task<IActionResult> GetAllTopicsWithUnread(
+        [FromRoute] MaskedGuid roomId,
+        CancellationToken cancellationToken)
+    {
         var userId = CurrentUserId;
         if (!userId.HasValue)
             return Unauthorized();
 
-        var result = await _topicManagementService.GetRootTopicsWithUnreadAsync((Guid)roomId, userId.Value, cancellationToken);
+        var result = await _topicManagementService.GetAllTopicsWithUnreadAsync((Guid)roomId, userId.Value, cancellationToken);
         return result.ToApiResult();
     }
 

@@ -13,21 +13,27 @@ namespace TreeTopic.Services;
 
 public interface ITopicManagementService
 {
-    Task<Result<List<TopicDto>>> GetAllTopicsAsync(Guid? userId = null, CancellationToken cancellationToken = default);
-    Task<Result<List<TopicDto>>> GetTopicsByRoomAsync(Guid roomId, Guid? userId = null, CancellationToken cancellationToken = default);
-    Task<Result<List<TopicDto>>> GetRootTopicsByRoomAsync(Guid roomId, Guid? userId = null, CancellationToken cancellationToken = default);
-    Task<Result<List<TopicDto>>> GetTopicsByParentAsync(Guid parentId, Guid? userId = null, CancellationToken cancellationToken = default);
-    Task<Result<TopicDto>> GetTopicByIdAsync(Guid topicId, Guid? userId = null, CancellationToken cancellationToken = default);
-    Task<Result<TopicDto>> CreateTopicAsync(CreateTopicRequest request, CancellationToken cancellationToken = default);
-    Task<Result<TopicDto>> UpdateTopicAsync(Guid topicId, UpdateTopicRequest request, CancellationToken cancellationToken = default);
+    // 基本的なトピック情報（最小限）
+    Task<Result<List<TopicBasicDto>>> GetAllTopicsAsync(Guid? userId = null, CancellationToken cancellationToken = default);
+    Task<Result<List<TopicBasicDto>>> GetTopicsByRoomAsync(Guid roomId, Guid? userId = null, CancellationToken cancellationToken = default);
+
+    // ツリー表示用（hasChildrenと未読数付き）
+    Task<Result<List<TopicTreeDto>>> GetRootTopicsByRoomAsync(Guid roomId, Guid? userId = null, CancellationToken cancellationToken = default);
+    Task<Result<List<TopicTreeDto>>> GetTopicsByParentAsync(Guid parentId, Guid? userId = null, CancellationToken cancellationToken = default);
+    Task<Result<List<TopicTreeDto>>> GetRootTopicsWithUnreadAsync(Guid roomId, Guid userId, CancellationToken cancellationToken = default);
+    Task<Result<List<TopicTreeDto>>> GetAllTopicsWithUnreadAsync(Guid roomId, Guid userId, CancellationToken cancellationToken = default);
+
+    // 詳細情報
+    Task<Result<TopicDetailDto>> GetTopicByIdAsync(Guid topicId, Guid? userId = null, CancellationToken cancellationToken = default);
+    Task<Result<TopicDetailDto>> CreateTopicAsync(CreateTopicRequest request, CancellationToken cancellationToken = default);
+    Task<Result<TopicDetailDto>> UpdateTopicAsync(Guid topicId, UpdateTopicRequest request, CancellationToken cancellationToken = default);
+
+    // 削除（戻り値なし）
     Task<Result> DeleteTopicAsync(Guid topicId, TopicDeleteStrategy strategy = TopicDeleteStrategy.Cascade, CancellationToken cancellationToken = default);
 
-    // N+1問題を解決するためのメソッド
+    // N+1問題を解決するための統計情報メソッド
     Task<Result<List<TopicWithStatsDto>>> GetTopicsWithStatsAsync(Guid roomId, Guid userId, CancellationToken cancellationToken = default);
     Task<Result<TopicWithStatsDto>> GetTopicWithStatsByIdAsync(Guid topicId, Guid userId, CancellationToken cancellationToken = default);
-
-    // 未読カウントを含むトピック取得メソッド
-    Task<Result<List<TopicDto>>> GetRootTopicsWithUnreadAsync(Guid roomId, Guid userId, CancellationToken cancellationToken = default);
 }
 
 public class TopicManagementService : BaseService, ITopicManagementService
@@ -53,19 +59,19 @@ public class TopicManagementService : BaseService, ITopicManagementService
         _dbContext = dbContext;
     }
 
-    public async Task<Result<List<TopicDto>>> GetAllTopicsAsync(Guid? userId = null, CancellationToken cancellationToken = default)
+    public async Task<Result<List<TopicBasicDto>>> GetAllTopicsAsync(Guid? userId = null, CancellationToken cancellationToken = default)
     {
         return await ExecuteAsync(async () =>
         {
             var topics = await _topicRepository.Query()
                 .ToListAsync(cancellationToken);
 
-            var dtos = topics.Select(t => MapToDto(t, userId)).ToList();
-            return Result<List<TopicDto>>.Success(dtos);
+            var dtos = await MapToDtosBuilder(topics).BuildBasicAsync(cancellationToken);
+            return Result<List<TopicBasicDto>>.Success(dtos);
         }, nameof(GetAllTopicsAsync));
     }
 
-    public async Task<Result<List<TopicDto>>> GetTopicsByRoomAsync(Guid roomId, Guid? userId = null, CancellationToken cancellationToken = default)
+    public async Task<Result<List<TopicBasicDto>>> GetTopicsByRoomAsync(Guid roomId, Guid? userId = null, CancellationToken cancellationToken = default)
     {
         return await ExecuteAsync(async () =>
         {
@@ -73,12 +79,12 @@ public class TopicManagementService : BaseService, ITopicManagementService
                 .Where(t => t.RoomId == roomId)
                 .ToListAsync(cancellationToken);
 
-            var dtos = await MapToDtosAsync(topics, userId, cancellationToken);
-            return Result<List<TopicDto>>.Success(dtos);
+            var dtos = await MapToDtosBuilder(topics).BuildBasicAsync(cancellationToken);
+            return Result<List<TopicBasicDto>>.Success(dtos);
         }, nameof(GetTopicsByRoomAsync));
     }
 
-    public async Task<Result<List<TopicDto>>> GetRootTopicsByRoomAsync(Guid roomId, Guid? userId = null, CancellationToken cancellationToken = default)
+    public async Task<Result<List<TopicTreeDto>>> GetRootTopicsByRoomAsync(Guid roomId, Guid? userId = null, CancellationToken cancellationToken = default)
     {
         Logger.LogInformation("[GetRootTopicsByRoom] START roomId={RoomId} userId={UserId}", roomId, userId);
         return await ExecuteAsync(async () =>
@@ -89,13 +95,20 @@ public class TopicManagementService : BaseService, ITopicManagementService
 
             Logger.LogInformation("[GetRootTopicsByRoom] Found {Count} topics", topics.Count);
 
-            // 未読数計算を実行
-            var dtos = await MapToDtosAsync(topics, userId, cancellationToken);
-            return Result<List<TopicDto>>.Success(dtos);
+            var builder = await MapToDtosBuilder(topics)
+                .WithHasChildren(cancellationToken);
+
+            if (userId.HasValue && userId.Value != Guid.Empty)
+            {
+                builder = await builder.WithUnread(userId, cancellationToken);
+            }
+
+            var dtos = await builder.BuildTreeAsync(cancellationToken);
+            return Result<List<TopicTreeDto>>.Success(dtos);
         }, nameof(GetRootTopicsByRoomAsync));
     }
 
-    public async Task<Result<List<TopicDto>>> GetTopicsByParentAsync(Guid parentId, Guid? userId = null, CancellationToken cancellationToken = default)
+    public async Task<Result<List<TopicTreeDto>>> GetTopicsByParentAsync(Guid parentId, Guid? userId = null, CancellationToken cancellationToken = default)
     {
         return await ExecuteAsync(async () =>
         {
@@ -103,26 +116,34 @@ public class TopicManagementService : BaseService, ITopicManagementService
                 .Where(t => t.ParentId == parentId)
                 .ToListAsync(cancellationToken);
 
-            var dtos = await MapToDtosAsync(topics, userId, cancellationToken);
-            return Result<List<TopicDto>>.Success(dtos);
+            var builder = await MapToDtosBuilder(topics)
+                .WithHasChildren(cancellationToken);
+
+            if (userId.HasValue && userId.Value != Guid.Empty)
+            {
+                builder = await builder.WithUnread(userId, cancellationToken);
+            }
+
+            var dtos = await builder.BuildTreeAsync(cancellationToken);
+            return Result<List<TopicTreeDto>>.Success(dtos);
         }, nameof(GetTopicsByParentAsync));
     }
 
-    public async Task<Result<TopicDto>> GetTopicByIdAsync(Guid topicId, Guid? userId = null, CancellationToken cancellationToken = default)
+    public async Task<Result<TopicDetailDto>> GetTopicByIdAsync(Guid topicId, Guid? userId = null, CancellationToken cancellationToken = default)
     {
         return await ExecuteAsync(async () =>
         {
             var topic = await _topicRepository.GetByIdAsync(topicId, cancellationToken);
 
             if (topic == null)
-                return Result<TopicDto>.NotFound("Topic not found");
+                return Result<TopicDetailDto>.NotFound("Topic not found");
 
-            var dto = MapToDto(topic, userId);
-            return Result<TopicDto>.Success(dto);
+            var dto = await MapToTopicDetailDtoAsync(topic, userId, cancellationToken);
+            return Result<TopicDetailDto>.Success(dto);
         }, nameof(GetTopicByIdAsync));
     }
 
-    public async Task<Result<TopicDto>> CreateTopicAsync(
+    public async Task<Result<TopicDetailDto>> CreateTopicAsync(
         CreateTopicRequest request,
         CancellationToken cancellationToken = default)
     {
@@ -130,7 +151,7 @@ public class TopicManagementService : BaseService, ITopicManagementService
         {
             var room = await _roomRepository.GetByIdAsync(request.RoomId, cancellationToken);
             if (room == null)
-                return Result<TopicDto>.NotFound("Room not found");
+                return Result<TopicDetailDto>.NotFound("Room not found");
 
             Guid? parentId = request.ParentId.HasValue ? (Guid)request.ParentId.Value : null;
 
@@ -138,7 +159,7 @@ public class TopicManagementService : BaseService, ITopicManagementService
             {
                 var parent = await _topicRepository.GetByIdAsync(parentId.Value, cancellationToken);
                 if (parent == null)
-                    return Result<TopicDto>.NotFound("Parent topic not found");
+                    return Result<TopicDetailDto>.NotFound("Parent topic not found");
             }
 
             Guid? sourceMessageId = request.SourceMessageId.HasValue ? (Guid)request.SourceMessageId.Value : null;
@@ -155,25 +176,20 @@ public class TopicManagementService : BaseService, ITopicManagementService
             await _topicRepository.AddAsync(topic, cancellationToken);
             await _topicRepository.SaveChangesAsync(cancellationToken);
 
-            var dto = MapToDto(topic);
+            var dto = await MapToTopicDetailDtoAsync(topic, null, cancellationToken);
             await BroadcastTopicCreatedAsync(dto);
 
             // 親トピックのhasChildrenを更新してブロードキャスト
             if (parentId.HasValue)
             {
-                var parent = await _topicRepository.GetByIdAsync(parentId.Value, cancellationToken);
-                if (parent != null)
-                {
-                    var parentDto = MapToDto(parent);
-                    await BroadcastTopicUpdatedAsync(parentDto);
-                }
+                await BroadcastTopicHasChildrenUpdatedAsync(parentId.Value, true);
             }
 
-            return Result<TopicDto>.Success(dto, 201);
+            return Result<TopicDetailDto>.Success(dto, 201);
         }, nameof(CreateTopicAsync));
     }
 
-    public async Task<Result<TopicDto>> UpdateTopicAsync(
+    public async Task<Result<TopicDetailDto>> UpdateTopicAsync(
         Guid topicId,
         UpdateTopicRequest request,
         CancellationToken cancellationToken = default)
@@ -183,21 +199,21 @@ public class TopicManagementService : BaseService, ITopicManagementService
             var topic = await _topicRepository.GetByIdAsync(topicId, cancellationToken);
 
             if (topic == null)
-                return Result<TopicDto>.NotFound("Topic not found");
+                return Result<TopicDetailDto>.NotFound("Topic not found");
 
             var oldParentId = topic.ParentId;
             Guid? parentId = request.ParentId.HasValue ? (Guid)request.ParentId.Value : null;
             if (parentId.HasValue)
             {
                 if (parentId.Value == topicId)
-                    return Result<TopicDto>.BadRequest("A topic cannot be its own parent");
+                    return Result<TopicDetailDto>.BadRequest("A topic cannot be its own parent");
 
                 var parent = await _topicRepository.GetByIdAsync(parentId.Value, cancellationToken);
                 if (parent == null)
-                    return Result<TopicDto>.NotFound("Parent topic not found");
+                    return Result<TopicDetailDto>.NotFound("Parent topic not found");
 
                 if (parent.RoomId != topic.RoomId)
-                    return Result<TopicDto>.BadRequest("Parent topic must be in the same room");
+                    return Result<TopicDetailDto>.BadRequest("Parent topic must be in the same room");
 
                 // Prevent cycles: the new parent cannot be a descendant of the topic.
                 var cursor = parent;
@@ -206,7 +222,7 @@ public class TopicManagementService : BaseService, ITopicManagementService
                 {
                     var nextId = cursor.ParentId.Value;
                     if (nextId == topicId)
-                        return Result<TopicDto>.BadRequest("Cannot move a topic under its descendant");
+                        return Result<TopicDetailDto>.BadRequest("Cannot move a topic under its descendant");
 
                     if (!visited.Add(nextId))
                         break; // Defensive: existing cycle in DB
@@ -239,7 +255,7 @@ public class TopicManagementService : BaseService, ITopicManagementService
             _topicRepository.Update(topic);
             await _topicRepository.SaveChangesAsync(cancellationToken);
 
-            var dto = MapToDto(topic);
+            var dto = await MapToTopicDetailDtoAsync(topic, null, cancellationToken);
             await BroadcastTopicUpdatedAsync(dto);
 
             // 親が変更された場合、古い親と新しい親のhasChildrenを更新してブロードキャスト
@@ -251,7 +267,7 @@ public class TopicManagementService : BaseService, ITopicManagementService
                     var oldParent = await _topicRepository.GetByIdAsync(oldParentId.Value, cancellationToken);
                     if (oldParent != null)
                     {
-                        var oldParentDto = MapToDto(oldParent);
+                        var oldParentDto = await MapToTopicDetailDtoAsync(oldParent, null, cancellationToken);
                         await BroadcastTopicUpdatedAsync(oldParentDto);
                     }
                 }
@@ -262,13 +278,13 @@ public class TopicManagementService : BaseService, ITopicManagementService
                     var newParent = await _topicRepository.GetByIdAsync(topic.ParentId.Value, cancellationToken);
                     if (newParent != null)
                     {
-                        var newParentDto = MapToDto(newParent);
+                        var newParentDto = await MapToTopicDetailDtoAsync(newParent, null, cancellationToken);
                         await BroadcastTopicUpdatedAsync(newParentDto);
                     }
                 }
             }
 
-            return Result<TopicDto>.Success(dto);
+            return Result<TopicDetailDto>.Success(dto);
         }, nameof(UpdateTopicAsync));
     }
 
@@ -310,7 +326,7 @@ public class TopicManagementService : BaseService, ITopicManagementService
                 var oldParent = await _topicRepository.GetByIdAsync(oldParentId.Value, cancellationToken);
                 if (oldParent != null)
                 {
-                    var oldParentDto = MapToDto(oldParent);
+                    var oldParentDto = await MapToTopicDetailDtoAsync(oldParent, null, cancellationToken);
                     await BroadcastTopicUpdatedAsync(oldParentDto);
                 }
             }
@@ -319,30 +335,30 @@ public class TopicManagementService : BaseService, ITopicManagementService
         }, nameof(DeleteTopicAsync));
     }
 
-    private TopicRealtimeDto MapToRealtime(TopicDto dto)
+    private TopicRealtimeDto MapToRealtime(TopicDetailDto dto)
     {
         var id = (Guid)dto.Id;
         var roomId = (Guid)dto.RoomId;
         var parentId = dto.ParentId.HasValue ? (Guid)dto.ParentId.Value : Guid.Empty;
 
-            var sourceMessageEncoded = dto.SourceMessageId.HasValue && (Guid)dto.SourceMessageId.Value != Guid.Empty
-                ? _maskedUuidService.EncodeSynchronous((Guid)dto.SourceMessageId.Value)
-                : null;
+        var sourceMessageEncoded = dto.SourceMessageId.HasValue && (Guid)dto.SourceMessageId.Value != Guid.Empty
+            ? _maskedUuidService.EncodeSynchronous((Guid)dto.SourceMessageId.Value)
+            : null;
 
-            return new TopicRealtimeDto(
-                id == Guid.Empty ? string.Empty : _maskedUuidService.EncodeSynchronous(id),
-                roomId == Guid.Empty ? string.Empty : _maskedUuidService.EncodeSynchronous(roomId),
-                dto.ParentId.HasValue && parentId != Guid.Empty ? _maskedUuidService.EncodeSynchronous(parentId) : null,
-                dto.Title,
-                dto.Description,
-                dto.HasChildren,
-                sourceMessageEncoded,
-                dto.UnreadCount,
-                dto.CreatedAt,
-                dto.UpdatedAt);
+        return new TopicRealtimeDto(
+            id == Guid.Empty ? string.Empty : _maskedUuidService.EncodeSynchronous(id),
+            roomId == Guid.Empty ? string.Empty : _maskedUuidService.EncodeSynchronous(roomId),
+            dto.ParentId.HasValue && parentId != Guid.Empty ? _maskedUuidService.EncodeSynchronous(parentId) : null,
+            dto.Title,
+            dto.Description,
+            dto.HasChildren,
+            sourceMessageEncoded,
+            dto.UnreadCount,
+            dto.CreatedAt,
+            dto.UpdatedAt);
     }
 
-    private Task BroadcastTopicCreatedAsync(TopicDto dto)
+    private Task BroadcastTopicCreatedAsync(TopicDetailDto dto)
     {
         var groupName = RoomTopicHubGroups.Room(_maskedUuidService.EncodeSynchronous((Guid)dto.RoomId));
         var payload = MapToRealtime(dto);
@@ -350,7 +366,7 @@ public class TopicManagementService : BaseService, ITopicManagementService
         return _roomTopicHub.Clients.Group(groupName).TopicCreated(payload);
     }
 
-    private Task BroadcastTopicUpdatedAsync(TopicDto dto)
+    private Task BroadcastTopicUpdatedAsync(TopicDetailDto dto)
     {
         var groupName = RoomTopicHubGroups.Room(_maskedUuidService.EncodeSynchronous((Guid)dto.RoomId));
         var payload = MapToRealtime(dto);
@@ -371,142 +387,31 @@ public class TopicManagementService : BaseService, ITopicManagementService
         return _roomTopicHub.Clients.Group(groupName).TopicDeleted(payload);
     }
 
-    private async Task<List<TopicDto>> MapToDtosAsync(List<Topic> topics, Guid? userId, CancellationToken cancellationToken)
+    /// <summary>
+    /// 親トピックのhasChildrenのみを更新してブロードキャスト（子トピック作成時など）
+    /// </summary>
+    private async Task BroadcastTopicHasChildrenUpdatedAsync(Guid topicId, bool hasChildren)
     {
-        if (topics.Count == 0)
-            return new List<TopicDto>();
+        var topic = await _topicRepository.GetByIdAsync(topicId);
+        if (topic == null) return;
 
-        var topicIds = topics.Select(t => t.Id).ToList();
-
-        // hasChildrenを一括チェック
-        var childTopicParentIds = await _topicRepository.Query()
-            .Where(t => t.ParentId.HasValue && topicIds.Contains(t.ParentId.Value))
-            .Select(t => new { t.ParentId, t.Id })
-            .ToListAsync(cancellationToken);
-
-        var hasChildrenSet = childTopicParentIds.Select(x => x.ParentId.Value).ToHashSet();
-
-        // 未読数を計算（一括で取得）
-        Dictionary<Guid, int> unreadCountsMap = new();
-        Dictionary<Guid, MaskedGuid?> lastReadMessageIdsMap = new();
-
-        if (userId.HasValue && userId.Value != Guid.Empty)
-        {
-            try
-            {
-                // UserTopicsを一括取得
-                var userTopics = await _dbContext.UserTopics
-                    .Where(ut => topicIds.Contains(ut.TopicId) && ut.UserId == userId.Value)
-                    .ToListAsync(cancellationToken);
-
-                var userTopicsMap = userTopics.ToDictionary(ut => ut.TopicId, ut => ut);
-
-                // 各トピックの全メッセージ数を一括取得
-                var messageCountsByTopic = await _dbContext.Messages
-                    .Where(m => topicIds.Contains(m.TopicId))
-                    .GroupBy(m => m.TopicId)
-                    .Select(g => new { TopicId = g.Key, Count = g.Count() })
-                    .ToDictionaryAsync(x => x.TopicId, x => x.Count, cancellationToken);
-
-                // LastReadMessageIdがあるトピックの未読数を計算
-                var topicsWithLastRead = userTopicsMap
-                    .Where(kvp => kvp.Value.LastReadMessageId.HasValue)
-                    .Select(kvp => new { TopicId = kvp.Key, LastReadMessageId = kvp.Value.LastReadMessageId!.Value })
-                    .ToList();
-
-                if (topicsWithLastRead.Count > 0)
-                {
-                    // 一括で未読件数を取得
-                    // トピックごとのLastReadMessageIdを条件に含めてカウント
-                    var unreadCounts = await _dbContext.Messages
-                        .Where(m => topicsWithLastRead.Select(x => x.TopicId).Contains(m.TopicId))
-                        .GroupBy(m => m.TopicId)
-                        .Select(g => new
-                        {
-                            TopicId = g.Key,
-                            UnreadCount = g.Count(m => m.Id > topicsWithLastRead.First(x => x.TopicId == g.Key).LastReadMessageId)
-                        })
-                        .ToDictionaryAsync(x => x.TopicId, x => x.UnreadCount, cancellationToken);
-
-                    foreach (var item in topicsWithLastRead)
-                    {
-                        lastReadMessageIdsMap[item.TopicId] = item.LastReadMessageId;
-                        unreadCountsMap[item.TopicId] = unreadCounts.GetValueOrDefault(item.TopicId, 0);
-                    }
-                }
-
-                // UserTopicがないトピックは全メッセージが未読
-                foreach (var topicId in topicIds)
-                {
-                    if (!unreadCountsMap.ContainsKey(topicId))
-                    {
-                        unreadCountsMap[topicId] = messageCountsByTopic.GetValueOrDefault(topicId, 0);
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Logger.LogError(ex, "Failed to calculate unread counts for {TopicCount} topics", topics.Count);
-            }
-        }
-
-        // DTOを作成
-        return topics.Select(topic => new TopicDto
-        {
-            Id = topic.Id,
-            RoomId = topic.RoomId,
-            ParentId = topic.ParentId.HasValue ? topic.ParentId : null,
-            SourceMessageId = topic.SourceMessageId.HasValue ? topic.SourceMessageId : null,
-            Title = topic.Title,
-            Description = topic.Description,
-            HasChildren = hasChildrenSet.Contains(topic.Id),
-            UnreadCount = unreadCountsMap.GetValueOrDefault(topic.Id),
-            LastReadMessageId = lastReadMessageIdsMap.GetValueOrDefault(topic.Id),
-            CreatedAt = topic.CreatedAt,
-            UpdatedAt = topic.UpdatedAt
-        }).ToList();
+        var dto = await MapToTopicDetailDtoAsync(topic, null, CancellationToken.None);
+        await BroadcastTopicUpdatedAsync(dto);
     }
 
-    private TopicDto MapToDto(Topic topic, Guid? userId = null)
+    /// <summary>
+    /// 複数トピックをDTOに変換するビルダーを作成
+    /// </summary>
+    private TopicDtoBuilder MapToDtosBuilder(List<Topic> topics)
     {
-        // Check if this topic has any children
-        var hasChildren = _topicRepository.Query()
-            .Any(t => t.ParentId == topic.Id);
+        return new TopicDtoBuilder(topics, _dbContext, _topicRepository);
+    }
 
-        // 単一トピックの未読数計算
-        int unreadCount = 0;
-        MaskedGuid? lastReadMessageId = null;
-
-        if (userId.HasValue && userId.Value != Guid.Empty)
-        {
-            try
-            {
-                var userTopic = _dbContext.UserTopics
-                    .FirstOrDefault(ut => ut.TopicId == topic.Id && ut.UserId == userId.Value);
-
-                if (userTopic != null)
-                {
-                    if (userTopic.LastReadMessageId.HasValue)
-                    {
-                        var unreadCountResult = _dbContext.Messages
-                            .Count(m => m.TopicId == topic.Id && m.Id > userTopic.LastReadMessageId.Value);
-                        unreadCount = unreadCountResult;
-                        lastReadMessageId = userTopic.LastReadMessageId;
-                    }
-                }
-                else
-                {
-                    // UserTopicがない場合は全メッセージが未読
-                    unreadCount = _dbContext.Messages
-                        .Count(m => m.TopicId == topic.Id);
-                }
-            }
-            catch (Exception ex)
-            {
-                Logger.LogError(ex, "Failed to calculate unread count for topic {TopicId}", topic.Id);
-            }
-        }
-
+    /// <summary>
+    /// 単一トピックをDTOに変換（基本版: hasChildrenも未読も含まない）
+    /// </summary>
+    private TopicDto MapToDtoBasic(Topic topic)
+    {
         return new TopicDto
         {
             Id = topic.Id,
@@ -515,9 +420,62 @@ public class TopicManagementService : BaseService, ITopicManagementService
             SourceMessageId = topic.SourceMessageId.HasValue ? topic.SourceMessageId : null,
             Title = topic.Title,
             Description = topic.Description,
+            HasChildren = false,
+            UnreadCount = 0,
+            CreatedAt = topic.CreatedAt,
+            UpdatedAt = topic.UpdatedAt
+        };
+    }
+
+    /// <summary>
+    /// 単一トピックを詳細DTOに変換（hasChildrenチェックと未読数計算を含む）
+    /// </summary>
+    private async Task<TopicDetailDto> MapToTopicDetailDtoAsync(Topic topic, Guid? userId, CancellationToken cancellationToken)
+    {
+        // hasChildrenチェック
+        var hasChildren = await _topicRepository.Query()
+            .AnyAsync(t => t.ParentId == topic.Id, cancellationToken);
+
+        // 未読数計算
+        int unreadCount = 0;
+        if (userId.HasValue && userId.Value != Guid.Empty)
+        {
+            try
+            {
+                var userTopic = await _dbContext.UserTopics
+                    .FirstOrDefaultAsync(ut => ut.TopicId == topic.Id && ut.UserId == userId.Value, cancellationToken);
+
+                if (userTopic != null)
+                {
+                    if (userTopic.LastReadMessageId.HasValue)
+                    {
+                        unreadCount = await _dbContext.Messages
+                            .CountAsync(m => m.TopicId == topic.Id && m.Id > userTopic.LastReadMessageId.Value, cancellationToken);
+                    }
+                }
+                else
+                {
+                    // UserTopicがない場合は全メッセージが未読
+                    unreadCount = await _dbContext.Messages
+                        .CountAsync(m => m.TopicId == topic.Id, cancellationToken);
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Failed to calculate unread count for topic {TopicId}", topic.Id);
+            }
+        }
+
+        return new TopicDetailDto
+        {
+            Id = topic.Id,
+            RoomId = topic.RoomId,
+            ParentId = topic.ParentId,
+            SourceMessageId = topic.SourceMessageId,
+            Title = topic.Title,
+            Description = topic.Description,
             HasChildren = hasChildren,
             UnreadCount = unreadCount,
-            LastReadMessageId = lastReadMessageId,
             CreatedAt = topic.CreatedAt,
             UpdatedAt = topic.UpdatedAt
         };
@@ -665,76 +623,25 @@ public class TopicManagementService : BaseService, ITopicManagementService
     /// <summary>
     /// ルートトピックに未読カウントを含めて取得（N+1問題を解決）
     /// </summary>
-    public async Task<Result<List<TopicDto>>> GetRootTopicsWithUnreadAsync(Guid roomId, Guid userId, CancellationToken cancellationToken = default)
+    public async Task<Result<List<TopicTreeDto>>> GetRootTopicsWithUnreadAsync(Guid roomId, Guid userId, CancellationToken cancellationToken = default)
     {
         return await ExecuteAsync(async () =>
         {
-            // 1. ルートトピックを取得（ParentIdがnullのもの）
             var topics = await _topicRepository.Query()
                 .Where(t => t.RoomId == roomId && t.ParentId == null)
                 .OrderByDescending(t => t.UpdatedAt)
                 .ToListAsync(cancellationToken);
 
             if (!topics.Any())
-                return Result<List<TopicDto>>.Success(new List<TopicDto>());
+                return Result<List<TopicTreeDto>>.Success(new List<TopicTreeDto>());
 
-            // 2. 子トピックの存在チェック
-            var topicIds = topics.Select(t => t.Id).ToList();
-            var hasChildren = await _topicRepository.Query()
-                .Where(t => t.ParentId.HasValue && topicIds.Contains(t.ParentId.Value))
-                .Select(t => t.ParentId.Value)
-                .Distinct()
-                .ToListAsync(cancellationToken);
+            var builder = await MapToDtosBuilder(topics)
+                .WithHasChildren(cancellationToken);
 
-            var hasChildrenSet = hasChildren.ToHashSet();
+            builder = await builder.WithUnread(userId, cancellationToken);
 
-            // 3. UserTopic情報を取得
-            Dictionary<Guid, UserTopic> userTopicsMap = new();
-            if (userId != Guid.Empty)
-            {
-                var userTopics = await _dbContext.UserTopics
-                    .Where(ut => topicIds.Contains(ut.TopicId) && ut.UserId == userId)
-                    .ToListAsync(cancellationToken);
-
-                userTopicsMap = userTopics.ToDictionary(ut => ut.TopicId, ut => ut);
-            }
-
-            // 4. メッセージ統計を取得
-            var messageStats = await _dbContext.Messages
-                .Where(m => topicIds.Contains(m.TopicId))
-                .GroupBy(m => m.TopicId)
-                .Select(g => new
-                {
-                    TopicId = g.Key,
-                    TotalCount = g.Count(),
-                    LastUpdatedAt = g.Max(m => m.UpdatedAt)
-                })
-                .ToDictionaryAsync(x => x.TopicId, cancellationToken);
-
-            // 5. DTOを作成
-            var dtos = topics.Select(topic =>
-            {
-                var userTopic = userTopicsMap.GetValueOrDefault(topic.Id);
-                var stats = messageStats.GetValueOrDefault(topic.Id);
-                var unreadCount = CalculateUnreadCount(topic.Id, userTopic, stats);
-
-                return new TopicDto
-                {
-                    Id = topic.Id,
-                    RoomId = topic.RoomId,
-                    ParentId = topic.ParentId.HasValue ? topic.ParentId : null,
-                    SourceMessageId = topic.SourceMessageId.HasValue ? topic.SourceMessageId : null,
-                    Title = topic.Title,
-                    Description = topic.Description,
-                    HasChildren = hasChildrenSet.Contains(topic.Id),
-                    UnreadCount = unreadCount,
-                    LastReadMessageId = userTopic?.LastReadMessageId,
-                    CreatedAt = topic.CreatedAt,
-                    UpdatedAt = topic.UpdatedAt
-                };
-            }).ToList();
-
-            return Result<List<TopicDto>>.Success(dtos);
+            var dtos = await builder.BuildTreeAsync(cancellationToken);
+            return Result<List<TopicTreeDto>>.Success(dtos);
         }, nameof(GetRootTopicsWithUnreadAsync));
     }
 
@@ -771,5 +678,30 @@ public class TopicManagementService : BaseService, ITopicManagementService
         }
 
         return 0;
+    }
+
+    /// <summary>
+    /// ルーム内の全トピックを未読カウント付きで一括取得（N+1問題を解決）
+    /// </summary>
+    public async Task<Result<List<TopicTreeDto>>> GetAllTopicsWithUnreadAsync(Guid roomId, Guid userId, CancellationToken cancellationToken = default)
+    {
+        return await ExecuteAsync(async () =>
+        {
+            var topics = await _topicRepository.Query()
+                .Where(t => t.RoomId == roomId)
+                .ToListAsync(cancellationToken);
+
+            if (!topics.Any())
+                return Result<List<TopicTreeDto>>.Success(new List<TopicTreeDto>());
+
+            // hasChildren + 未読計算
+            var builder = await MapToDtosBuilder(topics)
+                .WithHasChildren(cancellationToken);
+
+            builder = await builder.WithUnread(userId, cancellationToken);
+
+            var dtos = await builder.BuildTreeAsync(cancellationToken);
+            return Result<List<TopicTreeDto>>.Success(dtos);
+        }, nameof(GetAllTopicsWithUnreadAsync));
     }
 }

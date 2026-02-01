@@ -28,6 +28,41 @@
   let isDraggingSelf = $state(false);
   let hasUnreadChildrenState = $state(false);
 
+  // 未読チェック完了フラグ（常にtrue: 全トピックがAPIでロードされているため）
+  let hasCheckedUnread = $derived(true);
+
+  // 子孫を含む全未読数を計算
+  function calculateTotalUnreadDescendants(topicId: string): number {
+    let total = 0;
+
+    // 直近の子トピックを取得
+    const children = $topicList.filter(t => t.parentId === topicId);
+
+    for (const child of children) {
+      // 子の自未読を加算
+      total += child.unreadCount;
+      // 子の子孫の未読を再帰的に加算
+      total += calculateTotalUnreadDescendants(child.id);
+    }
+
+    return total;
+  }
+
+  // 子孫の未読数（派生ステート）
+  // $derivedはSvelte 4ストア($topicList)の変更を追跡できないため、$stateで管理
+  let descendantsUnreadCount = $state(0);
+
+  function updateDescendantsUnreadCount() {
+    const count = calculateTotalUnreadDescendants(node.id);
+    descendantsUnreadCount = count;
+    hasUnreadChildrenState = count > 0;
+    console.log(`[TopicNode ${node.id}] Updated descendantsUnreadCount:`, {
+      count,
+      hasUnread: hasUnreadChildrenState,
+      topicListSize: $topicList.length
+    });
+  }
+
 
   function normalizeTopic(raw: any) {
     const id = raw?.id ?? raw?.Id ?? '';
@@ -108,10 +143,18 @@
     const response = await api.get<any[]>(`/${tenant}/api/Topic/parent/${parentId}`);
     const childTopics = Array.isArray(response) ? response.map(normalizeTopic) : [];
 
-    // Add child topics to store if not already present
+    // 子トピックをストアに追加または更新
     childTopics.forEach((topic) => {
-      if (!$topicList.find((t) => t.id === topic.id)) {
+      const existing = $topicList.find((t) => t.id === topic.id);
+      if (!existing) {
         addTopic(topic);
+      } else {
+        // 既存のトピックの場合は未読カウントなどの情報を更新
+        updateTopic(topic.id, {
+          unreadCount: topic.unreadCount,
+          messageCount: topic.messageCount,
+          hasChildren: topic.hasChildren,
+        });
       }
     });
 
@@ -131,30 +174,17 @@
         updateTopic(node.id, { hasChildren: true });
       }
 
-      // 子トピックの未読状態を更新
-      await checkUnreadChildrenFromBackend();
+      // 未読状態をログ出力（$effectで自動更新される）
+      if (node.hasChildren) {
+        console.log(`[TopicNode ${node.id}] After fetching children:`, {
+          childTopics: childTopics.map(c => ({ id: c.id, title: c.title, unreadCount: c.unreadCount })),
+          totalDescendantsUnread: descendantsUnreadCount
+        });
+      }
     } catch (err) {
       console.error('Failed to fetch child topics:', err);
     } finally {
       isLoadingChildren = false;
-    }
-  }
-
-  // バックエンドから子トピックの未読状態をチェック
-  async function checkUnreadChildrenFromBackend() {
-    if (!node.hasChildren) {
-      hasUnreadChildrenState = false;
-      return;
-    }
-
-    try {
-      const tenant = getCurrentTenant();
-      const response = await api.get<any[]>(`/${tenant}/api/Topic/parent/${node.id}`);
-      const childTopics = Array.isArray(response) ? response : [];
-      hasUnreadChildrenState = childTopics.some(child => (child.unreadCount ?? child.UnreadCount ?? 0) > 0);
-    } catch (err) {
-      console.error('Failed to check unread children:', err);
-      hasUnreadChildrenState = false;
     }
   }
 
@@ -279,7 +309,21 @@
 
   // コンポーネントマウント時に子トピックの未読状態をチェック
   onMount(async () => {
-    await checkUnreadChildrenFromBackend();
+    // 子トピックがまだロードされていない場合はロード
+    if (node.hasChildren && !isLoadingChildren) {
+      const childTopics = $topicList.filter(t => t.parentId === node.id);
+      if (childTopics.length === 0) {
+        await fetchChildTopics();
+      } else {
+        // 既に子トピックがロードされている場合は未読状態をチェック
+        console.log(`[TopicNode ${node.id}] Initial unread check on mount (children already loaded):`, {
+          childTopics: childTopics.map(c => ({ id: c.id, title: c.title, unreadCount: c.unreadCount })),
+          totalDescendantsUnread: descendantsUnreadCount
+        });
+      }
+    }
+
+    // $effectが自動的に未読状態を更新するため、手動の更新は不要
   });
 
   // ノードが展開状態のときに子トピックをロード
@@ -294,11 +338,12 @@
     }
   });
 
-  // 子トピックが変更されたときに未読状態を更新
+  // $topicListの変更を監視して子孫の未読数を更新
+  // Svelte 5の$derivedはSvelte 4ストア($topicList)の変更を追跡できないため、$effectで監視
   $effect(() => {
-    if (node.children && node.children.length > 0) {
-      hasUnreadChildrenState = node.children.some(child => child.unreadCount > 0);
-    }
+    // $topicListを参照して変更を監視
+    const topicListSnapshot = $topicList;
+    updateDescendantsUnreadCount();
   });
 
   function getContextMenuItems(): ContextMenuItem[] {
@@ -368,11 +413,9 @@
         </span>
       {/if}
 
-      {#if node.hasChildren && hasUnreadChildrenState}
-        <span class="child-unread-badge">
-          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-            <circle cx="12" cy="12" r="8"/>
-          </svg>
+      {#if node.hasChildren && hasUnreadChildrenState && hasCheckedUnread}
+        <span class="child-unread-badge" title="子孫トピックの未読メッセージ">
+          {descendantsUnreadCount}
         </span>
       {/if}
 
@@ -459,17 +502,12 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    border-radius: 50%;
-    padding: 2px;
-    min-width: 18px;
-    height: 18px;
-    font-size: 10px;
+    border-radius: 12px;
+    padding: 2px 6px;
+    min-width: 20px;
+    height: 20px;
+    font-size: 11px;
     font-weight: bold;
-  }
-
-  .child-unread-badge svg {
-    width: 10px;
-    height: 10px;
   }
 
   .topic-header-drop {

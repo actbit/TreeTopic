@@ -118,17 +118,31 @@
           // 直近の10件を取得して整合性チェック
           syncLatestMessages(normalized.topicId, normalized);
         }
+
         // SignalR受信時の処理
         if (normalized.topicId) {
-          // 新しいメッセージの場合は未読更新は行わず、同期のみ実行
-          // ユーザーが実際にメッセージを見たときに未読更新を実行する
-          if (!exists) {
-            console.log('New message via SignalR, syncing and will mark as read after display');
-            syncLatestMessages(normalized.topicId, normalized);
-          } else {
-            // 既存メッセージの更新の場合は同期のみ
-            console.log('Existing message updated via SignalR, syncing only');
-            scheduleMessageSync(normalized.topicId);
+          // 新しいメッセージで、現在選択中のトピックの場合は即座に既読にする
+          const isSelectedTopic = loadedTopicId === normalized.topicId;
+
+          if (!exists && isSelectedTopic && !document.hidden) {
+            console.log('[MessageCreated] New message for selected topic, marking as read immediately:', {
+              topicId: normalized.topicId,
+              loadedTopicId,
+              messageId: normalized.id
+            });
+            // 既読APIを呼び、レスポンスの未読数で更新
+            void markTopicAsRead(normalized.topicId).then(unreadCount => {
+              if (unreadCount !== null) {
+                updateTopic(normalized.topicId, { unreadCount });
+              }
+            });
+          } else if (!exists) {
+            console.log('[MessageCreated] New message for different topic or page hidden:', {
+              topicId: normalized.topicId,
+              loadedTopicId,
+              isSelectedTopic,
+              pageHidden: document.hidden
+            });
           }
         }
       } catch (error) {
@@ -283,6 +297,11 @@
         }
       }
 
+      // 未読数が0で既存の未読数がある場合は、既存の未読数を保持（バックエンドから未読数が送られない場合がある）
+      const unreadCount = (normalized.unreadCount === 0 && existing.unreadCount > 0)
+        ? existing.unreadCount
+        : normalized.unreadCount;
+
       updateTopic(normalized.id, {
         parentId: normalized.parentId,
         roomId: normalized.roomId,
@@ -290,7 +309,7 @@
         description: normalized.description,
         creatorId: normalized.creatorId,
         messageCount: normalized.messageCount,
-        unreadCount: normalized.unreadCount,
+        unreadCount,
         userPermission: normalized.userPermission,
         permissions: normalized.permissions,
         isArchived: normalized.isArchived,
@@ -564,6 +583,8 @@
           parentId: t.parentId,
           roomId: t.roomId,
           hasChildren: t.hasChildren,
+          unreadCount: t.unreadCount,
+          messageCount: t.messageCount,
           updatedAt: t.updatedAt,
           sourceMessageId: t.sourceMessageId ?? null,
         });
@@ -581,60 +602,34 @@
 
   // 展開されているトピックの子孫を再帰的に取得（並列処理版）
   async function loadDescendantsForExpandedTopics(tenant: string): Promise<void> {
-    const maxDepth = 10;
-    const loading = new Set<string>(); // ロード中のトピックを追跡
+    // 新しいAPI: ルーム内の全トピックを未読カウント付きで一括取得
+    if (!$currentRoom) return;
 
-    // 指定したトピックIDのトピックと子孫をすべてロード
-    async function loadTopicAndDescendantsRecursively(topicId: string, currentDepth: number): Promise<void> {
-      // 重複ロードを防止
-      if (loading.has(topicId)) return;
-      if (currentDepth > maxDepth) return;
+    try {
+      const response = await api.get<any[]>(`/${tenant}/api/Topic/room/${$currentRoom.id}/all-with-unread`);
+      const allTopics = Array.isArray(response) ? response.map(normalizeTopic) : [];
 
-      loading.add(topicId);
+      console.log(`[loadDescendantsForExpandedTopics] Loaded ${allTopics.length} topics from all-with-unread API`);
 
-      try {
-        // トピック自体がtopicListにあるか確認
-        let topic = $topicList.find((t) => t.id === topicId);
-        if (!topic) {
-          const response = await api.get<any>(`/${tenant}/api/Topic/${topicId}`);
-          topic = normalizeTopic(response);
+      // 全トピックをストアに追加または更新
+      allTopics.forEach((topic) => {
+        const existing = $topicList.find((t) => t.id === topic.id);
+        if (!existing) {
           addTopic(topic);
+        } else {
+          // 既存のトピックの場合は未読カウントなどの情報を更新
+          updateTopic(topic.id, {
+            unreadCount: topic.unreadCount,
+            messageCount: topic.messageCount,
+            hasChildren: topic.hasChildren,
+          });
         }
+      });
 
-        // トピックが展開されている場合、子をロードして再帰処理
-        if ($expandedTopics.has(topicId)) {
-          try {
-            const response = await api.get<any[]>(`/${tenant}/api/Topic/parent/${topicId}`);
-            const childTopics = Array.isArray(response) ? response.map(normalizeTopic) : [];
-
-            // 子トピックをストアに追加
-            childTopics.forEach((child) => {
-              const existing = $topicList.find((t) => t.id === child.id);
-              if (!existing) {
-                addTopic(child);
-              }
-            });
-
-            // 展開されている各子トピックについて、さらに子孫を並列ロード
-            const childPromises = childTopics
-              .filter(child => $expandedTopics.has(child.id))
-              .map(child => loadTopicAndDescendantsRecursively(child.id, currentDepth + 1));
-
-            await Promise.all(childPromises);
-          } catch (err) {
-            console.error(`Failed to load children for topic ${topicId}:`, err);
-          }
-        }
-      } finally {
-        loading.delete(topicId);
-      }
+      console.log('[loadDescendantsForExpandedTopics] All topics loaded with unread counts');
+    } catch (err) {
+      console.error('Failed to load all topics with unread:', err);
     }
-
-    // expandedTopicsに含まれる各トピックについて並列処理
-    const rootPromises = Array.from($expandedTopics).map(topicId =>
-      loadTopicAndDescendantsRecursively(topicId, 0)
-    );
-    await Promise.all(rootPromises);
   }
 
   async function selectTopicFromUrl(tenant: string, roomToUse?: Room | null): Promise<Topic | null> {
@@ -650,6 +645,17 @@
     const existing = $topicList.find((t) => t.id === urlTopicId) ?? null;
     if (existing) {
       if (existing.roomId === room.id) setSelectedTopic(existing);
+      // トピックを選択したときに既読にする
+      if (!document.hidden) {
+        console.log('Topic selected from URL, marking as read:', existing.id);
+        setTimeout(() => {
+          void markTopicAsRead(existing.id).then(unreadCount => {
+            if (unreadCount !== null) {
+              updateTopic(existing.id, { unreadCount });
+            }
+          });
+        }, 100);
+      }
       return existing;
     }
 
@@ -657,6 +663,17 @@
       const loaded = await ensureTopicPathLoaded(tenant, urlTopicId);
       if (loaded && loaded.roomId === room.id) {
         setSelectedTopic(loaded);
+        // トピックを選択したときに既読にする
+        if (!document.hidden) {
+          console.log('Topic loaded from URL, marking as read:', loaded.id);
+          setTimeout(() => {
+            void markTopicAsRead(loaded.id).then(unreadCount => {
+              if (unreadCount !== null) {
+                updateTopic(loaded.id, { unreadCount });
+              }
+            });
+          }, 100);
+        }
         return loaded;
       }
     } catch {
@@ -804,16 +821,29 @@
         }, 1000); // スクロール停止後1秒で未読更新
       }
     }, { passive: true });
+
+    // スクロールバーが出ていない場合（コンテンツが画面に収まっている場合）、即座に既読にする
+    requestAnimationFrame(() => {
+      const scrollHeight = messageContainer.scrollHeight;
+      const clientHeight = messageContainer.clientHeight;
+      if (scrollHeight <= clientHeight && loadedTopicId) {
+        console.log('Content fits in viewport, marking topic as read immediately:', loadedTopicId);
+        void markTopicAsRead(loadedTopicId);
+      }
+    });
   }
 
-  async function markTopicAsRead(topicId: string, retryCount = 0) {
+  async function markTopicAsRead(topicId: string, retryCount = 0): Promise<number | null> {
     const tenant = $page.params.tenant ?? getCurrentTenant();
-    if (!tenant) return;
+    if (!tenant) return null;
 
     // 未読更新を実行（常に実行して状態を正しく保つ）
     try {
       console.log(`Marking topic ${topicId} as read (attempt ${retryCount + 1})`);
-      await api.post(`/${tenant}/api/Message/topic/${topicId}/markAsRead`);
+      const response = await api.post<number>(`/${tenant}/api/Message/topic/${topicId}/markAsRead`);
+      const unreadCount = typeof response === 'number' ? response : 0;
+      console.log(`Mark topic ${topicId} as read, unread count: ${unreadCount}`);
+      return unreadCount;
     } catch (err: unknown) {
       const error = err as Error & { status?: number };
       console.error('Failed to mark topic as read:', error);
@@ -824,8 +854,7 @@
       if (retryCount < 3 && error.status && error.status >= 500) {
         console.log(`Retrying markAsRead for topic ${topicId} (attempt ${retryCount + 1})`);
         await new Promise(resolve => setTimeout(resolve, 1000 * (retryCount + 1)));
-        await markTopicAsRead(topicId, retryCount + 1);
-        return;
+        return await markTopicAsRead(topicId, retryCount + 1);
       }
 
       // ユーザーにエラーを通知
@@ -833,6 +862,7 @@
         // クライアントエラーはユーザーに通知
         alert('未読の更新に失敗しました。ページを再読み込みしてください。');
       }
+      return null;
     }
   }
 
@@ -1003,11 +1033,11 @@
         // 新しいAPIではすでにunreadCountが含まれている
         const topicsWithUnread = topics.map(topic => {
           const unreadCount = topic.unreadCount || 0;
-          console.log(`[RoomPage] Topic ${topic.id}: unread count = ${unreadCount}`);
+          console.log(`[RoomPage] Topic ${topic.id} (${topic.title}): unread count = ${unreadCount}, hasChildren = ${topic.hasChildren}`);
           return topic;
         });
 
-        console.log('[RoomPage] Topics with unread counts:', topicsWithUnread);
+        console.log('[RoomPage] Topics with unread counts:', topicsWithUnread.map(t => ({ id: t.id, title: t.title, unreadCount: t.unreadCount, hasChildren: t.hasChildren })));
         setTopics(topicsWithUnread);
 
         // まずURLからトピックを選択（これでexpandedTopicsが更新される）
@@ -1245,6 +1275,16 @@
       .finally(() => {
         if (requestId !== loadRequestId) return;
         messages.setLoading(false);
+
+        // メッセージ読み込み完了後、ページが表示されている場合は既読にする
+        if (!document.hidden && loadedTopicId) {
+          console.log('[MessageLoad] Messages loaded, marking topic as read:', loadedTopicId);
+          void markTopicAsRead(loadedTopicId).then(unreadCount => {
+            if (unreadCount !== null && loadedTopicId) {
+              updateTopic(loadedTopicId, { unreadCount });
+            }
+          });
+        }
       });
   });
 
@@ -1297,6 +1337,26 @@
       return;
     }
     void startRoomUserSyncHub(tenant, roomId, userId);
+  });
+
+  // document.visibilitychangeイベントを監視
+  onMount(() => {
+    const handleVisibilityChange = () => {
+      if (!document.hidden && loadedTopicId) {
+        console.log('[VisibilityChange] Document became visible, marking topic as read:', loadedTopicId);
+        void markTopicAsRead(loadedTopicId).then(unreadCount => {
+          if (unreadCount !== null && loadedTopicId) {
+            updateTopic(loadedTopicId, { unreadCount });
+          }
+        });
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   });
 </script>
 

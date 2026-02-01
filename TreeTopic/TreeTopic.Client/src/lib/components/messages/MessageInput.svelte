@@ -335,6 +335,12 @@
       selectedFiles = [];
       if (fileInput) fileInput.value = '';
       resetChildTopicForm();
+
+      // メッセージ送信後に自分のトピックの未読カウントを0に設定
+      if ($selectedTopic && $selectedTopic.unreadCount > 0) {
+        updateTopic($selectedTopic.id, { unreadCount: 0 });
+      }
+
       if (childTopicIdFromResponse) {
         void syncChildTopicFromMessage(childTopicIdFromResponse);
       }
