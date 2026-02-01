@@ -3,6 +3,8 @@ using Microsoft.AspNetCore.Authorization;
 using MaskedUUID.AspNetCore.Types;
 using TreeTopic.Dtos;
 using TreeTopic.Services;
+using TreeTopic.Filters;
+using TreeTopic.Permissions;
 using Finbuckle.MultiTenant;
 using TreeTopic.Models;
 using Finbuckle.MultiTenant.Abstractions;
@@ -132,6 +134,7 @@ public class TenantController : ControllerBase
     /// </summary>
     [HttpGet("{identifier}")]
     [Authorize]
+    [RequirePermission(IdentityPermissions.TenantRead)]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -167,6 +170,7 @@ public class TenantController : ControllerBase
     /// </summary>
     [HttpGet]
     [Authorize]
+    [RequirePermission(IdentityPermissions.TenantRead)]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -198,6 +202,7 @@ public class TenantController : ControllerBase
     /// </summary>
     [HttpDelete("{tenantId}")]
     [Authorize]
+    [RequirePermission(IdentityPermissions.TenantManage)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]

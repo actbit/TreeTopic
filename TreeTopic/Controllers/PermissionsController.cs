@@ -5,6 +5,8 @@ using TreeTopic.Common;
 using TreeTopic.Dtos;
 using TreeTopic.Models;
 using TreeTopic.Services;
+using TreeTopic.Filters;
+using TreeTopic.Permissions;
 
 namespace TreeTopic.Controllers;
 
@@ -21,6 +23,7 @@ public class PermissionsController : ControllerBase
     }
 
     [HttpGet]
+    [RequirePermission(IdentityPermissions.PermissionRead)]
     public async Task<ActionResult<List<PermissionDto>>> List(CancellationToken cancellationToken)
     {
         var result = await _permissionManagementService.ListPermissionsAsync();
@@ -35,6 +38,7 @@ public class PermissionsController : ControllerBase
     }
 
     [HttpGet("{permissionId}")]
+    [RequirePermission(IdentityPermissions.PermissionRead)]
     public async Task<ActionResult<PermissionDto>> Get([FromRoute] MaskedGuid permissionId, CancellationToken cancellationToken)
     {
         var result = await _permissionManagementService.GetPermissionByIdAsync((Guid)permissionId);
@@ -49,6 +53,7 @@ public class PermissionsController : ControllerBase
     }
 
     [HttpPost]
+    [RequirePermission(IdentityPermissions.PermissionManage)]
     public async Task<ActionResult<PermissionDto>> Create([FromBody] PermissionModificationRequest request)
     {
         if (!ModelState.IsValid)
@@ -68,6 +73,7 @@ public class PermissionsController : ControllerBase
     }
 
     [HttpPut("{permissionId}")]
+    [RequirePermission(IdentityPermissions.PermissionManage)]
     public async Task<ActionResult<PermissionDto>> Update([FromRoute] MaskedGuid permissionId, [FromBody] PermissionModificationRequest request)
     {
         if (!ModelState.IsValid)
@@ -87,6 +93,7 @@ public class PermissionsController : ControllerBase
     }
 
     [HttpDelete("{permissionId}")]
+    [RequirePermission(IdentityPermissions.PermissionManage)]
     public async Task<IActionResult> Delete([FromRoute] MaskedGuid permissionId)
     {
         var result = await _permissionManagementService.DeletePermissionAsync(permissionId);

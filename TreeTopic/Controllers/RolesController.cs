@@ -2,13 +2,14 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using TreeTopic.Dtos;
+using TreeTopic.Filters;
+using TreeTopic.Permissions;
 using TreeTopic.Models;
 
 namespace TreeTopic.Controllers;
 
 [ApiController]
 [Route("{tenant}/api/[controller]")]
-[Authorize]
 public class RolesController : ControllerBase
 {
     private readonly RoleManager<ApplicationRole> _roleManager;
@@ -19,6 +20,7 @@ public class RolesController : ControllerBase
     }
 
     [HttpGet]
+    [RequirePermission(IdentityPermissions.RoleRead)]
     public ActionResult<List<RoleDto>> List()
     {
         var roles = _roleManager.Roles.ToList();
@@ -26,6 +28,7 @@ public class RolesController : ControllerBase
     }
 
     [HttpPost]
+    [RequirePermission(IdentityPermissions.RoleManage)]
     public async Task<ActionResult<RoleDto>> Create([FromBody] RoleCreationRequest request)
     {
         if (!ModelState.IsValid)
@@ -50,6 +53,7 @@ public class RolesController : ControllerBase
     }
 
     [HttpDelete("{roleName}")]
+    [RequirePermission(IdentityPermissions.RoleManage)]
     public async Task<IActionResult> Delete(string roleName)
     {
         if (string.IsNullOrWhiteSpace(roleName))

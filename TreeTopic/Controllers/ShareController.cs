@@ -7,6 +7,8 @@ using Microsoft.AspNetCore.StaticFiles;
 using Microsoft.EntityFrameworkCore;
 using TreeTopic.Models;
 using TreeTopic.Common;
+using TreeTopic.Filters;
+using TreeTopic.Permissions;
 using FileModel = TreeTopic.Models.File;
 
 namespace TreeTopic.Controllers;
@@ -216,6 +218,7 @@ public class ShareController : ControllerBase
     }
 
     [HttpGet("room/{roomId}")]
+    [RequirePermission(RoomPermissions.Join)]
     public async Task<IActionResult> GetByRoom(
         [FromRoute] MaskedGuid roomId,
         [FromQuery] MaskedGuid? topicId,
@@ -285,6 +288,7 @@ public class ShareController : ControllerBase
 
     [HttpPost("room/{roomId}")]
     [Consumes("multipart/form-data")]
+    [RequirePermission(RoomPermissions.Write)]
     public async Task<IActionResult> UploadToRoom(
         [FromRoute] MaskedGuid roomId,
         [FromForm] IFormFile file,
@@ -451,6 +455,7 @@ public class ShareController : ControllerBase
     }
 
     [HttpPost("room/{roomId}/brainstorm")]
+    [RequirePermission(RoomPermissions.Write)]
     public async Task<IActionResult> ShareBrainstorm(
         [FromRoute] MaskedGuid roomId,
         [FromBody] CreateBrainstormShareRequest request,
@@ -479,6 +484,7 @@ public class ShareController : ControllerBase
     }
 
     [HttpDelete("room/{roomId}/{shareId}")]
+    [RequirePermission(RoomPermissions.Delete)]
     public async Task<IActionResult> DeleteShare(
         [FromRoute] MaskedGuid roomId,
         [FromRoute] MaskedGuid shareId,
