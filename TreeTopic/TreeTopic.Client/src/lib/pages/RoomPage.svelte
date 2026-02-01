@@ -6,6 +6,7 @@
   import { auth, isAuthenticated } from '$lib/stores/auth';
   import { currentRoom, setRooms, setCurrentRoom, addRoom, updateRoom, deleteRoom, roomList } from '$lib/stores/rooms';
   import { rooms } from '$lib/stores/rooms';
+  import type { Room } from '$lib/stores/rooms';
   import {
   selectedTopic,
   setSelectedTopic,
@@ -18,8 +19,10 @@
   toggleTopicExpansion,
   moveTopicParent,
   } from '$lib/stores/topics';
-  import { addMessage, deleteMessage, messageList, messages, setMessages, updateMessage } from '$lib/stores/messages';
+  import type { Topic } from '$lib/stores/topics';
+  import { addMessage, deleteMessage, messageList, messages, setMessages, updateMessage, type Message } from '$lib/stores/messages';
   import { setFiles } from '$lib/stores/files';
+  import { push } from '$lib/stores/push';
   import AppLayout from '$lib/components/layout/AppLayout.svelte';
   import RoomSelector from '$lib/components/rooms/RoomSelector.svelte';
   import RoomCreateModal from '$lib/components/rooms/RoomCreateModal.svelte';
@@ -50,6 +53,13 @@
   let filesLoadRequestId = $state(0);
   let lastAppliedUrlTopicId = $state<string | null>(null);
   let checkedRoomUserId = $state<string | null>(null);
+  let signalRStarted = $state(false);  // SignalR接続開始済みフラグ
+
+  // Tree描画完了フラグ
+  let isTreeRendered = $state(false);
+  let treeRenderTimeout: ReturnType<typeof setTimeout> | null = null;
+  let hasScrolledToMessages = $state(false);
+  let scrollTimeout: ReturnType<typeof setTimeout> | null = null;
   let messageHub: HubConnection | null = null;
   let messageHubTenant: string | null = null;
   let messageHubTopicId: string | null = null;
@@ -59,6 +69,14 @@
   let roomTopicHubTenant: string | null = null;
   let roomTopicHubRoomId: string | null = null;
   let roomTopicHubConnected = $state(false);
+  let roomUserSyncHub: HubConnection | null = null;
+  let roomUserSyncHubTenant: string | null = null;
+  let roomUserSyncHubRoomId: string | null = null;
+  let roomUserSyncHubUserId: string | null = null;
+  let roomUserSyncHubConnected = $state(false);
+
+  // Topic fetch deduplication map
+  const pendingTopicFetches = new Map<string, Promise<any>>();
 
   let urlTopicId = $derived.by(() => ($page.params as any)?.topicId ?? null);
   let legacyQueryTopicId = $derived.by(() => $page.url.searchParams.get('topicId'));
@@ -75,6 +93,12 @@
     return normalizedBaseUrl ? `${normalizedBaseUrl}/${tenant}/hubs/rooms` : `/${tenant}/hubs/rooms`;
   }
 
+  function buildRoomUserSyncHubUrl(tenant: string) {
+    const baseUrl = getApiBaseUrl();
+    const normalizedBaseUrl = baseUrl?.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
+    return normalizedBaseUrl ? `${normalizedBaseUrl}/${tenant}/hubs/roomusersync` : `/${tenant}/hubs/roomusersync`;
+  }
+
   async function startMessageHub(tenant: string) {
     if (messageHub && messageHubTenant === tenant) return;
 
@@ -86,14 +110,47 @@
       .build();
 
     connection.on('MessageCreated', (raw: any) => {
-      const normalized = normalizeMessage(raw);
-      const exists = $messageList.some((m) => m.id === normalized.id);
-      if (exists) {
-        updateMessage(normalized.id, normalized);
-      } else {
-        addMessage(normalized);
+      try {
+        const normalized = normalizeMessage(raw);
+        const exists = $messageList.some((m) => m.id === normalized.id);
+
+        if (exists) {
+          // 既に存在する場合は更新
+          updateMessage(normalized.id, normalized);
+        } else {
+          // 直近の10件を取得して整合性チェック
+          syncLatestMessages(normalized.topicId, normalized);
+        }
+
+        // SignalR受信時の処理
+        if (normalized.topicId) {
+          // 新しいメッセージで、現在選択中のトピックの場合は即座に既読にする
+          const isSelectedTopic = loadedTopicId === normalized.topicId;
+
+          if (!exists && isSelectedTopic && !document.hidden) {
+            console.log('[MessageCreated] New message for selected topic, marking as read immediately:', {
+              topicId: normalized.topicId,
+              loadedTopicId,
+              messageId: normalized.id
+            });
+            // 既読APIを呼び、レスポンスの未読数で更新
+            void markTopicAsRead(normalized.topicId).then(unreadCount => {
+              if (unreadCount !== null) {
+                updateTopic(normalized.topicId, { unreadCount });
+              }
+            });
+          } else if (!exists) {
+            console.log('[MessageCreated] New message for different topic or page hidden:', {
+              topicId: normalized.topicId,
+              loadedTopicId,
+              isSelectedTopic,
+              pageHidden: document.hidden
+            });
+          }
+        }
+      } catch (error) {
+        console.error('Failed to process MessageCreated event:', error, raw);
       }
-      if (normalized.topicId) scheduleMessageSync(normalized.topicId);
     });
 
     connection.on('MessageUpdated', (raw: any) => {
@@ -164,9 +221,10 @@
       deleteRoom(roomId);
     });
 
-    connection.on('TopicCreated', (raw: any) => {
+    connection.on('TopicCreated', async (raw: any) => {
       const normalized = normalizeTopic(raw);
       if (!$currentRoom || normalized.roomId !== $currentRoom.id) return;
+
       const exists = $topicList.some((t) => t.id === normalized.id);
       if (exists) {
         // 既存の場合はトピックを更新
@@ -174,15 +232,44 @@
         return;
       }
 
+      // 親トピックのID
       const parentId = normalized.parentId ?? null;
+
+      // 親がtopicListにない場合は先に親を取得
       if (parentId && !$topicList.some((t) => t.id === parentId)) {
-        return;
+        try {
+          const tenant = messageHubTenant ?? $page.params.tenant ?? getCurrentTenant();
+          if (tenant) {
+            const parentRaw = await api.get<any>(`/${tenant}/api/Topic/${parentId}`);
+            const parentNormalized = normalizeTopic(parentRaw);
+            // 親を追加
+            if (!$topicList.some((t) => t.id === parentNormalized.id)) {
+              addTopic(parentNormalized);
+            }
+          }
+        } catch (err) {
+          console.error('Failed to fetch parent topic:', err);
+          // 親の取得に失敗しても子は追加する
+        }
+      }
+
+      // 親トピックのhasChildrenを更新
+      if (parentId) {
+        updateTopic(parentId, { hasChildren: true });
       }
 
       addTopic(normalized);
+
+      // 親トピックを自動展開（作成したクライアントで子が表示されるように）
+      if (parentId) {
+        // 親がまだ展開されていない場合は展開
+        if (!$expandedTopics.has(parentId)) {
+          toggleTopicExpansion(parentId);
+        }
+      }
     });
 
-    connection.on('TopicUpdated', (raw: any) => {
+    connection.on('TopicUpdated', async (raw: any) => {
       const normalized = normalizeTopic(raw);
       if (!$currentRoom || normalized.roomId !== $currentRoom.id) {
         const existing = $topicList.find((t) => t.id === normalized.id);
@@ -200,7 +287,23 @@
       const previousParentId = existing.parentId ?? null;
       if (previousParentId !== normalizedParentId) {
         moveTopicParent(normalized.id, normalizedParentId);
+
+        // 古い親のhasChildrenを更新
+        if (previousParentId) {
+          const hasOtherChildren = $topicList.some(t => t.parentId === previousParentId && t.id !== normalized.id);
+          updateTopic(previousParentId, { hasChildren: hasOtherChildren });
+        }
+
+        // 新しい親のhasChildrenを更新
+        if (normalizedParentId) {
+          updateTopic(normalizedParentId, { hasChildren: true });
+        }
       }
+
+      // 未読数が0で既存の未読数がある場合は、既存の未読数を保持（バックエンドから未読数が送られない場合がある）
+      const unreadCount = (normalized.unreadCount === 0 && existing.unreadCount > 0)
+        ? existing.unreadCount
+        : normalized.unreadCount;
 
       updateTopic(normalized.id, {
         parentId: normalized.parentId,
@@ -209,7 +312,7 @@
         description: normalized.description,
         creatorId: normalized.creatorId,
         messageCount: normalized.messageCount,
-        unreadCount: normalized.unreadCount,
+        unreadCount,
         userPermission: normalized.userPermission,
         permissions: normalized.permissions,
         isArchived: normalized.isArchived,
@@ -220,22 +323,20 @@
       });
     });
 
-    connection.on('TopicDeleted', (raw: any) => {
+    connection.on('TopicDeleted', async (raw: any) => {
       const topicId = raw?.topicId ?? raw?.TopicId ?? '';
       const roomId = raw?.roomId ?? raw?.RoomId ?? '';
+      const parentId = raw?.parentId ?? raw?.ParentId ?? null;
       if (!topicId) return;
       if ($currentRoom && roomId && roomId !== $currentRoom.id) return;
 
-      // 削除するトピックの情報を取得
-      const deletedTopic = $topicList.find(t => t.id === topicId);
-      const parentId = deletedTopic?.parentId;
-
       deleteTopic(topicId);
 
-      // 親トピックがあればhasChildrenを更新
-      // TODO: if (parentId) {
-      //   topics.refreshHasChildren(parentId);
-      // }
+      // 親トピックがあればhasChildrenを更新（子がまだいるかチェック）
+      if (parentId) {
+        const hasOtherChildren = $topicList.some(t => t.parentId === parentId);
+        updateTopic(parentId, { hasChildren: hasOtherChildren });
+      }
     });
 
     connection.onreconnected(async () => {
@@ -269,6 +370,53 @@
     }
   }
 
+  async function startRoomUserSyncHub(tenant: string, roomId: string, userId: string) {
+    if (roomUserSyncHub && roomUserSyncHubTenant === tenant && roomUserSyncHubRoomId === roomId && roomUserSyncHubUserId === userId) return;
+
+    await stopRoomUserSyncHub();
+
+    const connection = new HubConnectionBuilder()
+      .withUrl(buildRoomUserSyncHubUrl(tenant), { withCredentials: true })
+      .withAutomaticReconnect()
+      .build();
+
+    connection.on('TopicUnreadUpdated', async (raw: any) => {
+      // SignalRはPascalCaseでシリアライズされる
+      const topicId = raw?.TopicId ?? raw?.topicId ?? '';
+      const unreadCount = raw?.UnreadCount ?? raw?.unreadCount ?? 0;
+
+      if (!topicId) return;
+
+      // SignalRイベントから直接未読数を更新（API再取得をスキップしてタイムラグを回避）
+      updateTopic(topicId, { unreadCount });
+    });
+
+    connection.onreconnected(async () => {
+      roomUserSyncHubConnected = true;
+      try {
+        await connection.invoke('JoinRoomUserGroup', roomId, userId);
+      } catch (err) {
+        console.error('Failed to rejoin room user sync hub:', err);
+      }
+    });
+
+    connection.onclose(() => {
+      roomUserSyncHubConnected = false;
+    });
+
+    try {
+      await connection.start();
+      roomUserSyncHub = connection;
+      roomUserSyncHubTenant = tenant;
+      roomUserSyncHubRoomId = roomId;
+      roomUserSyncHubUserId = userId;
+      roomUserSyncHubConnected = true;
+      await connection.invoke('JoinRoomUserGroup', roomId, userId);
+    } catch (err) {
+      console.error('Failed to start room user sync hub:', err);
+    }
+  }
+
   async function stopMessageHub() {
     if (!messageHub) return;
     try {
@@ -294,6 +442,21 @@
       roomTopicHubTenant = null;
       roomTopicHubRoomId = null;
       roomTopicHubConnected = false;
+    }
+  }
+
+  async function stopRoomUserSyncHub() {
+    if (!roomUserSyncHub) return;
+    try {
+      await roomUserSyncHub.stop();
+    } catch (err) {
+      console.error('Failed to stop room user sync hub:', err);
+    } finally {
+      roomUserSyncHub = null;
+      roomUserSyncHubTenant = null;
+      roomUserSyncHubRoomId = null;
+      roomUserSyncHubUserId = null;
+      roomUserSyncHubConnected = false;
     }
   }
 
@@ -388,14 +551,49 @@
     };
   }
 
+  /**
+   * Fetch a topic once with deduplication
+   * Prevents duplicate fetches of the same topic
+   */
+  async function fetchTopicOnce(tenant: string, topicId: string): Promise<any> {
+    // Check if there's already a pending fetch for this topic
+    if (pendingTopicFetches.has(topicId)) {
+      return pendingTopicFetches.get(topicId);
+    }
+
+    // Check API cache first
+    const cacheKey = `topic:${tenant}:${topicId}`;
+    const cached = pendingTopicFetches.get(cacheKey);
+    if (cached) return cached;
+
+    // Create new fetch promise
+    const promise = api.get<any>(`/${tenant}/api/Topic/${topicId}`)
+      .then(data => {
+        pendingTopicFetches.delete(topicId);
+        return data;
+      })
+      .catch(err => {
+        pendingTopicFetches.delete(topicId);
+        throw err;
+      });
+
+    pendingTopicFetches.set(topicId, promise);
+    return promise;
+  }
+
   async function ensureTopicPathLoaded(tenant: string, topicId: string) {
     const chain: any[] = [];
     let cursorId: string | null = topicId;
     const visited = new Set<string>();
 
+    // Fetch all topics in the path (in parallel for better performance)
+    const fetchPromises: Map<string, Promise<any>> = new Map();
+
     while (cursorId && !visited.has(cursorId)) {
       visited.add(cursorId);
-      const raw = await api.get<any>(`/${tenant}/api/Topic/${cursorId}`);
+      // Use fetchTopicOnce for deduplication
+      fetchPromises.set(cursorId, fetchTopicOnce(tenant, cursorId));
+      const raw = await fetchPromises.get(cursorId);
       const normalized = normalizeTopic(raw);
       chain.push(normalized);
       cursorId = normalized.parentId ?? null;
@@ -414,6 +612,8 @@
           parentId: t.parentId,
           roomId: t.roomId,
           hasChildren: t.hasChildren,
+          unreadCount: t.unreadCount,
+          messageCount: t.messageCount,
           updatedAt: t.updatedAt,
           sourceMessageId: t.sourceMessageId ?? null,
         });
@@ -429,33 +629,116 @@
     return chain[chain.length - 1] ?? null;
   }
 
-  async function selectTopicFromUrl(tenant: string) {
+  // 展開されているトピックの子孫を再帰的に取得（並列処理版）
+  async function loadDescendantsForExpandedTopics(tenant: string): Promise<void> {
+    // 新しいAPI: ルーム内の全トピックを未読カウント付きで一括取得
     if (!$currentRoom) return;
+
+    try {
+      const response = await api.get<any[]>(`/${tenant}/api/Topic/room/${$currentRoom.id}/all-with-unread`);
+      const allTopics = Array.isArray(response) ? response.map(normalizeTopic) : [];
+
+      console.log(`[loadDescendantsForExpandedTopics] Loaded ${allTopics.length} topics from all-with-unread API`);
+
+      // 全トピックをストアに追加または更新
+      allTopics.forEach((topic) => {
+        const existing = $topicList.find((t) => t.id === topic.id);
+        if (!existing) {
+          addTopic(topic);
+        } else {
+          // 既存のトピックの場合は未読カウントなどの情報を更新
+          updateTopic(topic.id, {
+            unreadCount: topic.unreadCount,
+            messageCount: topic.messageCount,
+            hasChildren: topic.hasChildren,
+          });
+        }
+      });
+
+      console.log('[loadDescendantsForExpandedTopics] All topics loaded with unread counts');
+    } catch (err) {
+      console.error('Failed to load all topics with unread:', err);
+    }
+  }
+
+  async function selectTopicFromUrl(tenant: string, roomToUse?: Room | null): Promise<Topic | null> {
+    const room = roomToUse ?? $currentRoom;
+    if (!room) return null;
     if (!urlTopicId) {
       if ($selectedTopic) setSelectedTopic(null);
-      return;
+      return null;
     }
 
-    if ($selectedTopic?.id === urlTopicId) return;
+    if ($selectedTopic?.id === urlTopicId) return $selectedTopic;
 
     const existing = $topicList.find((t) => t.id === urlTopicId) ?? null;
     if (existing) {
-      if (existing.roomId === $currentRoom.id) setSelectedTopic(existing);
-      return;
+      if (existing.roomId === room.id) setSelectedTopic(existing);
+      // トピックを選択したときに既読にする
+      if (!document.hidden) {
+        console.log('Topic selected from URL, marking as read:', existing.id);
+        setTimeout(() => {
+          void markTopicAsRead(existing.id).then(unreadCount => {
+            if (unreadCount !== null) {
+              updateTopic(existing.id, { unreadCount });
+            }
+          });
+        }, 100);
+      }
+      return existing;
     }
 
     try {
       const loaded = await ensureTopicPathLoaded(tenant, urlTopicId);
-      if (loaded && loaded.roomId === $currentRoom.id) {
+      if (loaded && loaded.roomId === room.id) {
         setSelectedTopic(loaded);
+        // トピックを選択したときに既読にする
+        if (!document.hidden) {
+          console.log('Topic loaded from URL, marking as read:', loaded.id);
+          setTimeout(() => {
+            void markTopicAsRead(loaded.id).then(unreadCount => {
+              if (unreadCount !== null) {
+                updateTopic(loaded.id, { unreadCount });
+              }
+            });
+          }, 100);
+        }
+        return loaded;
       }
     } catch {
       // ignore
+    }
+    return null;
+  }
+
+  /// <summary>
+  /// トピックの未読状態をバックエンドから取得して更新する（シンプル版）
+  /// </summary>
+  async function refreshTopicUnreadStatus(topicId: string, tenant: string) {
+    try {
+      const updated = await api.get<any>(`/${tenant}/api/Topic/${topicId}`);
+      if (updated) {
+        const normalized = normalizeTopic(updated);
+        if (normalized.id) {
+          updateTopic(normalized.id, {
+            unreadCount: normalized.unreadCount
+          });
+        }
+      }
+    } catch (err) {
+      console.error('Failed to refresh topic unread status:', err);
     }
   }
 
   function normalizeMessage(raw: any) {
     const id = raw?.id ?? raw?.Id ?? '';
+
+    // IDが空文字列の場合はエラーとして扱う（デバッグ用）
+    if (!id) {
+      console.error('Message ID is empty:', raw);
+      throw new Error('Invalid message ID: ID is empty');
+    }
+
     const createdAt = raw?.createdAt ?? raw?.CreatedAt ?? null;
     const updatedAt = raw?.updatedAt ?? raw?.UpdatedAt ?? null;
 
@@ -545,6 +828,73 @@
     setMessages(topicId, merged);
   }
 
+  // メッセージ表示領域のスクロールイベントを監視
+  function setupMessageScrollListener() {
+    const messageContainer = document.querySelector('.room-messages-container');
+    if (!messageContainer) return;
+
+    messageContainer.addEventListener('scroll', () => {
+      if (scrollTimeout) clearTimeout(scrollTimeout);
+
+      const scrollTop = messageContainer.scrollTop;
+      const scrollHeight = messageContainer.scrollHeight;
+      const clientHeight = messageContainer.clientHeight;
+
+      // ユーザーがメッセージを表示していることを検出（スクロールが発生した場合）
+      if (scrollTop > 0) {
+        scrollTimeout = setTimeout(() => {
+          if (loadedTopicId) {
+            console.log('User scrolled, marking topic as read:', loadedTopicId);
+            void markTopicAsRead(loadedTopicId);
+          }
+        }, 1000); // スクロール停止後1秒で未読更新
+      }
+    }, { passive: true });
+
+    // スクロールバーが出ていない場合（コンテンツが画面に収まっている場合）、即座に既読にする
+    requestAnimationFrame(() => {
+      const scrollHeight = messageContainer.scrollHeight;
+      const clientHeight = messageContainer.clientHeight;
+      if (scrollHeight <= clientHeight && loadedTopicId) {
+        console.log('Content fits in viewport, marking topic as read immediately:', loadedTopicId);
+        void markTopicAsRead(loadedTopicId);
+      }
+    });
+  }
+
+  async function markTopicAsRead(topicId: string, retryCount = 0): Promise<number | null> {
+    const tenant = $page.params.tenant ?? getCurrentTenant();
+    if (!tenant) return null;
+
+    // 未読更新を実行（常に実行して状態を正しく保つ）
+    try {
+      console.log(`Marking topic ${topicId} as read (attempt ${retryCount + 1})`);
+      const response = await api.post<number>(`/${tenant}/api/Message/topic/${topicId}/markAsRead`);
+      const unreadCount = typeof response === 'number' ? response : 0;
+      console.log(`Mark topic ${topicId} as read, unread count: ${unreadCount}`);
+      return unreadCount;
+    } catch (err: unknown) {
+      const error = err as Error & { status?: number };
+      console.error('Failed to mark topic as read:', error);
+      console.error('Topic ID:', topicId);
+      console.error('User ID:', $auth?.user?.id);
+
+      // リトライロジック（最大3回）
+      if (retryCount < 3 && error.status && error.status >= 500) {
+        console.log(`Retrying markAsRead for topic ${topicId} (attempt ${retryCount + 1})`);
+        await new Promise(resolve => setTimeout(resolve, 1000 * (retryCount + 1)));
+        return await markTopicAsRead(topicId, retryCount + 1);
+      }
+
+      // ユーザーにエラーを通知
+      if (error.status && error.status >= 400 && error.status < 500) {
+        // クライアントエラーはユーザーに通知
+        alert('未読の更新に失敗しました。ページを再読み込みしてください。');
+      }
+      return null;
+    }
+  }
+
   function getAnchorIdForTopic(topicId: string, backCount: number) {
     const topicMessages = $messageList
       .filter((m) => m.topicId === topicId)
@@ -553,6 +903,38 @@
     if (topicMessages.length === 0) return null;
     const index = Math.max(topicMessages.length - backCount, 0);
     return topicMessages[index]?.id ?? topicMessages[0]?.id ?? null;
+  }
+
+  function syncLatestMessages(topicId: string, newMessage: Message) {
+    // 直近10件のメッセージを取得
+    const topicMessages = $messageList
+      .filter((m) => m.topicId === topicId)
+      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+      .slice(-10);
+
+    if (topicMessages.length === 0) {
+      // メッセージがなければ直接追加
+      addMessage(newMessage);
+      return;
+    }
+
+    // 最も古いメッセージより新しいメッセージのみを取得
+    const oldestMessage = topicMessages[0];
+    const newerMessages = topicMessages.filter(m => new Date(m.createdAt) >= new Date(oldestMessage.createdAt));
+
+    // 古いメッセージを削除
+    newerMessages.forEach(m => {
+      deleteMessage(m.id);
+    });
+
+    // 新しいメッセージを追加（新しい順）
+    const sortedNewMessages = [...newerMessages, newMessage]
+      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+
+    // すべてを再追加
+    sortedNewMessages.forEach(m => {
+      addMessage(m);
+    });
   }
 
   function scheduleMessageSync(topicId: string) {
@@ -574,6 +956,12 @@
         );
         const list = Array.isArray(response) ? response.map(normalizeMessage) : [];
         mergeMessagesForTopic(topicId, list);
+
+        // 同期後に未読更新を実行（同期したメッセージが表示されたと判断）
+        setTimeout(async () => {
+          console.log('Executing markTopicAsRead after message sync for topic:', topicId);
+          await markTopicAsRead(topicId);
+        }, 300);
       } catch (err) {
         console.error('Failed to sync messages:', err);
       }
@@ -614,35 +1002,133 @@
       if (!tenant) throw new Error('Tenant not found in URL');
 
       api.configureApiClient(tenant);
+
+      // Step 1: 認証（必ず最初）
       await auth.fetchCurrentUser(tenant);
 
-      const response = await api.get<any[]>(`/${tenant}/api/Room`);
-      const rooms = Array.isArray(response) ? response.map(normalizeRoom) : [];
+      // Step 2: 並列実行 - SignalR接続開始 + Rooms取得
+      signalRStarted = true;
+
+      const [roomsResponse] = await Promise.all([
+        api.get<any[]>(`/${tenant}/api/Room`),
+        startMessageHub(tenant).catch(err => {
+          console.error('Failed to start message hub:', err);
+        }),
+        startRoomTopicHub(tenant).catch(err => {
+          console.error('Failed to start room topic hub:', err);
+        }),
+      ]);
+
+      const rooms = Array.isArray(roomsResponse) ? roomsResponse.map(normalizeRoom) : [];
       setRooms(rooms);
 
       const roomId = $page.params.roomId;
+      console.log('[RoomPage] URL roomId:', roomId, 'Type:', typeof roomId);
+      console.log('[RoomPage] Loaded rooms:', rooms.length, rooms);
+      console.log('[RoomPage] First room id:', rooms[0]?.id, 'Type:', typeof rooms[0]?.id);
+
       const initialRoom = rooms.find((room) => room.id === roomId) ?? rooms[0] ?? null;
+      console.log('[RoomPage] Selected initialRoom:', initialRoom);
       setCurrentRoom(initialRoom);
 
+      // ここでローディング解除 - Roomが表示される
+      isLoading = false;
+
       if (initialRoom) {
-        try {
-          const topicsResponse = await api.get<any[]>(`/${tenant}/api/Topic/room/${initialRoom.id}/root`);
-          const topics = Array.isArray(topicsResponse) ? topicsResponse.map(normalizeTopic) : [];
-          setTopics(topics);
-          await selectTopicFromUrl(tenant);
-        } catch (err) {
-          console.error('Failed to load root topics:', err);
+        // Step 3: 並列実行 - RoomUser + Topics + Files + RoomUserSyncHub
+        const userId = $auth?.user?.id ?? '';
+        const [roomUserData, topicsResponse, filesResponse] = await Promise.all([
+          loadRoomUser(tenant, initialRoom.id).catch(err => {
+            console.error('Failed to load room user:', err);
+            return null;
+          }),
+          api.get<any[]>(`/${tenant}/api/Topic/room/${initialRoom.id}/root-with-unread`).catch(err => {
+            console.error('Failed to load root topics with unread:', err);
+            // フォールバックとして通常のAPIを使用
+            return api.get<any[]>(`/${tenant}/api/Topic/room/${initialRoom.id}/root`).catch(err => {
+              console.error('Failed to load root topics (fallback):', err);
+              return [];
+            });
+          }),
+          loadRoomFiles(tenant, initialRoom.id).catch(err => {
+            console.error('Failed to load room files:', err);
+            return [];
+          }),
+          // userIdがある場合のみSignalR接続を開始
+          userId ? startRoomUserSyncHub(tenant, initialRoom.id, userId).catch(err => {
+            console.error('Failed to start room user sync hub:', err);
+          }) : Promise.resolve(),
+        ]);
+
+        console.log('[RoomPage] Topics API response:', topicsResponse);
+        const topics = Array.isArray(topicsResponse) ? topicsResponse.map(normalizeTopic) : [];
+        console.log('[RoomPage] Normalized topics:', topics);
+
+        // 新しいAPIではすでにunreadCountが含まれている
+        const topicsWithUnread = topics.map(topic => {
+          const unreadCount = topic.unreadCount || 0;
+          console.log(`[RoomPage] Topic ${topic.id} (${topic.title}): unread count = ${unreadCount}, hasChildren = ${topic.hasChildren}`);
+          return topic;
+        });
+
+        console.log('[RoomPage] Topics with unread counts:', topicsWithUnread.map(t => ({ id: t.id, title: t.title, unreadCount: t.unreadCount, hasChildren: t.hasChildren })));
+        setTopics(topicsWithUnread);
+
+        // Step 4: 並列実行 - トピック選択 + 子孫ロード
+        const [selected] = await Promise.all([
+          selectTopicFromUrl(tenant, initialRoom),
+          loadDescendantsForExpandedTopics(tenant),
+        ]);
+
+        lastAppliedUrlTopicId = urlTopicId ?? null;
+
+        // Tree描画完了をマーク
+        isTreeRendered = true;
+
+        // トピック選択後に未読更新とメッセージ読み込みを開始
+        if (selected) {
+          loadedTopicId = selected.id;
+          messages.setLoading(true);
+          messages.setError(null);
+
+          // 即座に未読更新を実行
+          console.log('Topic selected, marking as read immediately:', selected.id);
+          void markTopicAsRead(selected.id);
+
+          const requestId = ++loadRequestId;
+          api.get<any[]>(`/${tenant}/api/Message/topic/${selected.id}`)
+            .then(async (response) => {
+              if (requestId !== loadRequestId) return;
+              const list = Array.isArray(response) ? response.map(normalizeMessage) : [];
+              setMessages(selected.id, list);
+            })
+            .catch((err: unknown) => {
+              if (requestId !== loadRequestId) return;
+              const msg = err instanceof Error ? err.message : 'Failed to load messages';
+              messages.setError(msg);
+            })
+            .finally(() => {
+              if (requestId !== loadRequestId) return;
+              messages.setLoading(false);
+              // メッセージ読み込み後、スクロールリスナーを設定
+              setupMessageScrollListener();
+              // 初回ロード時は即座に未読更新を実行
+              if (!hasScrolledToMessages) {
+                hasScrolledToMessages = true;
+                console.log('Initial load, marking topic as read:', selected.id);
+                void markTopicAsRead(selected.id);
+              }
+            });
         }
       }
 
       if (initialRoom && initialRoom.id !== roomId) {
+        // goto()による再遷移をやめ、履歴を追加せずにURLのみを更新
         const search = $page.url.search;
         const maybeTopic = urlTopicId ? `/topic/${urlTopicId}` : '';
-        goto(`/${tenant}/room/${initialRoom.id}${maybeTopic}${search}`, {
-          replaceState: true,
-          keepFocus: true,
-          noScroll: true,
-        });
+        const newUrl = `/${tenant}/room/${initialRoom.id}${maybeTopic}${search}`;
+        window.history.replaceState({}, '', newUrl);
+        // setCurrentRoomは既に呼ばれているので、これ以上何もしない
       }
     } catch (error) {
       const resolvedTenant = tenant ?? ($page.params.tenant ?? getCurrentTenant());
@@ -651,19 +1137,87 @@
         error instanceof api.ApiError &&
         (error.status === 401 || error.status === 403)
       ) {
+        isLoading = false;
         auth.logout();
         redirectToTenantLogin(resolvedTenant);
         return;
       }
 
       loadError = error instanceof Error ? error.message : 'Failed to load tenant data';
-    } finally {
       isLoading = false;
+    }
+  }
+
+  async function loadRoomFiles(tenant: string, roomId: string): Promise<void> {
+    if (loadedRoomFilesId === roomId) return;
+    loadedRoomFilesId = roomId;
+
+    try {
+      const response = await api.get<any[]>(`/${tenant}/api/File/room/${roomId}`);
+      const list = Array.isArray(response) ? response.map(normalizeMaterial) : [];
+      setFiles(list);
+    } catch {
+      setFiles([]);
+    }
+  }
+
+  async function loadRoomUser(tenant: string, roomId: string): Promise<void> {
+    if (checkedRoomUserId === roomId) return;
+    checkedRoomUserId = roomId;
+
+    try {
+      const roomUserData = await api.get<any>(`/${tenant}/api/RoomUsers/room/${roomId}/me`);
+      if (roomUserData) {
+        const roomUser = {
+          id: roomUserData.id ?? roomUserData.Id ?? '',
+          displayName: roomUserData.displayName ?? roomUserData.DisplayName ?? '',
+          iconUrl: roomUserData.iconUrl ?? roomUserData.IconUrl,
+          useMainIcon: roomUserData.useMainIcon ?? roomUserData.UseMainIcon ?? false,
+        };
+        rooms.setCurrentRoomUser(roomUser);
+      }
+    } catch (err: unknown) {
+      if (err instanceof api.ApiError) {
+        if (err.status === 401) {
+          // 未ログイン: ログインページにリダイレクト
+          redirectToTenantLogin(tenant);
+          return;
+        }
+        if (err.status === 404) {
+          // 未登録: 参加モーダルを表示
+          void handleRoomUserNotFound(tenant, roomId);
+          return;
+        }
+      }
+      console.error('Failed to fetch RoomUser:', err);
     }
   }
 
   onMount(() => {
     loadTenantData();
+    // プッシュ通知の初期化と購読
+    push.init().then(async () => {
+      if (Notification.permission === 'default') {
+        const granted = await push.requestPermission();
+        if (granted) {
+          console.log('[RoomPage] Push notification permission granted, subscribing...');
+          try {
+            await push.subscribePush();
+            console.log('[RoomPage] Push notification subscription successful');
+          } catch (err) {
+            console.error('[RoomPage] Failed to subscribe to push notifications:', err);
+          }
+        }
+      } else if (Notification.permission === 'granted') {
+        // 既に許可されている場合は購読のみ
+        try {
+          await push.subscribePush();
+          console.log('[RoomPage] Push notification subscription successful');
+        } catch (err) {
+          console.error('[RoomPage] Failed to subscribe to push notifications:', err);
+        }
+      }
+    });
     return () => {
       void stopMessageHub();
       void stopRoomTopicHub();
@@ -731,6 +1285,7 @@
   $effect(() => {
     if (!$currentRoom || !$selectedTopic) return;
 
+    // 既に読み込まれている場合はスキップ（loadTenantData内で実行済みの場合）
     if (loadedTopicId === $selectedTopic.id) return;
     loadedTopicId = $selectedTopic.id;
 
@@ -755,6 +1310,16 @@
       .finally(() => {
         if (requestId !== loadRequestId) return;
         messages.setLoading(false);
+
+        // メッセージ読み込み完了後、ページが表示されている場合は既読にする
+        if (!document.hidden && loadedTopicId) {
+          console.log('[MessageLoad] Messages loaded, marking topic as read:', loadedTopicId);
+          void markTopicAsRead(loadedTopicId).then(unreadCount => {
+            if (unreadCount !== null && loadedTopicId) {
+              updateTopic(loadedTopicId, { unreadCount });
+            }
+          });
+        }
       });
   });
 
@@ -764,8 +1329,13 @@
     if (!$isAuthenticated) {
       void stopMessageHub();
       void stopRoomTopicHub();
+      void stopRoomUserSyncHub();
+      signalRStarted = false;
       return;
     }
+
+    // loadTenantData()で既にSignalR接続を開始済みの場合はスキップ
+    if (signalRStarted) return;
 
     void startMessageHub(tenant).then(() => {
       void ensureMessageHubTopic($selectedTopic?.id ?? null);
@@ -774,6 +1344,13 @@
     void startRoomTopicHub(tenant).then(() => {
       void ensureRoomTopicHubRoom($currentRoom?.id ?? null);
     });
+
+    const userId = $auth?.user?.id ?? null;
+    if ($currentRoom?.id && userId) {
+      void startRoomUserSyncHub(tenant, $currentRoom.id, userId);
+    }
+
+    signalRStarted = true;
   });
 
   $effect(() => {
@@ -787,64 +1364,34 @@
   });
 
   $effect(() => {
-    if (!$currentRoom) {
-      loadedRoomFilesId = null;
-      setFiles([]);
+    const tenant = $page.params.tenant ?? getCurrentTenant();
+    const roomId = $currentRoom?.id ?? null;
+    const userId = $auth?.user?.id ?? null;
+    if (!tenant || !roomId || !userId) {
+      void stopRoomUserSyncHub();
       return;
     }
-
-    if (loadedRoomFilesId === $currentRoom.id) return;
-    loadedRoomFilesId = $currentRoom.id;
-
-    const tenant = $page.params.tenant ?? getCurrentTenant();
-    if (!tenant) return;
-
-    const requestId = ++filesLoadRequestId;
-    api.get<any[]>(`/${tenant}/api/File/room/${$currentRoom.id}`)
-      .then((response) => {
-        if (requestId !== filesLoadRequestId) return;
-        const list = Array.isArray(response) ? response.map(normalizeMaterial) : [];
-        setFiles(list);
-      })
-      .catch(() => {
-        if (requestId !== filesLoadRequestId) return;
-        setFiles([]);
-      });
+    void startRoomUserSyncHub(tenant, roomId, userId);
   });
 
-  $effect(() => {
-    if (!$currentRoom) {
-      checkedRoomUserId = null;
-      return;
-    }
+  // document.visibilitychangeイベントを監視
+  onMount(() => {
+    const handleVisibilityChange = () => {
+      if (!document.hidden && loadedTopicId) {
+        console.log('[VisibilityChange] Document became visible, marking topic as read:', loadedTopicId);
+        void markTopicAsRead(loadedTopicId).then(unreadCount => {
+          if (unreadCount !== null && loadedTopicId) {
+            updateTopic(loadedTopicId, { unreadCount });
+          }
+        });
+      }
+    };
 
-    // Only fetch if room ID changed
-    if (checkedRoomUserId === $currentRoom.id) return;
-    checkedRoomUserId = $currentRoom.id;
+    document.addEventListener('visibilitychange', handleVisibilityChange);
 
-    const tenant = $page.params.tenant ?? getCurrentTenant();
-    if (!tenant) return;
-
-    api.get<any>(`/${tenant}/api/RoomUsers/room/${$currentRoom.id}/me`)
-      .then((roomUserData: any) => {
-        if (roomUserData) {
-          const roomUser = {
-            id: roomUserData.id ?? roomUserData.Id ?? '',
-            displayName: roomUserData.displayName ?? roomUserData.DisplayName ?? '',
-            iconUrl: roomUserData.iconUrl ?? roomUserData.IconUrl,
-            useMainIcon: roomUserData.useMainIcon ?? roomUserData.UseMainIcon ?? false,
-          };
-          rooms.setCurrentRoomUser(roomUser);
-        }
-      })
-      .catch((err: unknown) => {
-        if (err instanceof api.ApiError && err.status === 404) {
-          void handleRoomUserNotFound(tenant, $currentRoom.id);
-          return;
-        }
-
-        console.error('Failed to fetch RoomUser:', err);
-      });
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   });
 </script>
 

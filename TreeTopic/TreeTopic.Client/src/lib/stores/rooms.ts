@@ -1,4 +1,7 @@
 import { writable, derived } from 'svelte/store';
+import { isCacheValid } from '$lib/utils/store';
+
+const ROOMS_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
 /**
  * Room member information
@@ -58,6 +61,7 @@ export interface RoomsState {
   isLoading: boolean;
   error: string | null;
   lastUpdated: number | null;
+  cacheExpiry: number;
 }
 
 /**
@@ -72,6 +76,7 @@ function createRoomsStore() {
     isLoading: false,
     error: null,
     lastUpdated: null,
+    cacheExpiry: 0,
   });
 
   return {
@@ -85,6 +90,7 @@ function createRoomsStore() {
         rooms,
         error: null,
         lastUpdated: Date.now(),
+        cacheExpiry: Date.now() + ROOMS_CACHE_TTL,
       }));
     },
     /**
@@ -215,6 +221,7 @@ function createRoomsStore() {
         isLoading: false,
         error: null,
         lastUpdated: null,
+        cacheExpiry: 0,
       });
     },
   };
@@ -225,45 +232,45 @@ export const rooms = createRoomsStore();
 /**
  * Derived stores
  */
-export const roomList = derived(rooms, ($rooms) => $rooms.rooms);
-export const currentRoom = derived(rooms, ($rooms) => $rooms.currentRoom);
-export const selectedRoomId = derived(rooms, ($rooms) => $rooms.selectedRoomId);
-export const currentRoomUser = derived(rooms, ($rooms) => $rooms.currentRoomUser);
-export const roomsLoading = derived(rooms, ($rooms) => $rooms.isLoading);
-export const roomsError = derived(rooms, ($rooms) => $rooms.error);
+export const roomList = derived(rooms, ($rooms) => $rooms?.rooms ?? []);
+export const currentRoom = derived(rooms, ($rooms) => $rooms?.currentRoom ?? null);
+export const selectedRoomId = derived(rooms, ($rooms) => $rooms?.selectedRoomId ?? null);
+export const currentRoomUser = derived(rooms, ($rooms) => $rooms?.currentRoomUser ?? null);
+export const roomsLoading = derived(rooms, ($rooms) => $rooms?.isLoading ?? false);
+export const roomsError = derived(rooms, ($rooms) => $rooms?.error ?? null);
 
 /**
  * Get room by ID
  */
 export const getRoomById = (roomId: string) =>
-  derived(roomList, ($rooms) => $rooms.find((r) => r.id === roomId));
+  derived(roomList, ($rooms) => ($rooms || []).find((r) => r?.id === roomId));
 
 /**
  * Get all unread rooms
  */
 export const unreadRooms = derived(roomList, ($rooms) =>
-  $rooms.filter((r) => r.unreadCount > 0)
+  ($rooms || []).filter((r) => r?.unreadCount > 0)
 );
 
 /**
  * Get total unread count
  */
 export const totalUnreadCount = derived(roomList, ($rooms) =>
-  $rooms.reduce((sum, room) => sum + room.unreadCount, 0)
+  ($rooms || []).reduce((sum, room) => sum + (room?.unreadCount ?? 0), 0)
 );
 
 /**
  * Get active (non-archived) rooms
  */
 export const activeRooms = derived(roomList, ($rooms) =>
-  $rooms.filter((r) => !r.isArchived)
+  ($rooms || []).filter((r) => r && !r.isArchived)
 );
 
 /**
  * Get archived rooms
  */
 export const archivedRooms = derived(roomList, ($rooms) =>
-  $rooms.filter((r) => r.isArchived)
+  ($rooms || []).filter((r) => r && r.isArchived)
 );
 
 /**

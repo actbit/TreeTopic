@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+<body>
+<canvas id="c192" width="192" height="192"></canvas>
+<canvas id="c512" width="512" height="512"></canvas>
+<script>
+const drawIcon = (size, canvasId) => {
+  const canvas = document.getElementById(canvasId);
+  const ctx = canvas.getContext('2d');
+  // 背景
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, size, size);
+  // 枠
+  ctx.strokeStyle = '#4A5568';
+  ctx.lineWidth = size / 24;
+  ctx.strokeRect(size/8, size/8, size*3/4, size*3/4);
+  // 木の形（簡易版）
+  ctx.fillStyle = '#48BB78';
+  ctx.beginPath();
+  ctx.arc(size/2, size/2.5, size/4, 0, Math.PI * 2);
+  ctx.fill();
+  // 幹
+  ctx.fillStyle = '#744210';
+  ctx.fillRect(size/2 - size/24, size/2.2, size/12, size/3);
+};
+drawIcon(192, 'c192');
+drawIcon(512, 'c512');
+document.getElementById('c192').toBlob(b => {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(b);
+  a.download = 'pwa-192x192.png';
+  a.click();
+});
+document.getElementById('c512').toBlob(b => {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(b);
+  a.download = 'pwa-512x512.png';
+  a.click();
+});
+</script>
+</body>
+</html>

@@ -13,14 +13,14 @@
 
   let roomTopics = $derived.by(() => {
     if (!$currentRoom) return [];
-    return $topicList.filter((t) => t.roomId === $currentRoom?.id);
+    return ($topicList || []).filter((t) => t?.id && t.roomId === $currentRoom?.id);
   });
 
   let topicsWithMessages = $derived.by(() => {
     return roomTopics
       .map((topic) => ({
         topic,
-        messageCount: $messageList.filter((m) => m.topicId === topic.id).length,
+        messageCount: ($messageList || []).filter((m) => m?.id && m.topicId === topic.id).length,
       }))
       .filter((item) => item.messageCount > 0)
       .sort((a, b) => b.messageCount - a.messageCount);
@@ -28,7 +28,7 @@
 
   let filteredMessages = $derived.by(() => {
     if (!selectedTopic) return [];
-    return $messageList.filter((m) => m.topicId === selectedTopic);
+    return ($messageList || []).filter((m) => m?.id && m.topicId === selectedTopic);
   });
 
   $effect(() => {
@@ -90,7 +90,7 @@
       </div>
 
       <div class="flex-1 overflow-y-auto padding-md spacing-md min-h-0">
-        {#each filteredMessages as message (message.id)}
+        {#each filteredMessages.filter(m => m?.id) as message (message.id)}
           <MessageItem {message} />
         {/each}
       </div>

@@ -1,7 +1,8 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
-  import { topicList, addTopic, toggleTopicExpansion, setSelectedTopic, createTopicParentId, moveTopicParent, updateTopic } from '$lib/stores/topics';
+  import { onMount } from 'svelte';
+  import { topicList, addTopic, toggleTopicExpansion, setSelectedTopic, createTopicParentId, moveTopicParent, updateTopic, expandedTopics } from '$lib/stores/topics';
   import { currentRoom } from '$lib/stores/rooms';
   import { ui } from '$lib/stores/ui';
   import { api, getCurrentTenant } from '$lib/api/client';
@@ -25,6 +26,42 @@
   let isLoadingChildren = $state(false);
   let isDragOver = $state(false);
   let isDraggingSelf = $state(false);
+  let hasUnreadChildrenState = $state(false);
+
+  // 未読チェック完了フラグ（常にtrue: 全トピックがAPIでロードされているため）
+  let hasCheckedUnread = $derived(true);
+
+  // 子孫を含む全未読数を計算
+  function calculateTotalUnreadDescendants(topicId: string): number {
+    let total = 0;
+
+    // 直近の子トピックを取得
+    const children = $topicList.filter(t => t.parentId === topicId);
+
+    for (const child of children) {
+      // 子の自未読を加算
+      total += child.unreadCount;
+      // 子の子孫の未読を再帰的に加算
+      total += calculateTotalUnreadDescendants(child.id);
+    }
+
+    return total;
+  }
+
+  // 子孫の未読数（派生ステート）
+  // $derivedはSvelte 4ストア($topicList)の変更を追跡できないため、$stateで管理
+  let descendantsUnreadCount = $state(0);
+
+  function updateDescendantsUnreadCount() {
+    const count = calculateTotalUnreadDescendants(node.id);
+    descendantsUnreadCount = count;
+    hasUnreadChildrenState = count > 0;
+    console.log(`[TopicNode ${node.id}] Updated descendantsUnreadCount:`, {
+      count,
+      hasUnread: hasUnreadChildrenState,
+      topicListSize: $topicList.length
+    });
+  }
 
 
   function normalizeTopic(raw: any) {
@@ -100,21 +137,50 @@
     if (newParentId) await refreshHasChildren(newParentId);
   }
 
+  // 指定したトピックIDの子トピックを取得
+  async function fetchChildrenByParentId(parentId: string): Promise<any[]> {
+    const tenant = getCurrentTenant();
+    const response = await api.get<any[]>(`/${tenant}/api/Topic/parent/${parentId}`);
+    const childTopics = Array.isArray(response) ? response.map(normalizeTopic) : [];
+
+    // 子トピックをストアに追加または更新
+    childTopics.forEach((topic) => {
+      const existing = $topicList.find((t) => t.id === topic.id);
+      if (!existing) {
+        addTopic(topic);
+      } else {
+        // 既存のトピックの場合は未読カウントなどの情報を更新
+        updateTopic(topic.id, {
+          unreadCount: topic.unreadCount,
+          messageCount: topic.messageCount,
+          hasChildren: topic.hasChildren,
+        });
+      }
+    });
+
+    return childTopics;
+  }
+
   async function fetchChildTopics() {
     if (!$currentRoom || isLoadingChildren) return;
 
     isLoadingChildren = true;
     try {
-      const tenant = getCurrentTenant();
-      const response = await api.get<any[]>(`/${tenant}/api/Topic/parent/${node.id}`);
-      const childTopics = Array.isArray(response) ? response.map(normalizeTopic) : [];
+      // 子トピックを取得
+      const childTopics = await fetchChildrenByParentId(node.id);
 
-      // Add child topics to store if not already present
-      childTopics.forEach((topic) => {
-        if (!$topicList.find((t) => t.id === topic.id)) {
-          addTopic(topic);
-        }
-      });
+      // 子がいたらhasChildrenをtrueに更新
+      if (childTopics.length > 0) {
+        updateTopic(node.id, { hasChildren: true });
+      }
+
+      // 未読状態をログ出力（$effectで自動更新される）
+      if (node.hasChildren) {
+        console.log(`[TopicNode ${node.id}] After fetching children:`, {
+          childTopics: childTopics.map(c => ({ id: c.id, title: c.title, unreadCount: c.unreadCount })),
+          totalDescendantsUnread: descendantsUnreadCount
+        });
+      }
     } catch (err) {
       console.error('Failed to fetch child topics:', err);
     } finally {
@@ -124,16 +190,14 @@
 
   async function toggleExpand() {
     if (!node.isExpanded) {
-      // Expanding - load child topics from backend
-      if (node.hasChildren) {
-        await fetchChildTopics();
-      }
+      // Expanding - always load child topics from backend
+      await fetchChildTopics();
     }
 
     toggleTopicExpansion(node.id);
   }
 
-  function selectTopic() {
+  async function selectTopic() {
     if (!$currentRoom) return;
 
     const tenant = ($page.params as any)?.tenant ?? getCurrentTenant();
@@ -141,6 +205,17 @@
 
     // If already selected, keep selection (don't toggle off).
     if (selectedTopicId === node.id) return;
+
+    // 子トピックを持っている場合、子トピックを読み込んでおく
+    if (node.hasChildren) {
+      // topicListから子トピックをチェック
+      const childTopicsInList = $topicList.filter(t => t.parentId === node.id);
+      const needsLoad = childTopicsInList.length === 0 && !isLoadingChildren;
+
+      if (needsLoad) {
+        await fetchChildTopics();
+      }
+    }
 
     goto(`/${tenant}/room/${$currentRoom.id}/topic/${node.id}`, { keepFocus: true, noScroll: true });
   }
@@ -232,6 +307,45 @@
     ui.openModal(modal);
   }
 
+  // コンポーネントマウント時に子トピックの未読状態をチェック
+  onMount(async () => {
+    // 子トピックがまだロードされていない場合はロード
+    if (node.hasChildren && !isLoadingChildren) {
+      const childTopics = $topicList.filter(t => t.parentId === node.id);
+      if (childTopics.length === 0) {
+        await fetchChildTopics();
+      } else {
+        // 既に子トピックがロードされている場合は未読状態をチェック
+        console.log(`[TopicNode ${node.id}] Initial unread check on mount (children already loaded):`, {
+          childTopics: childTopics.map(c => ({ id: c.id, title: c.title, unreadCount: c.unreadCount })),
+          totalDescendantsUnread: descendantsUnreadCount
+        });
+      }
+    }
+
+    // $effectが自動的に未読状態を更新するため、手動の更新は不要
+  });
+
+  // ノードが展開状態のときに子トピックをロード
+  $effect(() => {
+    if (node.isExpanded && node.hasChildren) {
+      // 子トピックがロードされているかチェック
+      const childTopics = $topicList.filter(t => t.parentId === node.id);
+      if (childTopics.length === 0 && !isLoadingChildren) {
+        // 子トピックをロード（非同期処理はawaitせずに実行）
+        fetchChildTopics();
+      }
+    }
+  });
+
+  // $topicListの変更を監視して子孫の未読数を更新
+  // Svelte 5の$derivedはSvelte 4ストア($topicList)の変更を追跡できないため、$effectで監視
+  $effect(() => {
+    // $topicListを参照して変更を監視
+    const topicListSnapshot = $topicList;
+    updateDescendantsUnreadCount();
+  });
+
   function getContextMenuItems(): ContextMenuItem[] {
     return [
       {
@@ -249,80 +363,89 @@
   }
 </script>
 
-<div class="topic-item" style="--topic-level: {level}">
-  <div
-    class="topic-header {selectedTopicId === node.id ? 'topic-header-active' : ''} {isDragOver ? 'topic-header-drop' : ''} {isDraggingSelf ? 'topic-header-dragging' : ''}"
-    onclick={selectTopic}
-    oncontextmenu={handleContextMenu}
-    draggable={true}
-    ondragstart={handleDragStart}
-    ondragend={handleDragEnd}
-    ondragover={handleDragOver}
-    ondragleave={handleDragLeave}
-    ondrop={handleDrop}
-    onkeydown={(e) => {
-      if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault();
-        selectTopic();
-      }
-    }}
-    role="button"
-    tabindex="0"
-  >
-    {#if node.hasChildren}
+<div class="topic-node">
+  <div class="topic-row" style="--indent-level: {level}">
+    <div class="topic-spacer"></div>
+    <div
+      class="topic-header {selectedTopicId === node.id ? 'topic-header-active' : ''} {isDragOver ? 'topic-header-drop' : ''} {isDraggingSelf ? 'topic-header-dragging' : ''}"
+      onclick={selectTopic}
+      oncontextmenu={handleContextMenu}
+      draggable={true}
+      ondragstart={handleDragStart}
+      ondragend={handleDragEnd}
+      ondragover={handleDragOver}
+      ondragleave={handleDragLeave}
+      ondrop={handleDrop}
+      onkeydown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          selectTopic();
+        }
+      }}
+      role="button"
+      tabindex="0"
+    >
+      {#if node.hasChildren}
+        <button
+          onclick={(e) => {
+            e.stopPropagation();
+            toggleExpand();
+          }}
+          class="topic-toggle-button"
+          title={node.isExpanded ? 'Collapse' : 'Expand'}
+          aria-expanded={node.isExpanded}
+        >
+          <span class="toggle-icon {node.isExpanded ? 'toggle-icon-open' : ''}">▶</span>
+        </button>
+      {:else}
+        <div class="toggle-spacer"></div>
+      {/if}
+
+      <div class="topic-content">
+        <div class="text-small">
+          {node.title}
+        </div>
+      </div>
+
+      {#if node.unreadCount > 0}
+        <span class="badge badge-error">
+          {node.unreadCount}
+        </span>
+      {/if}
+
+      {#if node.hasChildren && hasUnreadChildrenState && hasCheckedUnread}
+        <span class="child-unread-badge" title="子孫トピックの未読メッセージ">
+          {descendantsUnreadCount}
+        </span>
+      {/if}
+
       <button
         onclick={(e) => {
           e.stopPropagation();
-          toggleExpand();
+          openCreateChildTopicModal();
         }}
-        class="topic-toggle-button"
-        title={node.isExpanded ? 'Collapse' : 'Expand'}
-        aria-expanded={node.isExpanded}
+        class="button clickable topic-add-button"
+        title="Add child topic"
       >
-        <span class="toggle-icon {node.isExpanded ? 'toggle-icon-open' : ''}">▶</span>
+        +
       </button>
-    {:else}
-      <div class="toggle-spacer"></div>
-    {/if}
 
-    <div class="topic-content">
-      <div class="text-small">
-        {node.title}
-      </div>
+      <button
+        onclick={(e) => {
+          e.stopPropagation();
+          handleContextMenu(e as unknown as MouseEvent);
+        }}
+        class="button clickable topic-options-button"
+        title="Options"
+      >
+        ⋮
+      </button>
     </div>
-
-    {#if node.unreadCount > 0}
-      <span class="badge badge-error">
-        {node.unreadCount}
-      </span>
-    {/if}
-
-    <button
-      onclick={(e) => {
-        e.stopPropagation();
-        openCreateChildTopicModal();
-      }}
-      class="button clickable topic-add-button"
-      title="Add child topic"
-    >
-      +
-    </button>
-
-    <button
-      onclick={(e) => {
-        e.stopPropagation();
-        handleContextMenu(e as unknown as MouseEvent);
-      }}
-      class="button clickable topic-options-button"
-      title="Options"
-    >
-      ⋮
-    </button>
   </div>
 
   {#if node.isExpanded && node.children.length > 0}
     <div class="topic-children">
-      {#each node.children as childNode (childNode.id)}
+      {#each node.children.filter(c => c?.id) as childNode (childNode.id)}
         <TopicNode node={childNode} level={level + 1} selectedTopicId={selectedTopicId} />
       {/each}
     </div>
@@ -339,16 +462,17 @@
 {/if}
 
 <style>
-  .topic-item {
-    margin: 0;
-    padding: 0;
-    padding-left: calc(var(--topic-level) * 16px);
+  .topic-node {
+    display: contents;
   }
 
-  .topic-children {
-    margin-left: 8px;
-    padding-left: 8px;
-    border-left: 1px solid var(--color-border);
+  .topic-row {
+    display: grid;
+    grid-template-columns: calc(var(--indent-level) * 8px) 1fr;
+  }
+
+  .topic-spacer {
+    flex-shrink: 0;
   }
 
   .topic-header {
@@ -360,7 +484,8 @@
     transition: background-color var(--transition-fast);
     border-radius: var(--border-radius-sm);
     user-select: none;
-    min-width: max-content;
+    width: 180px;  /* 固定幅 */
+    max-width: 180px;
   }
 
   .topic-header:hover {
@@ -369,6 +494,20 @@
 
   .topic-header-active {
     background-color: color-mix(in srgb, var(--color-primary) 5%, var(--color-background));
+  }
+
+  .child-unread-badge {
+    background-color: var(--color-warning);
+    color: var(--color-background);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 12px;
+    padding: 2px 6px;
+    min-width: 20px;
+    height: 20px;
+    font-size: 11px;
+    font-weight: bold;
   }
 
   .topic-header-drop {
@@ -453,5 +592,11 @@
   .topic-options-button:hover {
     color: var(--color-primary);
     background-color: var(--color-surface);
+  }
+
+  .topic-children {
+    margin-left: 8px;
+    padding-left: 8px;
+    border-left: 1px solid var(--color-border);
   }
 </style>

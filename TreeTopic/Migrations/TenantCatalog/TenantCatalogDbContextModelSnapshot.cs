@@ -148,6 +148,33 @@ namespace TreeTopic.Migrations.TenantCatalog
                     b.ToTable("SetupTokens");
                 });
 
+            modelBuilder.Entity("TreeTopic.Models.VapidKey", b =>
+                {
+                    b.Property<string>("TenantId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("EncryptedPrivateKey")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("EncryptedPublicKey")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("TenantId");
+
+                    b.ToTable("VapidKeys");
+                });
+
             modelBuilder.Entity("TreeTopic.Models.ApplicationTenantDetail", b =>
                 {
                     b.HasOne("TreeTopic.Models.ApplicationTenantInfo", "Tenant")
@@ -172,6 +199,15 @@ namespace TreeTopic.Migrations.TenantCatalog
                         .IsRequired();
 
                     b.Navigation("Tenant");
+                });
+
+            modelBuilder.Entity("TreeTopic.Models.VapidKey", b =>
+                {
+                    b.HasOne("TreeTopic.Models.ApplicationTenantInfo", null)
+                        .WithOne()
+                        .HasForeignKey("TreeTopic.Models.VapidKey", "TenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("TreeTopic.Models.ApplicationTenantInfo", b =>

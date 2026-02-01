@@ -88,7 +88,7 @@
     aria-label="Topic tree"
   >
     <div class="list topic-tree-list">
-      {#each $topicTree as node (node.id)}
+      {#each $topicTree.filter(n => n?.id) as node (node.id)}
         <TopicNode node={node} selectedTopicId={selectedTopicId} />
       {/each}
 
@@ -122,8 +122,6 @@
 
   .topic-tree-list {
     min-height: 100%;
-    min-width: 220px;
-    width: max-content;
   }
 
   .topic-root-drop {

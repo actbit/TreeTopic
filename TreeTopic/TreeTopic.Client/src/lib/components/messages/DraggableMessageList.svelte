@@ -12,7 +12,7 @@
 
   let topicMessages = $derived.by(() => {
     return $selectedTopic
-      ? $messageList.filter((m) => m.topicId === $selectedTopic.id)
+      ? ($messageList || []).filter((m) => m?.id && m.topicId === $selectedTopic.id)
       : [];
   });
 
@@ -113,7 +113,7 @@
       </div>
     </div>
   {:else}
-    {#each topicMessages as message (message.id)}
+    {#each topicMessages.filter(m => m?.id) as message (message.id)}
       <div
         class="transition-all duration-200 {draggedMessageId === message.id
           ? 'opacity-50 scale-95'

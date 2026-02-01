@@ -8,6 +8,7 @@ namespace TreeTopic
         public DbSet<ApplicationTenantInfo> Tenants => Set<ApplicationTenantInfo>();
         public DbSet<ApplicationTenantDetail> TenantDetails => Set<ApplicationTenantDetail>();
         public DbSet<SetupToken> SetupTokens => Set<SetupToken>();
+        public DbSet<VapidKey> VapidKeys => Set<VapidKey>();
 
         public TenantCatalogDbContext(DbContextOptions<TenantCatalogDbContext> options)
             : base(options)
@@ -108,6 +109,35 @@ namespace TreeTopic
 
                 // TenantId でのクエリ用インデックス
                 b.HasIndex(st => st.TenantId);
+            });
+
+            modelBuilder.Entity<VapidKey>(b =>
+            {
+                b.HasKey(vk => vk.TenantId);
+
+                b.Property(vk => vk.TenantId)
+                    .HasMaxLength(64)
+                    .IsRequired();
+
+                b.Property(vk => vk.EncryptedPublicKey)
+                    .HasMaxLength(500)
+                    .IsRequired();
+
+                b.Property(vk => vk.EncryptedPrivateKey)
+                    .HasMaxLength(500)
+                    .IsRequired();
+
+                b.Property(vk => vk.CreatedAt)
+                    .IsRequired();
+
+                b.Property(vk => vk.UpdatedAt)
+                    .IsRequired();
+
+                // ApplicationTenantInfoとのリレーション
+                b.HasOne<ApplicationTenantInfo>()
+                    .WithOne()
+                    .HasForeignKey<VapidKey>(vk => vk.TenantId)
+                    .OnDelete(DeleteBehavior.Cascade);
             });
         }
     }
