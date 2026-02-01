@@ -1,43 +1,55 @@
 <script lang="ts">
   import { api } from '$lib/api/client';
+  import { onMount } from 'svelte';
 
   interface Props {
     resourceType: 'room' | 'topic';
     resourceId: string;
+    tenant: string;
     onClose?: () => void;
   }
 
-  let { resourceType, resourceId, onClose }: Props = $props();
+  let { resourceType, resourceId, tenant, onClose }: Props = $props();
 
   let permissions = $state<any[]>([]);
+  let roles = $state<any[]>([]);
+  let availablePermissions = $state<string[]>([]);
   let isLoading = $state(true);
   let error = $state<string | null>(null);
-  let selectedRole = $state('user');
-  let newPermissions = $state({
-    canRead: false,
-    canWrite: false,
-    canDelete: false,
-    canManagePermissions: false,
+
+  onMount(async () => {
+    await loadRoles();
+    await loadPermissions();
   });
 
-  const roles = [
-    { id: 'owner', name: 'Owner', permissions: ['read', 'write', 'delete', 'manage'] },
-    { id: 'admin', name: 'Admin', permissions: ['read', 'write', 'delete', 'manage'] },
-    { id: 'editor', name: 'Editor', permissions: ['read', 'write'] },
-    { id: 'user', name: 'User', permissions: ['read'] },
-    { id: 'guest', name: 'Guest', permissions: [] },
-  ];
+  // 権限名を表示用に変換
+  function formatPermissionName(perm: string): string {
+    return perm
+      .split('.')
+      .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(' ');
+  }
 
-  const permissions_list = [
-    { id: 'read', name: 'Read', description: 'Can view content' },
-    { id: 'write', name: 'Write', description: 'Can create and edit content' },
-    { id: 'delete', name: 'Delete', description: 'Can delete content' },
-    { id: 'manage', name: 'Manage Permissions', description: 'Can change user permissions' },
-  ];
+  async function loadRoles() {
+    try {
+      isLoading = true;
+      const data = await api.get<any[]>(`/${tenant}/api/roomroles`);
+      roles = data.map((r: any) => ({
+        id: r.id,
+        name: r.name,
+        description: r.description,
+        permissions: r.permissions || []
+      }));
+      error = null;
+    } catch (err: any) {
+      error = err.message || 'Failed to load roles';
+    } finally {
+      isLoading = false;
+    }
+  }
 
   async function loadPermissions() {
     try {
-      isLoading = true;
       const endpoint =
         resourceType === 'room'
           ? `/api/room/${resourceId}/permissions`
@@ -45,11 +57,31 @@
 
       const data = (await api.get<any[]>(endpoint)) ?? [];
       permissions = data;
+
+      // 全てのユニークな権限名を収集
+      const allPermissions = new Set<string>();
+      roles.forEach(r => {
+        (r.permissions || []).forEach((p: string) => {
+          // "topic.read" -> "topic.read" (そのまま)
+          // "read" -> "read" (そのまま)
+          allPermissions.add(p);
+        });
+      });
+      permissions.forEach((p: any) => {
+        Object.keys(p).forEach(key => {
+          if (typeof p[key] === 'boolean' && key.startsWith('can')) {
+            // "canRead" -> "read"
+            // "canReadTopic" -> "readTopic"
+            const permName = key.replace('can', (match: string) => match.toLowerCase());
+            allPermissions.add(permName);
+          }
+        });
+      });
+      availablePermissions = Array.from(allPermissions).sort();
+
       error = null;
     } catch (err: any) {
       error = err.message || 'Failed to load permissions';
-    } finally {
-      isLoading = false;
     }
   }
 
@@ -64,27 +96,21 @@
         [permissionId]: enabled,
       });
 
-      // Update local state
-      const userPerm = permissions.find((p) => p.userId === userId);
-      if (userPerm) {
-        userPerm[permissionId] = enabled;
-        permissions = permissions;
-      }
+      await loadPermissions();
     } catch (err: any) {
       error = err.message || 'Failed to update permission';
     }
   }
 
-  async function setRole(userId: string, role: string) {
+  async function setRole(userId: string, roleId: string | null) {
     try {
       const endpoint =
         resourceType === 'room'
           ? `/api/room/${resourceId}/permissions/${userId}/role`
           : `/api/topic/${resourceId}/permissions/${userId}/role`;
 
-      await api.put(endpoint, { role });
+      await api.put(endpoint, { roleId });
 
-      // Reload permissions
       await loadPermissions();
     } catch (err: any) {
       error = err.message || 'Failed to set role';
@@ -102,14 +128,11 @@
 
       await api.delete(endpoint);
 
-      permissions = permissions.filter((p) => p.userId !== userId);
+      await loadPermissions();
     } catch (err: any) {
       error = err.message || 'Failed to remove user';
     }
   }
-
-  // Initialize
-  loadPermissions();
 </script>
 
 <div class="space-y-6">
@@ -140,8 +163,8 @@
             <tr>
               <th class="px-4 py-2 text-left text-sm font-semibold text-text">User</th>
               <th class="px-4 py-2 text-left text-sm font-semibold text-text">Role</th>
-              {#each permissions_list as perm}
-                <th class="px-4 py-2 text-center text-sm font-semibold text-text">{perm.name}</th>
+              {#each availablePermissions as perm}
+                <th class="px-4 py-2 text-center text-sm font-semibold text-text">{formatPermissionName(perm)}</th>
               {/each}
               <th class="px-4 py-2 text-center text-sm font-semibold text-text">Actions</th>
             </tr>
@@ -157,23 +180,27 @@
                 </td>
                 <td class="px-4 py-3 text-sm">
                   <select
-                    value={userPerm.role || 'user'}
-                    onchange={(e) => setRole(userPerm.userId, e.currentTarget.value)}
+                    value={userPerm.roomRoleId || ''}
+                    onchange={(e) => setRole(userPerm.userId, e.currentTarget.value || null)}
                     class="px-2 py-1 border border-border rounded text-sm bg-white focus:outline-none focus:border-primary"
                   >
+                    <option value="">No role</option>
                     {#each roles as role}
                       <option value={role.id}>{role.name}</option>
                     {/each}
                   </select>
+                  {#if userPerm.roomRoleName}
+                    <span class="text-xs text-text-light ml-2">{userPerm.roomRoleName}</span>
+                  {/if}
                 </td>
-                {#each permissions_list as perm}
+                {#each availablePermissions as perm}
+                  {@const permKey = `can${perm.charAt(0).toUpperCase() + perm.slice(1)}`}
                   <td class="px-4 py-3 text-center">
                     <input
                       type="checkbox"
-                      checked={userPerm[perm.id] || false}
+                      checked={userPerm[permKey] || false}
                       onchange={(e) =>
-                        updatePermission(userPerm.userId, perm.id, e.currentTarget.checked)}
-                      title={perm.description}
+                        updatePermission(userPerm.userId, permKey, e.currentTarget.checked)}
                       class="w-4 h-4 accent-primary cursor-pointer"
                     />
                   </td>
@@ -203,13 +230,14 @@
         {#each roles as role}
           <div class="p-4">
             <p class="font-semibold text-text mb-2">{role.name}</p>
+            {#if role.description}
+              <p class="text-xs text-text-light mb-2">{role.description}</p>
+            {/if}
             <div class="flex flex-wrap gap-2">
-              {#each permissions_list as perm}
-                {#if role.permissions.includes(perm.id)}
-                  <span class="px-2 py-1 bg-primary bg-opacity-10 text-primary text-xs rounded">
-                    {perm.name}
-                  </span>
-                {/if}
+              {#each role.permissions as perm}
+                <span class="px-2 py-1 bg-primary bg-opacity-10 text-primary text-xs rounded">
+                  {perm}
+                </span>
               {/each}
               {#if role.permissions.length === 0}
                 <span class="text-xs text-text-light">No permissions</span>

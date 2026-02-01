@@ -25,6 +25,59 @@ public class RoomUserDto
     /// Whether to use the main account's icon
     /// </summary>
     public bool UseMainIcon { get; set; }
+    /// <summary>
+    /// Role ID (optional)
+    /// </summary>
+    public MaskedGuid? RoomRoleId { get; set; }
+    /// <summary>
+    /// Role Name (for display)
+    /// </summary>
+    public string? RoomRoleName { get; set; }
+    /// <summary>
+    /// User's email (for permission editor)
+    /// </summary>
+    public string? Email { get; set; }
+    /// <summary>
+    /// User's username (for permission editor)
+    /// </summary>
+    public string? UserName { get; set; }
+    /// <summary>
+    /// Permission flags (for permission editor)
+    /// </summary>
+    public bool CanRead { get; set; }
+    public bool CanWrite { get; set; }
+    public bool CanDelete { get; set; }
+    public bool CanManage { get; set; }
+    /// <summary>
+    /// Topic permission flags (for permission editor)
+    /// </summary>
+    public bool CanReadTopic { get; set; }
+    public bool CanWriteTopic { get; set; }
+    public bool CanDeleteTopic { get; set; }
+    public bool CanManageTopic { get; set; }
+}
+
+/// <summary>
+/// RoomUserのロール設定リクエスト
+/// </summary>
+public class SetRoomUserRoleRequest
+{
+    public MaskedGuid? RoleId { get; set; }
+}
+
+/// <summary>
+/// RoomUserの権限更新リクエスト
+/// </summary>
+public class UpdateRoomUserPermissionsRequest
+{
+    public bool CanRead { get; set; }
+    public bool CanWrite { get; set; }
+    public bool CanDelete { get; set; }
+    public bool CanManage { get; set; }
+    public bool CanReadTopic { get; set; }
+    public bool CanWriteTopic { get; set; }
+    public bool CanDeleteTopic { get; set; }
+    public bool CanManageTopic { get; set; }
 }
 
 public class CreateRoomUserRequest
