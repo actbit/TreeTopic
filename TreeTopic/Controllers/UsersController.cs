@@ -3,7 +3,9 @@ using Microsoft.AspNetCore.Mvc;
 using MaskedUUID.AspNetCore.Types;
 using TreeTopic.Common;
 using TreeTopic.Dtos;
+using TreeTopic.Filters;
 using TreeTopic.Models;
+using TreeTopic.Permissions;
 using TreeTopic.Services;
 using Microsoft.AspNetCore.Identity;
 using System.Security.Claims;
@@ -12,7 +14,6 @@ namespace TreeTopic.Controllers;
 
 [ApiController]
 [Route("{tenant}/api/[controller]")]
-[Authorize]
 public class UsersController : ControllerBase
 {
     private readonly UserManagementService _userManagementService;
@@ -30,6 +31,7 @@ public class UsersController : ControllerBase
     }
 
     [HttpGet]
+    [RequirePermission(IdentityPermissions.UserRead)]
     public async Task<ActionResult<List<UserSummaryDto>>> GetAll(CancellationToken cancellationToken)
     {
         var result = await _userManagementService.GetAllUsersAsync();
@@ -44,6 +46,7 @@ public class UsersController : ControllerBase
     }
 
     [HttpGet("{userId}")]
+    [RequirePermission(IdentityPermissions.UserRead)]
     public async Task<ActionResult<UserSummaryDto>> GetById([FromRoute] MaskedGuid userId)
     {
         var result = await _userManagementService.GetUserByIdAsync((Guid)userId);
@@ -83,6 +86,7 @@ public class UsersController : ControllerBase
     }
 
     [HttpPost("{userId}/roles")]
+    [RequirePermission(IdentityPermissions.UserManage)]
     public async Task<ActionResult<UserSummaryDto>> AddRole([FromRoute] MaskedGuid userId, [FromBody] RoleAssignmentRequest request)
     {
         var result = await _userManagementService.AddRoleToUserAsync((Guid)userId, request);
@@ -98,6 +102,7 @@ public class UsersController : ControllerBase
     }
 
     [HttpDelete("{userId}/roles")]
+    [RequirePermission(IdentityPermissions.UserManage)]
     public async Task<ActionResult<UserSummaryDto>> RemoveRole([FromRoute] MaskedGuid userId, [FromBody] RoleAssignmentRequest request)
     {
         var result = await _userManagementService.RemoveRoleFromUserAsync(userId, request);

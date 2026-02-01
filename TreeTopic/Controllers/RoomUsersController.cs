@@ -10,7 +10,9 @@ using System.Linq;
 using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using TreeTopic.Dtos;
+using TreeTopic.Filters;
 using TreeTopic.Models;
+using TreeTopic.Permissions;
 using TreeTopic.Repositories;
 using TreeTopic.Common;
 using TreeTopic.Services;
@@ -20,7 +22,6 @@ namespace TreeTopic.Controllers;
 
 [ApiController]
 [Route("{tenant}/api/[controller]")]
-[Authorize]
 public class RoomUsersController : ControllerBase
 {
     private readonly IRoomUserRepository _roomUserRepository;
@@ -44,6 +45,7 @@ public class RoomUsersController : ControllerBase
     private Guid CurrentUserId => Guid.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? Guid.Empty.ToString());
 
     [HttpGet("room/{roomId}")]
+    [RequirePermission(RoomPermissions.ManageUsers)]
     public async Task<IActionResult> ListByRoom([FromRoute] MaskedGuid roomId, CancellationToken cancellationToken)
     {
         var entities = await _roomUserRepository.GetByRoomIdAsync((Guid)roomId, cancellationToken);
@@ -72,6 +74,7 @@ public class RoomUsersController : ControllerBase
     }
 
     [HttpGet("user/{userId}")]
+    [RequirePermission(RoomPermissions.ManageUsers)]
     public async Task<IActionResult> ListByUser([FromRoute] MaskedGuid userId, CancellationToken cancellationToken)
     {
         var entities = await _roomUserRepository.GetByUserIdAsync((Guid)userId, cancellationToken);
@@ -181,6 +184,7 @@ public class RoomUsersController : ControllerBase
     }
 
     [HttpPost("room/{roomId}")]
+    [RequirePermission(RoomPermissions.ManageUsers)]
     public async Task<IActionResult> Create([FromRoute] MaskedGuid roomId, [FromBody] CreateRoomUserRequest request)
     {
         if (!ModelState.IsValid)
@@ -204,6 +208,7 @@ public class RoomUsersController : ControllerBase
     }
 
     [HttpGet("{id}")]
+    [RequirePermission(RoomPermissions.ManageUsers)]
     public async Task<IActionResult> GetById([FromRoute] MaskedGuid id, CancellationToken cancellationToken)
     {
         var entity = await _roomUserRepository.Query()
@@ -317,6 +322,7 @@ public class RoomUsersController : ControllerBase
     }
 
     [HttpDelete("{id}")]
+    [RequirePermission(RoomPermissions.ManageUsers)]
     public async Task<IActionResult> Delete([FromRoute] MaskedGuid id)
     {
         var entity = await _roomUserRepository.GetByIdAsync(id);

@@ -9,11 +9,15 @@ namespace TreeTopic.Models
     {
         [ForeignKey(nameof(ApplicationUser))]
         public Guid ApplicationUserId { get; set; }
-        public ApplicationUser ApplicationUser { get; set; }
+        public ApplicationUser ApplicationUser { get; set; } = null!;
 
         [ForeignKey(nameof(Room))]
         public Guid RoomId { get; set; }
-        public Room Room { get; set; }
+        public Room Room { get; set; } = null!;
+
+        [ForeignKey(nameof(RoomRole))]
+        public Guid? RoomRoleId { get; set; }
+        public RoomRole? RoomRole { get; set; }
 
         public string? Name { get; set; }
 
@@ -24,6 +28,11 @@ namespace TreeTopic.Models
         public bool UseMainIcon { get; set; }
 
         public List<RoomPermission> RoomPermission { get; set; } = new List<RoomPermission>();
+
+    /// <summary>
+    /// このユーザーのトピック権限設定
+    /// </summary>
+    public List<TopicUserPermission> TopicUserPermissions { get; set; } = new();
     }
 }
 

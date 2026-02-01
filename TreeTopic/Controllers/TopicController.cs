@@ -4,6 +4,8 @@ using MaskedUUID.AspNetCore.Types;
 using TreeTopic.Common;
 using TreeTopic.Dtos;
 using TreeTopic.Services;
+using TreeTopic.Filters;
+using TreeTopic.Permissions;
 using System.Security.Claims;
 
 namespace TreeTopic.Controllers;
@@ -32,6 +34,7 @@ public class TopicController : ControllerBase
     }
 
     [HttpGet]
+    [RequirePermission(TopicPermissions.Read)]
     public async Task<IActionResult> GetAll([FromQuery] MaskedGuid? roomId, CancellationToken cancellationToken)
     {
         if (!roomId.HasValue)
@@ -44,6 +47,7 @@ public class TopicController : ControllerBase
     }
 
     [HttpGet("room/{roomId}")]
+    [RequirePermission(TopicPermissions.Read)]
     public async Task<IActionResult> GetByRoom([FromRoute] MaskedGuid roomId, CancellationToken cancellationToken)
     {
         var result = await _topicManagementService.GetTopicsByRoomAsync((Guid)roomId, CurrentUserId, cancellationToken);
@@ -51,6 +55,7 @@ public class TopicController : ControllerBase
     }
 
     [HttpGet("room/{roomId}/root")]
+    [RequirePermission(TopicPermissions.Read)]
     public async Task<IActionResult> GetRootByRoom([FromRoute] MaskedGuid roomId, CancellationToken cancellationToken)
     {
         var result = await _topicManagementService.GetRootTopicsByRoomAsync((Guid)roomId, CurrentUserId, cancellationToken);
@@ -58,6 +63,7 @@ public class TopicController : ControllerBase
     }
 
     [HttpGet("parent/{parentId}")]
+    [RequirePermission(TopicPermissions.Read)]
     public async Task<IActionResult> GetByParent([FromRoute] MaskedGuid parentId, CancellationToken cancellationToken)
     {
         var result = await _topicManagementService.GetTopicsByParentAsync((Guid)parentId, CurrentUserId, cancellationToken);
@@ -65,6 +71,7 @@ public class TopicController : ControllerBase
     }
 
     [HttpGet("{topicId}")]
+    [RequirePermission(TopicPermissions.Read)]
     public async Task<IActionResult> GetById([FromRoute] MaskedGuid topicId, CancellationToken cancellationToken)
     {
         var result = await _topicManagementService.GetTopicByIdAsync((Guid)topicId, CurrentUserId, cancellationToken);
@@ -72,6 +79,7 @@ public class TopicController : ControllerBase
     }
 
     [HttpPost]
+    [RequirePermission(TopicPermissions.Write)]
     public async Task<IActionResult> Create([FromBody] CreateTopicRequest request, CancellationToken cancellationToken)
     {
         if (!ModelState.IsValid)
@@ -82,6 +90,7 @@ public class TopicController : ControllerBase
     }
 
     [HttpPut("{topicId}")]
+    [RequirePermission(TopicPermissions.Write)]
     public async Task<IActionResult> Update([FromRoute] MaskedGuid topicId, [FromBody] UpdateTopicRequest request, CancellationToken cancellationToken)
     {
         if (!ModelState.IsValid)
@@ -92,6 +101,7 @@ public class TopicController : ControllerBase
     }
 
     [HttpDelete("{topicId}")]
+    [RequirePermission(TopicPermissions.Delete)]
     public async Task<IActionResult> Delete(
         [FromRoute] MaskedGuid topicId,
         [FromQuery] string? strategy,
@@ -115,6 +125,7 @@ public class TopicController : ControllerBase
     /// 複数トピックの統計情報を一括取得（N+1問題を解決）
     /// </summary>
     [HttpGet("room/{roomId}/stats")]
+    [RequirePermission(TopicPermissions.Read)]
     public async Task<IActionResult> GetTopicsWithStats(
         [FromRoute] MaskedGuid roomId,
         CancellationToken cancellationToken)
@@ -131,6 +142,7 @@ public class TopicController : ControllerBase
     /// 単一トピックの統計情報を取得（N+1問題を解決）
     /// </summary>
     [HttpGet("{topicId}/stats")]
+    [RequirePermission(TopicPermissions.Read)]
     public async Task<IActionResult> GetTopicWithStats(
         [FromRoute] MaskedGuid topicId,
         CancellationToken cancellationToken)
@@ -147,6 +159,7 @@ public class TopicController : ControllerBase
     /// ルームのルートトピックに未読カウントを含めて取得（N+1問題を解決）
     /// </summary>
     [HttpGet("room/{roomId}/root-with-unread")]
+    [RequirePermission(TopicPermissions.Read)]
     public async Task<IActionResult> GetRootTopicsWithUnread(
         [FromRoute] MaskedGuid roomId,
         CancellationToken cancellationToken)
@@ -170,6 +183,7 @@ public class TopicController : ControllerBase
     /// ルーム内の全トピックを未読カウント付きで一括取得（N+1問題を解決）
     /// </summary>
     [HttpGet("room/{roomId}/all-with-unread")]
+    [RequirePermission(TopicPermissions.Read)]
     public async Task<IActionResult> GetAllTopicsWithUnread(
         [FromRoute] MaskedGuid roomId,
         CancellationToken cancellationToken)

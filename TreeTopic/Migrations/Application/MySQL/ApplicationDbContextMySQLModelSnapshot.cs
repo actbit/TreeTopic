@@ -2,47 +2,48 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
-using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using TreeTopic.Data;
 
 #nullable disable
 
-namespace TreeTopic.Migrations.Application
+namespace TreeTopic.Migrations.Application.MySQL
 {
-    [DbContext(typeof(ApplicationDbContextPostgreSQL))]
-    partial class ApplicationDbContextPostgreSQLModelSnapshot : ModelSnapshot
+    [DbContext(typeof(ApplicationDbContextMySQL))]
+    partial class ApplicationDbContextMySQLModelSnapshot : ModelSnapshot
     {
         protected override void BuildModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
                 .HasAnnotation("ProductVersion", "9.0.11")
-                .HasAnnotation("Relational:MaxIdentifierLength", 63);
+                .HasAnnotation("Relational:MaxIdentifierLength", 64);
 
-            NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
+            MySqlModelBuilderExtensions.AutoIncrementColumns(modelBuilder);
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<System.Guid>", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
+                        .HasColumnType("int");
 
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
 
                     b.Property<string>("ClaimType")
-                        .HasColumnType("text");
+                        .HasColumnType("longtext");
 
                     b.Property<string>("ClaimValue")
-                        .HasColumnType("text");
+                        .HasColumnType("longtext");
 
-                    b.Property<Guid>("RoleId")
-                        .HasColumnType("uuid");
+                    b.Property<byte[]>("RoleId")
+                        .IsRequired()
+                        .HasColumnType("BINARY(16)");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
+                        .HasColumnType("varchar(64)");
 
                     b.HasKey("Id");
 
@@ -57,23 +58,24 @@ namespace TreeTopic.Migrations.Application
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
+                        .HasColumnType("int");
 
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
 
                     b.Property<string>("ClaimType")
-                        .HasColumnType("text");
+                        .HasColumnType("longtext");
 
                     b.Property<string>("ClaimValue")
-                        .HasColumnType("text");
+                        .HasColumnType("longtext");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
+                        .HasColumnType("varchar(64)");
 
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid");
+                    b.Property<byte[]>("UserId")
+                        .IsRequired()
+                        .HasColumnType("BINARY(16)");
 
                     b.HasKey("Id");
 
@@ -87,21 +89,22 @@ namespace TreeTopic.Migrations.Application
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityUserLogin<System.Guid>", b =>
                 {
                     b.Property<string>("LoginProvider")
-                        .HasColumnType("text");
+                        .HasColumnType("varchar(255)");
 
                     b.Property<string>("ProviderKey")
-                        .HasColumnType("text");
+                        .HasColumnType("varchar(255)");
 
                     b.Property<string>("ProviderDisplayName")
-                        .HasColumnType("text");
+                        .HasColumnType("longtext");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
+                        .HasColumnType("varchar(64)");
 
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid");
+                    b.Property<byte[]>("UserId")
+                        .IsRequired()
+                        .HasColumnType("BINARY(16)");
 
                     b.HasKey("LoginProvider", "ProviderKey");
 
@@ -114,16 +117,16 @@ namespace TreeTopic.Migrations.Application
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityUserRole<System.Guid>", b =>
                 {
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid");
+                    b.Property<byte[]>("UserId")
+                        .HasColumnType("BINARY(16)");
 
-                    b.Property<Guid>("RoleId")
-                        .HasColumnType("uuid");
+                    b.Property<byte[]>("RoleId")
+                        .HasColumnType("BINARY(16)");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
+                        .HasColumnType("varchar(64)");
 
                     b.HasKey("UserId", "RoleId");
 
@@ -136,22 +139,22 @@ namespace TreeTopic.Migrations.Application
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityUserToken<System.Guid>", b =>
                 {
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid");
+                    b.Property<byte[]>("UserId")
+                        .HasColumnType("BINARY(16)");
 
                     b.Property<string>("LoginProvider")
-                        .HasColumnType("text");
+                        .HasColumnType("varchar(255)");
 
                     b.Property<string>("Name")
-                        .HasColumnType("text");
+                        .HasColumnType("varchar(255)");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
+                        .HasColumnType("varchar(64)");
 
                     b.Property<string>("Value")
-                        .HasColumnType("text");
+                        .HasColumnType("longtext");
 
                     b.HasKey("UserId", "LoginProvider", "Name");
 
@@ -162,26 +165,26 @@ namespace TreeTopic.Migrations.Application
 
             modelBuilder.Entity("TreeTopic.Models.ApplicationRole", b =>
                 {
-                    b.Property<Guid>("Id")
+                    b.Property<byte[]>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
+                        .HasColumnType("BINARY(16)");
 
                     b.Property<string>("ConcurrencyStamp")
                         .IsConcurrencyToken()
-                        .HasColumnType("text");
+                        .HasColumnType("longtext");
 
                     b.Property<string>("Name")
                         .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
+                        .HasColumnType("varchar(256)");
 
                     b.Property<string>("NormalizedName")
                         .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
+                        .HasColumnType("varchar(256)");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
+                        .HasColumnType("varchar(64)");
 
                     b.HasKey("Id");
 
@@ -196,70 +199,70 @@ namespace TreeTopic.Migrations.Application
 
             modelBuilder.Entity("TreeTopic.Models.ApplicationUser", b =>
                 {
-                    b.Property<Guid>("Id")
+                    b.Property<byte[]>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
+                        .HasColumnType("BINARY(16)");
 
                     b.Property<int>("AccessFailedCount")
-                        .HasColumnType("integer");
+                        .HasColumnType("int");
 
                     b.Property<string>("ConcurrencyStamp")
                         .IsConcurrencyToken()
-                        .HasColumnType("text");
+                        .HasColumnType("longtext");
 
                     b.Property<string>("DisplayName")
-                        .HasColumnType("text");
+                        .HasColumnType("longtext");
 
                     b.Property<string>("Email")
                         .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
+                        .HasColumnType("varchar(256)");
 
                     b.Property<bool>("EmailConfirmed")
-                        .HasColumnType("boolean");
+                        .HasColumnType("tinyint(1)");
 
                     b.Property<string>("IconFileName")
-                        .HasColumnType("text");
+                        .HasColumnType("longtext");
 
                     b.Property<bool>("LockoutEnabled")
-                        .HasColumnType("boolean");
+                        .HasColumnType("tinyint(1)");
 
                     b.Property<DateTimeOffset?>("LockoutEnd")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("datetime(6)");
 
                     b.Property<string>("NormalizedEmail")
                         .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
+                        .HasColumnType("varchar(256)");
 
                     b.Property<string>("NormalizedUserName")
                         .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
+                        .HasColumnType("varchar(256)");
 
                     b.Property<string>("PasswordHash")
-                        .HasColumnType("text");
+                        .HasColumnType("longtext");
 
                     b.Property<string>("PhoneNumber")
-                        .HasColumnType("text");
+                        .HasColumnType("longtext");
 
                     b.Property<bool>("PhoneNumberConfirmed")
-                        .HasColumnType("boolean");
+                        .HasColumnType("tinyint(1)");
 
                     b.Property<string>("SecurityStamp")
-                        .HasColumnType("text");
+                        .HasColumnType("longtext");
 
                     b.Property<string>("Sub")
-                        .HasColumnType("text");
+                        .HasColumnType("varchar(255)");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
+                        .HasColumnType("varchar(64)");
 
                     b.Property<bool>("TwoFactorEnabled")
-                        .HasColumnType("boolean");
+                        .HasColumnType("tinyint(1)");
 
                     b.Property<string>("UserName")
                         .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
+                        .HasColumnType("varchar(256)");
 
                     b.HasKey("Id");
 
@@ -280,29 +283,30 @@ namespace TreeTopic.Migrations.Application
 
             modelBuilder.Entity("TreeTopic.Models.BrainBoard", b =>
                 {
-                    b.Property<Guid>("Id")
+                    b.Property<byte[]>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
+                        .HasColumnType("BINARY(16)");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("datetime(6)");
 
                     b.Property<bool>("IsSign")
-                        .HasColumnType("boolean");
+                        .HasColumnType("tinyint(1)");
 
                     b.Property<string>("Name")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("longtext");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("longtext");
 
-                    b.Property<Guid>("TopicId")
-                        .HasColumnType("uuid");
+                    b.Property<byte[]>("TopicId")
+                        .IsRequired()
+                        .HasColumnType("BINARY(16)");
 
                     b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("datetime(6)");
 
                     b.HasKey("Id");
 
@@ -313,38 +317,40 @@ namespace TreeTopic.Migrations.Application
 
             modelBuilder.Entity("TreeTopic.Models.BrainIdea", b =>
                 {
-                    b.Property<Guid>("Id")
+                    b.Property<byte[]>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
+                        .HasColumnType("BINARY(16)");
 
-                    b.Property<Guid>("BrainBoardId")
-                        .HasColumnType("uuid");
+                    b.Property<byte[]>("BrainBoardId")
+                        .IsRequired()
+                        .HasColumnType("BINARY(16)");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("datetime(6)");
 
                     b.Property<string>("Idea")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("longtext");
 
                     b.Property<double>("PositionLeft")
-                        .HasColumnType("double precision");
+                        .HasColumnType("double");
 
                     b.Property<double>("PositionTop")
-                        .HasColumnType("double precision");
+                        .HasColumnType("double");
 
-                    b.Property<Guid?>("RoomUserId")
-                        .HasColumnType("uuid");
+                    b.Property<byte[]>("RoomUserId")
+                        .HasColumnType("BINARY(16)");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("longtext");
 
-                    b.Property<Guid>("TopicId")
-                        .HasColumnType("uuid");
+                    b.Property<byte[]>("TopicId")
+                        .IsRequired()
+                        .HasColumnType("BINARY(16)");
 
                     b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("datetime(6)");
 
                     b.HasKey("Id");
 
@@ -359,32 +365,33 @@ namespace TreeTopic.Migrations.Application
 
             modelBuilder.Entity("TreeTopic.Models.BrainIdeaVote", b =>
                 {
-                    b.Property<Guid>("Id")
+                    b.Property<byte[]>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
+                        .HasColumnType("BINARY(16)");
 
-                    b.Property<Guid>("BrainIdeaId")
-                        .HasColumnType("uuid");
+                    b.Property<byte[]>("BrainIdeaId")
+                        .IsRequired()
+                        .HasColumnType("BINARY(16)");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("datetime(6)");
 
-                    b.Property<Guid?>("RoomUserId")
-                        .HasColumnType("uuid");
+                    b.Property<byte[]>("RoomUserId")
+                        .HasColumnType("BINARY(16)");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("longtext");
 
                     b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("datetime(6)");
 
                     b.Property<int>("Value")
-                        .HasColumnType("integer");
+                        .HasColumnType("int");
 
                     b.Property<string>("VoteType")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("longtext");
 
                     b.HasKey("Id");
 
@@ -397,41 +404,41 @@ namespace TreeTopic.Migrations.Application
 
             modelBuilder.Entity("TreeTopic.Models.File", b =>
                 {
-                    b.Property<Guid>("Id")
+                    b.Property<byte[]>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
+                        .HasColumnType("BINARY(16)");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("datetime(6)");
 
                     b.Property<string>("FileName")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("longtext");
 
                     b.Property<string>("FileType")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("longtext");
 
                     b.Property<bool>("IsLatast")
-                        .HasColumnType("boolean");
+                        .HasColumnType("tinyint(1)");
 
-                    b.Property<Guid?>("MessageId")
-                        .HasColumnType("uuid");
+                    b.Property<byte[]>("MessageId")
+                        .HasColumnType("BINARY(16)");
 
                     b.Property<string>("SaveFileName")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("longtext");
 
-                    b.Property<Guid?>("SourceFileId")
-                        .HasColumnType("uuid");
+                    b.Property<byte[]>("SourceFileId")
+                        .HasColumnType("BINARY(16)");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
+                        .HasColumnType("varchar(64)");
 
                     b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("datetime(6)");
 
                     b.HasKey("Id");
 
@@ -446,36 +453,38 @@ namespace TreeTopic.Migrations.Application
 
             modelBuilder.Entity("TreeTopic.Models.Message", b =>
                 {
-                    b.Property<Guid>("Id")
+                    b.Property<byte[]>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
+                        .HasColumnType("BINARY(16)");
 
                     b.Property<string>("Body")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("longtext");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("datetime(6)");
 
                     b.Property<string>("Header")
-                        .HasColumnType("text");
+                        .HasColumnType("longtext");
 
-                    b.Property<Guid?>("ReplyId")
-                        .HasColumnType("uuid");
+                    b.Property<byte[]>("ReplyId")
+                        .HasColumnType("BINARY(16)");
 
-                    b.Property<Guid>("RoomUserId")
-                        .HasColumnType("uuid");
+                    b.Property<byte[]>("RoomUserId")
+                        .IsRequired()
+                        .HasColumnType("BINARY(16)");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
+                        .HasColumnType("varchar(64)");
 
-                    b.Property<Guid>("TopicId")
-                        .HasColumnType("uuid");
+                    b.Property<byte[]>("TopicId")
+                        .IsRequired()
+                        .HasColumnType("BINARY(16)");
 
                     b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("datetime(6)");
 
                     b.HasKey("Id");
 
@@ -492,26 +501,27 @@ namespace TreeTopic.Migrations.Application
 
             modelBuilder.Entity("TreeTopic.Models.Permission", b =>
                 {
-                    b.Property<Guid>("Id")
+                    b.Property<byte[]>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
+                        .HasColumnType("BINARY(16)");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("datetime(6)");
 
                     b.Property<string>("Name")
-                        .HasColumnType("text");
+                        .HasColumnType("longtext");
 
-                    b.Property<Guid>("RoleId")
-                        .HasColumnType("uuid");
+                    b.Property<byte[]>("RoleId")
+                        .IsRequired()
+                        .HasColumnType("BINARY(16)");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
+                        .HasColumnType("varchar(64)");
 
                     b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("datetime(6)");
 
                     b.HasKey("Id");
 
@@ -524,38 +534,39 @@ namespace TreeTopic.Migrations.Application
 
             modelBuilder.Entity("TreeTopic.Models.PushSubscription", b =>
                 {
-                    b.Property<Guid>("Id")
+                    b.Property<byte[]>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
+                        .HasColumnType("BINARY(16)");
 
                     b.Property<string>("AuthKey")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("longtext");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("datetime(6)");
 
                     b.Property<string>("Endpoint")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("varchar(255)");
 
                     b.Property<DateTime?>("LastUsedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("datetime(6)");
 
                     b.Property<string>("P256dhKey")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("longtext");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
+                        .HasColumnType("varchar(64)");
 
                     b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("datetime(6)");
 
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid");
+                    b.Property<byte[]>("UserId")
+                        .IsRequired()
+                        .HasColumnType("BINARY(16)");
 
                     b.HasKey("Id");
 
@@ -571,27 +582,28 @@ namespace TreeTopic.Migrations.Application
 
             modelBuilder.Entity("TreeTopic.Models.Room", b =>
                 {
-                    b.Property<Guid>("Id")
+                    b.Property<byte[]>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
+                        .HasColumnType("BINARY(16)");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("datetime(6)");
 
-                    b.Property<Guid>("CreatedUserId")
-                        .HasColumnType("uuid");
+                    b.Property<byte[]>("CreatedUserId")
+                        .IsRequired()
+                        .HasColumnType("BINARY(16)");
 
                     b.Property<string>("Name")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("longtext");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
+                        .HasColumnType("varchar(64)");
 
                     b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("datetime(6)");
 
                     b.HasKey("Id");
 
@@ -604,27 +616,28 @@ namespace TreeTopic.Migrations.Application
 
             modelBuilder.Entity("TreeTopic.Models.RoomPermission", b =>
                 {
-                    b.Property<Guid>("Id")
+                    b.Property<byte[]>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
+                        .HasColumnType("BINARY(16)");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("datetime(6)");
 
                     b.Property<string>("Name")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("longtext");
 
-                    b.Property<Guid>("RoomUserId")
-                        .HasColumnType("uuid");
+                    b.Property<byte[]>("RoomUserId")
+                        .IsRequired()
+                        .HasColumnType("BINARY(16)");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
+                        .HasColumnType("varchar(64)");
 
                     b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("datetime(6)");
 
                     b.HasKey("Id");
 
@@ -635,46 +648,121 @@ namespace TreeTopic.Migrations.Application
                     b.HasAnnotation("Finbuckle:MultiTenant", true);
                 });
 
-            modelBuilder.Entity("TreeTopic.Models.RoomUser", b =>
+            modelBuilder.Entity("TreeTopic.Models.RoomRole", b =>
                 {
-                    b.Property<Guid>("Id")
+                    b.Property<byte[]>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("ApplicationUserId")
-                        .HasColumnType("uuid");
+                        .HasColumnType("BINARY(16)");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("datetime(6)");
 
-                    b.Property<string>("IconFileName")
-                        .HasColumnType("text");
+                    b.Property<string>("Description")
+                        .HasColumnType("longtext");
 
                     b.Property<string>("Name")
-                        .HasColumnType("text");
+                        .IsRequired()
+                        .HasColumnType("longtext");
 
-                    b.Property<Guid>("RoomId")
-                        .HasColumnType("uuid");
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("int");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
+                        .HasColumnType("varchar(64)");
 
                     b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("datetime(6)");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("RoomRoles");
+
+                    b.HasAnnotation("Finbuckle:MultiTenant", true);
+                });
+
+            modelBuilder.Entity("TreeTopic.Models.RoomRolePermission", b =>
+                {
+                    b.Property<byte[]>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("BINARY(16)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("PermissionName")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<byte[]>("RoomRoleId")
+                        .IsRequired()
+                        .HasColumnType("BINARY(16)");
+
+                    b.Property<string>("TenantId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RoomRoleId");
+
+                    b.ToTable("RoomRolePermissions");
+
+                    b.HasAnnotation("Finbuckle:MultiTenant", true);
+                });
+
+            modelBuilder.Entity("TreeTopic.Models.RoomUser", b =>
+                {
+                    b.Property<byte[]>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("BINARY(16)");
+
+                    b.Property<byte[]>("ApplicationUserId")
+                        .IsRequired()
+                        .HasColumnType("BINARY(16)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("IconFileName")
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("Name")
+                        .HasColumnType("longtext");
+
+                    b.Property<byte[]>("RoomId")
+                        .IsRequired()
+                        .HasColumnType("BINARY(16)");
+
+                    b.Property<byte[]>("RoomRoleId")
+                        .HasColumnType("BINARY(16)");
+
+                    b.Property<string>("TenantId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime(6)");
 
                     b.Property<bool>("UseMainIcon")
-                        .HasColumnType("boolean");
+                        .HasColumnType("tinyint(1)");
 
                     b.Property<bool>("UseMainName")
-                        .HasColumnType("boolean");
+                        .HasColumnType("tinyint(1)");
 
                     b.HasKey("Id");
 
                     b.HasIndex("ApplicationUserId");
 
                     b.HasIndex("RoomId");
+
+                    b.HasIndex("RoomRoleId");
 
                     b.ToTable("RoomUsers");
 
@@ -683,53 +771,55 @@ namespace TreeTopic.Migrations.Application
 
             modelBuilder.Entity("TreeTopic.Models.ShareItem", b =>
                 {
-                    b.Property<Guid>("Id")
+                    b.Property<byte[]>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
+                        .HasColumnType("BINARY(16)");
 
-                    b.Property<Guid?>("BrainBoardId")
-                        .HasColumnType("uuid");
+                    b.Property<byte[]>("BrainBoardId")
+                        .HasColumnType("BINARY(16)");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("datetime(6)");
 
                     b.Property<string>("CreatedByName")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("longtext");
 
-                    b.Property<Guid>("CreatedByRoomUserId")
-                        .HasColumnType("uuid");
+                    b.Property<byte[]>("CreatedByRoomUserId")
+                        .IsRequired()
+                        .HasColumnType("BINARY(16)");
 
                     b.Property<string>("Kind")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("longtext");
 
-                    b.Property<Guid>("RoomId")
-                        .HasColumnType("uuid");
+                    b.Property<byte[]>("RoomId")
+                        .IsRequired()
+                        .HasColumnType("BINARY(16)");
 
-                    b.Property<Guid?>("SourceFileId")
-                        .HasColumnType("uuid");
+                    b.Property<byte[]>("SourceFileId")
+                        .HasColumnType("BINARY(16)");
 
-                    b.Property<Guid?>("SourceMessageId")
-                        .HasColumnType("uuid");
+                    b.Property<byte[]>("SourceMessageId")
+                        .HasColumnType("BINARY(16)");
 
-                    b.Property<Guid?>("SourceShareItemId")
-                        .HasColumnType("uuid");
+                    b.Property<byte[]>("SourceShareItemId")
+                        .HasColumnType("BINARY(16)");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
+                        .HasColumnType("varchar(64)");
 
                     b.Property<string>("Title")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("longtext");
 
-                    b.Property<Guid?>("TopicId")
-                        .HasColumnType("uuid");
+                    b.Property<byte[]>("TopicId")
+                        .HasColumnType("BINARY(16)");
 
                     b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("datetime(6)");
 
                     b.HasKey("Id");
 
@@ -754,29 +844,31 @@ namespace TreeTopic.Migrations.Application
 
             modelBuilder.Entity("TreeTopic.Models.ShareItemFile", b =>
                 {
-                    b.Property<Guid>("Id")
+                    b.Property<byte[]>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
+                        .HasColumnType("BINARY(16)");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("datetime(6)");
 
-                    b.Property<Guid>("FileId")
-                        .HasColumnType("uuid");
+                    b.Property<byte[]>("FileId")
+                        .IsRequired()
+                        .HasColumnType("BINARY(16)");
 
                     b.Property<bool>("IsCurrent")
-                        .HasColumnType("boolean");
+                        .HasColumnType("tinyint(1)");
 
-                    b.Property<Guid>("ShareItemId")
-                        .HasColumnType("uuid");
+                    b.Property<byte[]>("ShareItemId")
+                        .IsRequired()
+                        .HasColumnType("BINARY(16)");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
+                        .HasColumnType("varchar(64)");
 
                     b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("datetime(6)");
 
                     b.HasKey("Id");
 
@@ -791,36 +883,37 @@ namespace TreeTopic.Migrations.Application
 
             modelBuilder.Entity("TreeTopic.Models.Topic", b =>
                 {
-                    b.Property<Guid>("Id")
+                    b.Property<byte[]>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
+                        .HasColumnType("BINARY(16)");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("datetime(6)");
 
                     b.Property<string>("Description")
-                        .HasColumnType("text");
+                        .HasColumnType("longtext");
 
-                    b.Property<Guid?>("ParentId")
-                        .HasColumnType("uuid");
+                    b.Property<byte[]>("ParentId")
+                        .HasColumnType("BINARY(16)");
 
-                    b.Property<Guid>("RoomId")
-                        .HasColumnType("uuid");
+                    b.Property<byte[]>("RoomId")
+                        .IsRequired()
+                        .HasColumnType("BINARY(16)");
 
-                    b.Property<Guid?>("SourceMessageId")
-                        .HasColumnType("uuid");
+                    b.Property<byte[]>("SourceMessageId")
+                        .HasColumnType("BINARY(16)");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
+                        .HasColumnType("varchar(64)");
 
                     b.Property<string>("Title")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("longtext");
 
                     b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("datetime(6)");
 
                     b.HasKey("Id");
 
@@ -835,37 +928,121 @@ namespace TreeTopic.Migrations.Application
                     b.HasAnnotation("Finbuckle:MultiTenant", true);
                 });
 
-            modelBuilder.Entity("TreeTopic.Models.UserTopic", b =>
+            modelBuilder.Entity("TreeTopic.Models.TopicRolePermission", b =>
                 {
-                    b.Property<Guid>("Id")
+                    b.Property<byte[]>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
+                        .HasColumnType("BINARY(16)");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("datetime(6)");
 
-                    b.Property<bool?>("IsAccessible")
-                        .HasColumnType("boolean");
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("varchar(255)");
 
-                    b.Property<DateTime?>("LastAccessAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid?>("LastReadMessageId")
-                        .HasColumnType("uuid");
+                    b.Property<byte[]>("RoomRoleId")
+                        .IsRequired()
+                        .HasColumnType("BINARY(16)");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
+                        .HasColumnType("varchar(64)");
 
-                    b.Property<Guid>("TopicId")
-                        .HasColumnType("uuid");
+                    b.Property<byte[]>("TopicId")
+                        .IsRequired()
+                        .HasColumnType("BINARY(16)");
 
                     b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("datetime(6)");
 
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid");
+                    b.HasKey("Id");
+
+                    b.HasIndex("RoomRoleId");
+
+                    b.HasIndex("TopicId", "RoomRoleId", "Name")
+                        .IsUnique();
+
+                    b.ToTable("TopicRolePermissions");
+
+                    b.HasAnnotation("Finbuckle:MultiTenant", true);
+                });
+
+            modelBuilder.Entity("TreeTopic.Models.TopicUserPermission", b =>
+                {
+                    b.Property<byte[]>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("BINARY(16)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<byte[]>("RoomUserId")
+                        .IsRequired()
+                        .HasColumnType("BINARY(16)");
+
+                    b.Property<string>("TenantId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<byte[]>("TopicId")
+                        .IsRequired()
+                        .HasColumnType("BINARY(16)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RoomUserId");
+
+                    b.HasIndex("TopicId", "RoomUserId", "Name")
+                        .IsUnique();
+
+                    b.ToTable("TopicUserPermissions");
+
+                    b.HasAnnotation("Finbuckle:MultiTenant", true);
+                });
+
+            modelBuilder.Entity("TreeTopic.Models.UserTopic", b =>
+                {
+                    b.Property<byte[]>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("BINARY(16)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<bool?>("IsAccessible")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<DateTime?>("LastAccessAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<byte[]>("LastReadMessageId")
+                        .HasColumnType("BINARY(16)");
+
+                    b.Property<string>("TenantId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<byte[]>("TopicId")
+                        .IsRequired()
+                        .HasColumnType("BINARY(16)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<byte[]>("UserId")
+                        .IsRequired()
+                        .HasColumnType("BINARY(16)");
 
                     b.HasKey("Id");
 
@@ -1070,6 +1247,17 @@ namespace TreeTopic.Migrations.Application
                     b.Navigation("RoomUser");
                 });
 
+            modelBuilder.Entity("TreeTopic.Models.RoomRolePermission", b =>
+                {
+                    b.HasOne("TreeTopic.Models.RoomRole", "RoomRole")
+                        .WithMany("Permissions")
+                        .HasForeignKey("RoomRoleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("RoomRole");
+                });
+
             modelBuilder.Entity("TreeTopic.Models.RoomUser", b =>
                 {
                     b.HasOne("TreeTopic.Models.ApplicationUser", "ApplicationUser")
@@ -1084,9 +1272,16 @@ namespace TreeTopic.Migrations.Application
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("TreeTopic.Models.RoomRole", "RoomRole")
+                        .WithMany("RoomUsers")
+                        .HasForeignKey("RoomRoleId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.Navigation("ApplicationUser");
 
                     b.Navigation("Room");
+
+                    b.Navigation("RoomRole");
                 });
 
             modelBuilder.Entity("TreeTopic.Models.ShareItem", b =>
@@ -1186,6 +1381,44 @@ namespace TreeTopic.Migrations.Application
                     b.Navigation("SourceMessage");
                 });
 
+            modelBuilder.Entity("TreeTopic.Models.TopicRolePermission", b =>
+                {
+                    b.HasOne("TreeTopic.Models.RoomRole", "RoomRole")
+                        .WithMany("TopicRolePermissions")
+                        .HasForeignKey("RoomRoleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("TreeTopic.Models.Topic", "Topic")
+                        .WithMany("TopicRolePermissions")
+                        .HasForeignKey("TopicId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("RoomRole");
+
+                    b.Navigation("Topic");
+                });
+
+            modelBuilder.Entity("TreeTopic.Models.TopicUserPermission", b =>
+                {
+                    b.HasOne("TreeTopic.Models.RoomUser", "RoomUser")
+                        .WithMany("TopicUserPermissions")
+                        .HasForeignKey("RoomUserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("TreeTopic.Models.Topic", "Topic")
+                        .WithMany("TopicUserPermissions")
+                        .HasForeignKey("TopicId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("RoomUser");
+
+                    b.Navigation("Topic");
+                });
+
             modelBuilder.Entity("TreeTopic.Models.UserTopic", b =>
                 {
                     b.HasOne("TreeTopic.Models.Topic", "Topic")
@@ -1238,9 +1471,20 @@ namespace TreeTopic.Migrations.Application
                     b.Navigation("Topics");
                 });
 
+            modelBuilder.Entity("TreeTopic.Models.RoomRole", b =>
+                {
+                    b.Navigation("Permissions");
+
+                    b.Navigation("RoomUsers");
+
+                    b.Navigation("TopicRolePermissions");
+                });
+
             modelBuilder.Entity("TreeTopic.Models.RoomUser", b =>
                 {
                     b.Navigation("RoomPermission");
+
+                    b.Navigation("TopicUserPermissions");
                 });
 
             modelBuilder.Entity("TreeTopic.Models.Topic", b =>
@@ -1252,6 +1496,10 @@ namespace TreeTopic.Migrations.Application
                     b.Navigation("ChildTopics");
 
                     b.Navigation("Messages");
+
+                    b.Navigation("TopicRolePermissions");
+
+                    b.Navigation("TopicUserPermissions");
                 });
 #pragma warning restore 612, 618
         }

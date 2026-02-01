@@ -26,6 +26,10 @@ namespace TreeTopic
         public DbSet<File> Files => Set<File>();
         public DbSet<RoomUser> RoomUsers => Set<RoomUser>();
         public DbSet<RoomPermission> RoomPermissions => Set<RoomPermission>();
+        public DbSet<RoomRole> RoomRoles => Set<RoomRole>();
+        public DbSet<RoomRolePermission> RoomRolePermissions => Set<RoomRolePermission>();
+        public DbSet<TopicRolePermission> TopicRolePermissions => Set<TopicRolePermission>();
+        public DbSet<TopicUserPermission> TopicUserPermissions => Set<TopicUserPermission>();
         public DbSet<BrainBoard> BrainBoards => Set<BrainBoard>();
         public DbSet<BrainIdea> BrainIdeas => Set<BrainIdea>();
         public DbSet<BrainIdeaVote> BrainIdeaVotes => Set<BrainIdeaVote>();
@@ -188,6 +192,19 @@ namespace TreeTopic
                 .HasForeignKey(rp => rp.RoomUserId)
                 .OnDelete(DeleteBehavior.Cascade);
 
+            modelBuilder.Entity<RoomUser>()
+                .HasOne(ru => ru.RoomRole)
+                .WithMany(rr => rr.RoomUsers)
+                .HasForeignKey(ru => ru.RoomRoleId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            // RoomRole リレーション
+            modelBuilder.Entity<RoomRole>()
+                .HasMany(rr => rr.Permissions)
+                .WithOne(rrp => rrp.RoomRole)
+                .HasForeignKey(rrp => rrp.RoomRoleId)
+                .OnDelete(DeleteBehavior.Cascade);
+
             // Permission リレーション
             modelBuilder.Entity<Permission>()
                 .HasOne(p => p.Role)
@@ -228,6 +245,40 @@ namespace TreeTopic
                 .HasOne(ut => ut.Topic)
                 .WithMany()
                 .HasForeignKey(ut => ut.TopicId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // TopicRolePermission リレーション
+            modelBuilder.Entity<TopicRolePermission>()
+                .HasIndex(trp => new { trp.TopicId, trp.RoomRoleId, trp.Name })
+                .IsUnique();
+
+            modelBuilder.Entity<TopicRolePermission>()
+                .HasOne(trp => trp.Topic)
+                .WithMany(t => t.TopicRolePermissions)
+                .HasForeignKey(trp => trp.TopicId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<TopicRolePermission>()
+                .HasOne(trp => trp.RoomRole)
+                .WithMany(rr => rr.TopicRolePermissions)
+                .HasForeignKey(trp => trp.RoomRoleId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // TopicUserPermission リレーション
+            modelBuilder.Entity<TopicUserPermission>()
+                .HasIndex(tup => new { tup.TopicId, tup.RoomUserId, tup.Name })
+                .IsUnique();
+
+            modelBuilder.Entity<TopicUserPermission>()
+                .HasOne(tup => tup.Topic)
+                .WithMany(t => t.TopicUserPermissions)
+                .HasForeignKey(tup => tup.TopicId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<TopicUserPermission>()
+                .HasOne(tup => tup.RoomUser)
+                .WithMany(ru => ru.TopicUserPermissions)
+                .HasForeignKey(tup => tup.RoomUserId)
                 .OnDelete(DeleteBehavior.Cascade);
 
             // DB プロバイダーに応じて Guid 型を最適化
