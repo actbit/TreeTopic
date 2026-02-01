@@ -1,4 +1,7 @@
 import { writable, derived } from 'svelte/store';
+import { isCacheValid } from '$lib/utils/store';
+
+const ROOMS_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
 /**
  * Room member information
@@ -58,6 +61,7 @@ export interface RoomsState {
   isLoading: boolean;
   error: string | null;
   lastUpdated: number | null;
+  cacheExpiry: number;
 }
 
 /**
@@ -72,6 +76,7 @@ function createRoomsStore() {
     isLoading: false,
     error: null,
     lastUpdated: null,
+    cacheExpiry: 0,
   });
 
   return {
@@ -85,6 +90,7 @@ function createRoomsStore() {
         rooms,
         error: null,
         lastUpdated: Date.now(),
+        cacheExpiry: Date.now() + ROOMS_CACHE_TTL,
       }));
     },
     /**
@@ -215,6 +221,7 @@ function createRoomsStore() {
         isLoading: false,
         error: null,
         lastUpdated: null,
+        cacheExpiry: 0,
       });
     },
   };

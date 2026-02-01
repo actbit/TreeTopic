@@ -6,6 +6,7 @@
  * - Request/response interceptors
  * - Error handling
  * - Tenant context management
+ * - Response caching with TTL
  *
  * Note: This integrates with OpenAPI auto-generated client from 'src/lib/api/generated'
  */
@@ -14,6 +15,7 @@ import { auth } from '$lib/stores/auth';
 import type { User, AuthContext } from '$lib/stores/auth';
 import { get as getStore } from 'svelte/store';
 import { goto } from '$app/navigation';
+import * as cacheManager from './cache';
 
 /**
  * API Error
@@ -147,7 +149,10 @@ async function handleResponse<T>(response: Response): Promise<T> {
       !isOnLoginPage &&
       (response.status === 401 || (response.status === 404 && isAuthMeRequest))
     ) {
+      // Clear all caches on authentication error
       auth.clear();
+      cacheManager.clear();
+
       if (tenant) {
         redirectToTenantOidc(tenant);
       } else {
@@ -164,14 +169,27 @@ async function handleResponse<T>(response: Response): Promise<T> {
 
 /**
  * Make GET request
+ * Supports caching for improved performance
  */
 export async function get<T>(
   path: string,
   options?: {
     headers?: Record<string, string>;
     params?: Record<string, any>;
+    cache?: boolean; // false to bypass cache
   }
 ): Promise<T> {
+  // Generate cache key
+  const cacheKey = cacheManager.generateCacheKey('GET', path, options?.params);
+
+  // Check cache first (unless explicitly bypassed)
+  if (options?.cache !== false) {
+    const cached = cacheManager.get<T>(cacheKey);
+    if (cached !== null) {
+      return cached;
+    }
+  }
+
   let url: string;
 
   if (apiClientConfig.baseUrl) {
@@ -207,11 +225,20 @@ export async function get<T>(
     credentials: 'include',
   });
 
-  return handleResponse<T>(response);
+  // handleResponse will handle 401/403 and redirect if needed
+  const result = await handleResponse<T>(response);
+
+  // Only cache successful responses
+  if (response.ok && result !== null && options?.cache !== false) {
+    cacheManager.set(cacheKey, result);
+  }
+
+  return result;
 }
 
 /**
  * Make POST request
+ * Invalidates related cache entries on success
  */
 export async function post<T>(
   path: string,
@@ -237,11 +264,19 @@ export async function post<T>(
     credentials: 'include',
   });
 
-  return handleResponse<T>(response);
+  const result = await handleResponse<T>(response);
+
+  // Invalidate related cache on success
+  if (response.ok) {
+    cacheManager.invalidateByResource('POST', path);
+  }
+
+  return result;
 }
 
 /**
  * Make PUT request
+ * Invalidates related cache entries on success
  */
 export async function put<T>(
   path: string,
@@ -260,11 +295,19 @@ export async function put<T>(
     credentials: 'include',
   });
 
-  return handleResponse<T>(response);
+  const result = await handleResponse<T>(response);
+
+  // Invalidate related cache on success
+  if (response.ok) {
+    cacheManager.invalidateByResource('PUT', path);
+  }
+
+  return result;
 }
 
 /**
  * Make PATCH request
+ * Invalidates related cache entries on success
  */
 export async function patch<T>(
   path: string,
@@ -283,11 +326,19 @@ export async function patch<T>(
     credentials: 'include',
   });
 
-  return handleResponse<T>(response);
+  const result = await handleResponse<T>(response);
+
+  // Invalidate related cache on success
+  if (response.ok) {
+    cacheManager.invalidateByResource('PATCH', path);
+  }
+
+  return result;
 }
 
 /**
  * Make DELETE request
+ * Invalidates related cache entries on success
  */
 export async function del<T>(
   path: string,
@@ -304,10 +355,19 @@ export async function del<T>(
   });
 
   if (response.status === 204) {
+    // Invalidate related cache on success
+    cacheManager.invalidateByResource('DELETE', path);
     return;
   }
 
-  return handleResponse<T>(response);
+  const result = await handleResponse<T>(response);
+
+  // Invalidate related cache on success
+  if (response.ok) {
+    cacheManager.invalidateByResource('DELETE', path);
+  }
+
+  return result;
 }
 
 /**

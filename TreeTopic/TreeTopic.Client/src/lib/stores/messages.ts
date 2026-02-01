@@ -1,4 +1,7 @@
 import { writable, derived } from 'svelte/store';
+import { isCacheValid } from '$lib/utils/store';
+
+const MESSAGES_CACHE_TTL = 30 * 1000; // 30 seconds - messages change frequently
 
 /**
  * Message attachment
@@ -51,6 +54,7 @@ export interface MessagesState {
   error: string | null;
   lastUpdated: number | null;
   currentTopicId: string | null;
+  cacheExpiry: number;
 }
 
 /**
@@ -65,6 +69,7 @@ function createMessagesStore() {
     error: null,
     lastUpdated: null,
     currentTopicId: null,
+    cacheExpiry: 0,
   });
 
   return {
@@ -92,6 +97,7 @@ function createMessagesStore() {
           currentTopicId: topicId,
           error: null,
           lastUpdated: Date.now(),
+          cacheExpiry: Date.now() + MESSAGES_CACHE_TTL,
         };
       });
     },
@@ -284,6 +290,7 @@ function createMessagesStore() {
         error: null,
         lastUpdated: null,
         currentTopicId: null,
+        cacheExpiry: 0,
       });
     },
   };

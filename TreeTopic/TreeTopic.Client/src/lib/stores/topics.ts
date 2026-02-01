@@ -1,5 +1,6 @@
 import { writable, derived } from 'svelte/store';
 import type { TopicTreeNode } from '$lib/types/ui';
+import { isCacheValid, getCacheAge } from '$lib/utils/store';
 
 /**
  * Topic permission levels
@@ -49,6 +50,32 @@ export interface TopicsState {
   isLoading: boolean;
   error: string | null;
   lastUpdated: number | null;
+  cacheExpiry: number;
+}
+
+const TOPICS_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+/**
+ * Topic information
+ */
+export interface Topic {
+  id: string;
+  roomId: string;
+  title: string;
+  description?: string;
+  parentId: string | null;
+  childIds: string[];
+  createdAt: Date;
+  updatedAt: Date;
+  creatorId: string;
+  messageCount: number;
+  unreadCount: number;
+  userPermission: PermissionLevel;
+  permissions?: TopicPermission[];
+  isArchived: boolean;
+  tags?: string[];
+  sourceMessageId?: string | null;
+  hasChildren: boolean;
 }
 
 /**
@@ -74,6 +101,7 @@ function createTopicsStore() {
     isLoading: false,
     error: null,
     lastUpdated: null,
+    cacheExpiry: 0,
   });
 
   return {
@@ -87,6 +115,7 @@ function createTopicsStore() {
         topics,
         error: null,
         lastUpdated: Date.now(),
+        cacheExpiry: Date.now() + TOPICS_CACHE_TTL,
       }));
     },
     /**
@@ -394,6 +423,7 @@ function createTopicsStore() {
         isLoading: false,
         error: null,
         lastUpdated: null,
+        cacheExpiry: 0,
       });
       localStorage.removeItem('selected_topic');
     },

@@ -1,5 +1,6 @@
 import { writable, derived } from 'svelte/store';
 import { api } from '$lib/api/client';
+import { getCachedAuth, setCachedAuth, clearAuthCache } from '$lib/utils/authCache';
 
 /**
  * User information interface
@@ -63,10 +64,33 @@ function createAuthStore() {
     },
     /**
      * Fetch current user info
+     * Uses cache to avoid redundant API calls
      */
     async fetchCurrentUser(tenant: string): Promise<void> {
       try {
+        // Check cache first
+        const cached = getCachedAuth(tenant);
+        if (cached) {
+          set({
+            user: {
+              id: cached.userId,
+              userName: cached.userName,
+              email: cached.email,
+              displayName: cached.displayName ?? cached.userName,
+              iconUrl: cached.iconUrl,
+              roles: cached.roles || [],
+            },
+            isAuthenticated: true,
+            isLoading: false,
+            error: null,
+          });
+          return;
+        }
+
         const userData = await api.get<AuthMeResponse>(`/${tenant}/auth/me`);
+        // Cache the user data
+        setCachedAuth(tenant, userData);
+
         set({
           user: {
             id: userData.userId,
@@ -111,6 +135,7 @@ function createAuthStore() {
      * Logout and clear local state
      */
     logout: () => {
+      clearAuthCache();
       set({
         user: null,
         isAuthenticated: false,
@@ -122,6 +147,7 @@ function createAuthStore() {
      * Clear local state only (for session expiration)
      */
     clear: () => {
+      clearAuthCache();
       set({
         user: null,
         isAuthenticated: false,
