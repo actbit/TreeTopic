@@ -227,21 +227,20 @@ public class TopicPermissionManager
     {
         var permissions = new HashSet<string>();
 
-        // RoomRoleIdを取得（RoomRoleがロードされていない場合でも対応）
-        var roomRoleId = roomUser.RoomRole?.Id ?? roomUser.RoomRoleId;
+        // 1. ロールから権限を取得（多対多関係）
+        var rolePermissions = await _context.RoomUserRoomRoles
+            .Where(rur => rur.RoomUserId == roomUser.Id)
+            .Join(_context.TopicRolePermissions,
+                rur => rur.RoomRoleId,
+                trp => trp.RoomRoleId,
+                (rur, trp) => new { trp.TopicId, trp.Name })
+            .Where(x => x.TopicId == topicId)
+            .Select(x => x.Name)
+            .ToListAsync(cancellationToken);
 
-        // 1. ロールから権限を取得
-        if (roomRoleId.HasValue)
+        foreach (var perm in rolePermissions)
         {
-            var rolePermissions = await _context.TopicRolePermissions
-                .Where(trp => trp.TopicId == topicId && trp.RoomRoleId == roomRoleId.Value)
-                .Select(trp => trp.Name)
-                .ToListAsync(cancellationToken);
-
-            foreach (var perm in rolePermissions)
-            {
-                permissions.Add(perm);
-            }
+            permissions.Add(perm);
         }
 
         // 2. 個別ユーザー権限を追加（ロール権限に追加）
@@ -267,16 +266,18 @@ public class TopicPermissionManager
         string permissionName,
         CancellationToken cancellationToken = default)
     {
-        // 1. ロール権限を確認
-        if (roomUser.RoomRole != null)
-        {
-            var hasRolePermission = await _context.TopicRolePermissions
-                .AnyAsync(trp => trp.TopicId == topicId && trp.RoomRoleId == roomUser.RoomRole.Id && trp.Name == permissionName, cancellationToken);
+        // 1. ロール権限を確認（多対多関係）
+        var hasRolePermission = await _context.RoomUserRoomRoles
+            .Where(rur => rur.RoomUserId == roomUser.Id)
+            .Join(_context.TopicRolePermissions,
+                rur => rur.RoomRoleId,
+                trp => trp.RoomRoleId,
+                (rur, trp) => new { trp.TopicId, trp.Name })
+            .AnyAsync(x => x.TopicId == topicId && x.Name == permissionName, cancellationToken);
 
-            if (hasRolePermission)
-            {
-                return true;
-            }
+        if (hasRolePermission)
+        {
+            return true;
         }
 
         // 2. 個別ユーザー権限を確認

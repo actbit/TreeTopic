@@ -1,9 +1,9 @@
 <script lang="ts">
   import { page } from '$app/stores';
   import { api } from '$lib/api/client';
+  import { ui } from '$lib/stores/ui';
   import AppLayout from '$lib/components/layout/AppLayout.svelte';
-  import Button from '$lib/components/common/Button.svelte';
-  import RoomRolePermissionEditor from '$lib/components/permissions/RoomRolePermissionEditor.svelte';
+  import { onMount } from 'svelte';
 
   let activeTab = $state('roles');
   let isLoading = $state(false);
@@ -12,14 +12,76 @@
   const tenant = $page.params.tenant ?? '';
   const roomId = $page.params.roomId ?? '';
 
+  // メンバーデータ
+  let roomUsers = $state<any[]>([]);
+  let roomRoles = $state<any[]>([]);
+
   const tabs = [
     { id: 'roles', label: 'ロール' },
-    { id: 'members', label: 'メンバー' },
-    { id: 'permissions', label: '権限' }
+    { id: 'members', label: 'メンバー' }
   ];
 
-  async function handleSave() {
-    // 保存処理
+  onMount(async () => {
+    await loadMembersData();
+  });
+
+  async function loadMembersData() {
+    try {
+      isLoading = true;
+
+      // ルームユーザー一覧を取得
+      const usersData = await api.get<any>(`/${tenant}/api/RoomUsers/room/${roomId}`);
+      roomUsers = usersData;
+
+      // ルームロール一覧を取得
+      const rolesData = await api.get<any[]>(`/${tenant}/api/roomroles`);
+      roomRoles = rolesData;
+
+      error = null;
+    } catch (err: any) {
+      error = err.message || 'データの読み込みに失敗しました';
+    } finally {
+      isLoading = false;
+    }
+  }
+
+  function openRoleModal() {
+    ui.openModal({
+      id: 'room-role-permission',
+      title: 'ロール権限管理',
+      type: 'custom',
+      data: { tenant, roomId }
+    });
+  }
+
+  function openUserPermissionModal() {
+    ui.openModal({
+      id: 'room-user-permission',
+      title: 'ルームユーザー権限管理',
+      type: 'custom',
+      data: { tenant, roomId }
+    });
+  }
+
+  async function updateUserRole(roomUserId: string, roleId: string | null) {
+    try {
+      isLoading = true;
+      await api.put(`/${tenant}/api/RoomUsers/${roomUserId}/role`, { roomId });
+      await loadMembersData();
+    } catch (err: any) {
+      error = err.message || 'ロールの更新に失敗しました';
+    } finally {
+      isLoading = false;
+    }
+  }
+
+  function getDisplayName(user: any): string {
+    return user.displayName || user.userName || 'Unknown';
+  }
+
+  function getRoleName(roleId: string): string {
+    const role = roomRoles.find((r) => r.id === roleId);
+    return role?.name || '未割り当て';
   }
 </script>
 
@@ -53,139 +115,119 @@
     <div class="flex-1 overflow-y-auto p-8 bg-white">
       <div class="max-w-4xl">
         {#if error}
-          <div class="mb-4 p-4 bg-red-50 border border-red-200 rounded text-red-800 text-sm">
-            {error}
+          <div class="mb-4 p-4 bg-red-50 border border-red-200 rounded text-red-800 text-sm flex justify-between items-center">
+            <span>{error}</span>
+            <button onclick={() => (error = null)} class="underline hover:no-underline">閉じる</button>
           </div>
         {/if}
 
         {#if activeTab === 'roles'}
           <div class="space-y-6">
             <div>
-              <h2 class="text-2xl font-bold text-text mb-4">ロール管理</h2>
+              <h2 class="text-2xl font-bold text-text mb-2">ロール管理</h2>
               <p class="text-text-light mb-4">ルーム内のロールとその権限を管理します。</p>
+              <button
+                onclick={openRoleModal}
+                class="px-4 py-2 bg-primary text-white rounded hover:bg-opacity-90 transition-colors text-sm font-medium"
+              >
+                ロール権限を管理
+              </button>
             </div>
 
-            <RoomRolePermissionEditor {tenant} {roomId} />
+            <!-- ロール一覧（簡易表示） -->
+            <div class="border border-border rounded-lg overflow-hidden">
+              <div class="bg-surface p-4 border-b border-border">
+                <h3 class="font-semibold text-text">ロール一覧</h3>
+              </div>
+              <div class="divide-y divide-border">
+                {#each roomRoles as role}
+                  <div class="p-4">
+                    <p class="font-medium text-text">{role.name}</p>
+                    {#if role.description}
+                      <p class="text-sm text-text-light">{role.description}</p>
+                    {/if}
+                  </div>
+                {:else}
+                  <div class="p-8 text-center text-text-light">
+                    <p>ロールがありません</p>
+                  </div>
+                {/each}
+              </div>
+            </div>
           </div>
+
         {:else if activeTab === 'members'}
           <div class="space-y-6">
-            <div>
-              <h2 class="text-2xl font-bold text-text mb-4">メンバー管理</h2>
-              <p class="text-text-light mb-4">ルームメンバーとロール割り当てを管理します。</p>
+            <div class="flex justify-between items-center">
+              <div>
+                <h2 class="text-2xl font-bold text-text mb-2">メンバー管理</h2>
+                <p class="text-text-light">ルームメンバーとロール割り当てを管理します。</p>
+              </div>
+              <button
+                onclick={openUserPermissionModal}
+                class="px-4 py-2 bg-secondary text-white rounded hover:bg-opacity-90 transition-colors text-sm font-medium"
+              >
+                個別権限を管理
+              </button>
             </div>
 
-            <div class="border border-border rounded-lg p-8 text-center text-text-light">
-              <p>準備中...</p>
-            </div>
-          </div>
-        {:else if activeTab === 'permissions'}
-          <div class="space-y-6">
-            <div>
-              <h2 class="text-2xl font-bold text-text mb-4">権限一覧</h2>
-              <p class="text-text-light mb-4">利用可能な権限の一覧です。</p>
-            </div>
-
-            <div class="border border-border rounded-lg overflow-hidden">
-              <div class="bg-surface p-4 border-b border-border">
-                <h3 class="font-semibold text-text">ルーム権限</h3>
+            {#if isLoading}
+              <div class="text-center py-8">
+                <div class="inline-block w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+                <p class="mt-2 text-sm text-text-light">読み込み中...</p>
               </div>
-              <div class="p-4 space-y-2">
-                <div class="flex items-center justify-between p-3 bg-surface rounded">
-                  <div>
-                    <p class="font-medium text-text">room.join</p>
-                    <p class="text-sm text-text-light">ルームに参加できます</p>
-                  </div>
-                  <span class="px-2 py-1 bg-green-100 text-green-800 text-xs rounded">基本</span>
+            {:else if roomUsers.length === 0}
+              <div class="border border-border rounded-lg p-8 text-center text-text-light">
+                <p>メンバーがいません</p>
+              </div>
+            {:else}
+              <!-- メンバー一覧 -->
+              <div class="border border-border rounded-lg overflow-hidden">
+                <div class="bg-surface p-4 border-b border-border">
+                  <h3 class="font-semibold text-text">メンバー一覧</h3>
                 </div>
-                <div class="flex items-center justify-between p-3 bg-surface rounded">
-                  <div>
-                    <p class="font-medium text-text">room.read</p>
-                    <p class="text-sm text-text-light">ルーム情報を閲覧できます</p>
-                  </div>
-                </div>
-                <div class="flex items-center justify-between p-3 bg-surface rounded">
-                  <div>
-                    <p class="font-medium text-text">room.write</p>
-                    <p class="text-sm text-text-light">トピック作成、ファイルアップロード等ができます</p>
-                  </div>
-                </div>
-                <div class="flex items-center justify-between p-3 bg-surface rounded">
-                  <div>
-                    <p class="font-medium text-text">room.delete</p>
-                    <p class="text-sm text-text-light">シェア、ファイル等を削除できます</p>
-                  </div>
-                </div>
-                <div class="flex items-center justify-between p-3 bg-surface rounded">
-                  <div>
-                    <p class="font-medium text-text">room.manage</p>
-                    <p class="text-sm text-text-light">ルーム設定を変更できます</p>
-                  </div>
-                  <span class="px-2 py-1 bg-yellow-100 text-yellow-800 text-xs rounded">管理者</span>
-                </div>
-                <div class="flex items-center justify-between p-3 bg-surface rounded">
-                  <div>
-                    <p class="font-medium text-text">room.manageUsers</p>
-                    <p class="text-sm text-text-light">ルームメンバーを管理できます</p>
-                  </div>
-                  <span class="px-2 py-1 bg-yellow-100 text-yellow-800 text-xs rounded">管理者</span>
-                </div>
-                <div class="flex items-center justify-between p-3 bg-surface rounded">
-                  <div>
-                    <p class="font-medium text-text">room.manageRoles</p>
-                    <p class="text-sm text-text-light">ルームロールを管理できます</p>
-                  </div>
-                  <span class="px-2 py-1 bg-yellow-100 text-yellow-800 text-xs rounded">管理者</span>
+                <div class="divide-y divide-border">
+                  {#each roomUsers as user}
+                    <div class="p-4">
+                      <div class="flex items-center justify-between">
+                        <div>
+                          <p class="font-medium text-text">{getDisplayName(user)}</p>
+                          <p class="text-sm text-text-light">@{user.userName}</p>
+                        </div>
+                        <div class="flex items-center gap-2">
+                          <select
+                            value={user.roomRoleId || ''}
+                            onchange={(e) => updateUserRole(user.id, e.currentTarget.value || null)}
+                            disabled={isLoading}
+                            class="px-3 py-1.5 border border-border rounded text-sm focus:outline-none focus:border-primary disabled:opacity-50"
+                          >
+                            <option value="">未割り当て</option>
+                            {#each roomRoles as role}
+                              <option value={role.id}>{role.name}</option>
+                            {/each}
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+                  {/each}
                 </div>
               </div>
-            </div>
-
-            <div class="border border-border rounded-lg overflow-hidden">
-              <div class="bg-surface p-4 border-b border-border">
-                <h3 class="font-semibold text-text">トピック権限</h3>
-              </div>
-              <div class="p-4 space-y-2">
-                <div class="flex items-center justify-between p-3 bg-surface rounded">
-                  <div>
-                    <p class="font-medium text-text">topic.read</p>
-                    <p class="text-sm text-text-light">トピックを閲覧できます</p>
-                  </div>
-                </div>
-                <div class="flex items-center justify-between p-3 bg-surface rounded">
-                  <div>
-                    <p class="font-medium text-text">topic.write</p>
-                    <p class="text-sm text-text-light">トピックを作成・編集できます</p>
-                  </div>
-                </div>
-                <div class="flex items-center justify-between p-3 bg-surface rounded">
-                  <div>
-                    <p class="font-medium text-text">topic.delete</p>
-                    <p class="text-sm text-text-light">トピックを削除できます</p>
-                  </div>
-                </div>
-                <div class="flex items-center justify-between p-3 bg-surface rounded">
-                  <div>
-                    <p class="font-medium text-text">topic.manage</p>
-                    <p class="text-sm text-text-light">トピック権限を管理できます</p>
-                  </div>
-                  <span class="px-2 py-1 bg-yellow-100 text-yellow-800 text-xs rounded">管理者</span>
-                </div>
-                <div class="flex items-center justify-between p-3 bg-surface rounded">
-                  <div>
-                    <p class="font-medium text-text">topic.readMessages</p>
-                    <p class="text-sm text-text-light">メッセージを閲覧できます</p>
-                  </div>
-                </div>
-                <div class="flex items-center justify-between p-3 bg-surface rounded">
-                  <div>
-                    <p class="font-medium text-text">topic.writeMessages</p>
-                    <p class="text-sm text-text-light">メッセージを投稿・編集できます</p>
-                  </div>
-                </div>
-              </div>
-            </div>
+            {/if}
           </div>
         {/if}
       </div>
     </div>
   {/snippet}
 </AppLayout>
+
+<style>
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  :global(.animate-spin) {
+    animation: spin 1s linear infinite;
+  }
+</style>

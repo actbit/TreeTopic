@@ -33,8 +33,9 @@ public class RoomUserManager
     public async Task<RoomUser?> FindByIdAsync(Guid id, CancellationToken cancellationToken = default)
     {
         return await _context.RoomUsers
-            .Include(ru => ru.RoomRole)
-                .ThenInclude(rr => rr!.Permissions)
+            .Include(ru => ru.RoomUserRoomRoles)
+                .ThenInclude(rur => rur.RoomRole)
+                    .ThenInclude(rr => rr!.Permissions)
             .Include(ru => ru.RoomPermission)
             .FirstOrDefaultAsync(ru => ru.Id == id, cancellationToken);
     }
@@ -48,8 +49,9 @@ public class RoomUserManager
         CancellationToken cancellationToken = default)
     {
         return await _context.RoomUsers
-            .Include(ru => ru.RoomRole)
-                .ThenInclude(rr => rr!.Permissions)
+            .Include(ru => ru.RoomUserRoomRoles)
+                .ThenInclude(rur => rur.RoomRole)
+                    .ThenInclude(rr => rr!.Permissions)
             .Include(ru => ru.RoomPermission)
             .FirstOrDefaultAsync(ru => ru.RoomId == roomId && ru.ApplicationUserId == userId, cancellationToken);
     }
@@ -69,8 +71,8 @@ public class RoomUserManager
         _context.RoomUsers.Add(roomUser);
         await _context.SaveChangesAsync(cancellationToken);
 
-        _logger.LogInformation("RoomUser created: RoomId={RoomId}, UserId={UserId}, RoleId={RoleId}",
-            roomUser.RoomId, roomUser.ApplicationUserId, roomUser.RoomRoleId);
+        _logger.LogInformation("RoomUser created: RoomId={RoomId}, UserId={UserId}",
+            roomUser.RoomId, roomUser.ApplicationUserId);
         return roomUser;
     }
 
@@ -89,15 +91,84 @@ public class RoomUserManager
     }
 
     /// <summary>
-    /// RoomUserのロールを設定
+    /// RoomUserにロールを追加
     /// </summary>
-    public async Task<RoomUser> SetRoleAsync(
+    public async Task AddRoleAsync(
         RoomUser roomUser,
-        Guid? roleId,
+        Guid roleId,
         CancellationToken cancellationToken = default)
     {
-        roomUser.RoomRoleId = roleId;
-        return await UpdateAsync(roomUser, cancellationToken);
+        // 既に同じロールが割り当てられているか確認
+        var existing = await _context.RoomUserRoomRoles
+            .AnyAsync(rur => rur.RoomUserId == roomUser.Id && rur.RoomRoleId == roleId, cancellationToken);
+
+        if (!existing)
+        {
+            var mapping = new RoomUserRoomRole
+            {
+                Id = Guid.CreateVersion7(),
+                RoomUserId = roomUser.Id,
+                RoomRoleId = roleId
+            };
+            _context.RoomUserRoomRoles.Add(mapping);
+            await _context.SaveChangesAsync(cancellationToken);
+
+            _logger.LogInformation("Role added to RoomUser: RoomUserId={RoomUserId}, RoleId={RoleId}",
+                roomUser.Id, roleId);
+        }
+    }
+
+    /// <summary>
+    /// RoomUserからロールを削除
+    /// </summary>
+    public async Task RemoveRoleAsync(
+        RoomUser roomUser,
+        Guid roleId,
+        CancellationToken cancellationToken = default)
+    {
+        var mapping = await _context.RoomUserRoomRoles
+            .FirstOrDefaultAsync(rur => rur.RoomUserId == roomUser.Id && rur.RoomRoleId == roleId, cancellationToken);
+
+        if (mapping != null)
+        {
+            _context.RoomUserRoomRoles.Remove(mapping);
+            await _context.SaveChangesAsync(cancellationToken);
+
+            _logger.LogInformation("Role removed from RoomUser: RoomUserId={RoomUserId}, RoleId={RoleId}",
+                roomUser.Id, roleId);
+        }
+    }
+
+    /// <summary>
+    /// RoomUserのすべてのロールを設定（置き換え）
+    /// </summary>
+    public async Task SetRolesAsync(
+        RoomUser roomUser,
+        List<Guid> roleIds,
+        CancellationToken cancellationToken = default)
+    {
+        // 既存のマッピングを削除
+        var existingMappings = await _context.RoomUserRoomRoles
+            .Where(rur => rur.RoomUserId == roomUser.Id)
+            .ToListAsync(cancellationToken);
+        _context.RoomUserRoomRoles.RemoveRange(existingMappings);
+
+        // 新しいマッピングを追加
+        foreach (var roleId in roleIds)
+        {
+            var mapping = new RoomUserRoomRole
+            {
+                Id = Guid.CreateVersion7(),
+                RoomUserId = roomUser.Id,
+                RoomRoleId = roleId
+            };
+            _context.RoomUserRoomRoles.Add(mapping);
+        }
+
+        await _context.SaveChangesAsync(cancellationToken);
+
+        _logger.LogInformation("Roles set for RoomUser: RoomUserId={RoomUserId}, RoleCount={RoleCount}",
+            roomUser.Id, roleIds.Count);
     }
 
     /// <summary>
@@ -129,20 +200,31 @@ public class RoomUserManager
     {
         var permissions = new HashSet<string>();
 
-        // 1. ロールから基本権限を取得（roomUserに既にロードされている場合はそれを使用）
-        if (roomUser.RoomRole?.Permissions != null)
+        // 1. ロールから基本権限を取得（多対多関係）
+        if (roomUser.RoomUserRoomRoles != null)
         {
-            foreach (var perm in roomUser.RoomRole.Permissions)
+            foreach (var userRole in roomUser.RoomUserRoomRoles)
             {
-                permissions.Add(perm.PermissionName);
+                if (userRole.RoomRole?.Permissions != null)
+                {
+                    foreach (var perm in userRole.RoomRole.Permissions)
+                    {
+                        permissions.Add(perm.PermissionName);
+                    }
+                }
             }
         }
-        else if (roomUser.RoomRoleId.HasValue)
+
+        // ロール権限がロードされていない場合はクエリ実行
+        if (permissions.Count == 0)
         {
-            // RoomRoleはあるがPermissionsがロードされていない場合はクエリ実行
-            var rolePerms = await _context.RoomRolePermissions
-                .Where(rp => rp.RoomRoleId == roomUser.RoomRoleId.Value)
-                .Select(rp => rp.PermissionName)
+            var rolePerms = await _context.RoomUserRoomRoles
+                .Where(rur => rur.RoomUserId == roomUser.Id)
+                .Join(_context.RoomRolePermissions,
+                    rur => rur.RoomRoleId,
+                    rp => rp.RoomRoleId,
+                    (rur, rp) => rp.PermissionName)
+                .Distinct()
                 .ToListAsync(cancellationToken);
             foreach (var perm in rolePerms)
             {
@@ -150,9 +232,7 @@ public class RoomUserManager
             }
         }
 
-        // 2. 個別設定で上書き（ある場合）
-        // ※個別設定は「上書き」として扱うか「追加」として扱うか要検討
-        // ここでは「追加」として扱う
+        // 2. 個別設定で追加
         // N+1問題を回避するため、roomUser.RoomPermissionが既にロードされているかチェック
         if (roomUser.RoomPermission != null)
         {
@@ -163,7 +243,7 @@ public class RoomUserManager
         }
         else
         {
-            // 個別設定を直接クエリ（FindByIdAsyncを使わない）
+            // 個別設定を直接クエリ
             var userPerms = await _context.RoomPermissions
                 .Where(rp => rp.RoomUserId == roomUser.Id)
                 .Select(rp => rp.Name)

@@ -574,6 +574,7 @@ public class Program
         builder.Services.AddScoped<IRoomUserRepository, RoomUserRepository>();
         builder.Services.AddScoped<IRoomPermissionRepository, RoomPermissionRepository>();
         builder.Services.AddScoped<IRoomRoleRepository, RoomRoleRepository>();
+        builder.Services.AddScoped<IRoomUserRoleRepository, RoomUserRoleRepository>();
         builder.Services.AddScoped<IBrainBoardRepository, BrainBoardRepository>();
         builder.Services.AddScoped<IBrainIdeaRepository, BrainIdeaRepository>();
         builder.Services.AddScoped<IBrainIdeaVoteRepository, BrainIdeaVoteRepository>();

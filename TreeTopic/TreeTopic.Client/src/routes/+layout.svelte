@@ -3,6 +3,7 @@
 	import { isAuthenticated } from '$lib/stores/auth';
 	import { ui } from '$lib/stores/ui';
 	import { onMount } from 'svelte';
+	import ModalRenderer from '$lib/components/modals/ModalRenderer.svelte';
 
 	onMount(() => {
 		// Restore UI state from localStorage
@@ -31,6 +32,8 @@
 <div class="min-h-screen bg-background font-sans">
 	<slot />
 </div>
+
+<ModalRenderer />
 
 <style>
 	:global(html, body) {

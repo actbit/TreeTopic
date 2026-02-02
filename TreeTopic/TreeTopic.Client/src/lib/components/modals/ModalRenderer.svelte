@@ -1,6 +1,11 @@
 <script lang="ts">
   import { activeModals, ui } from '$lib/stores/ui';
   import UserSettingModal from '../user/UserSettingModal.svelte';
+  import RoomRolePermissionModal from './RoomRolePermissionModal.svelte';
+  import TopicUserPermissionModal from './TopicUserPermissionModal.svelte';
+  import RoomUserPermissionModal from './RoomUserPermissionModal.svelte';
+  import IdentityRolePermissionModal from './IdentityRolePermissionModal.svelte';
+  import TenantCreateModal from './TenantCreateModal.svelte';
 
   let activeModalsList = $derived.by(() => $activeModals);
 </script>
@@ -13,6 +18,26 @@
         roomId={modal.data.roomId}
         onclose={() => ui.closeModal(modal.id)}
       />
+    {/if}
+
+    {#if modal.id === 'room-role-permission'}
+      <RoomRolePermissionModal />
+    {/if}
+
+    {#if modal.id === 'topic-user-permission'}
+      <TopicUserPermissionModal />
+    {/if}
+
+    {#if modal.id === 'room-user-permission'}
+      <RoomUserPermissionModal />
+    {/if}
+
+    {#if modal.id === 'identity-role-permission'}
+      <IdentityRolePermissionModal />
+    {/if}
+
+    {#if modal.id === 'tenant-create'}
+      <TenantCreateModal />
     {/if}
   </div>
 {/each}

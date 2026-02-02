@@ -3,32 +3,44 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using TreeTopic.Filters;
-using TreeTopic.Permissions;
-using TreeTopic.Services;
 using TreeTopic.Models;
+using TreeTopic.Permissions;
 
 namespace TreeTopic.Controllers;
 
 /// <summary>
-/// ルームロール権限管理
+/// Room権限管理
 /// </summary>
 [ApiController]
 [Route("{tenant}/api/roomroles/{roleId}/permissions")]
 [Authorize]
-public class RoomRolePermissionsController : ControllerBase
+public class RoomPermissionsController : ControllerBase
 {
-    private readonly TopicPermissionManager _topicPermissionManager;
     private readonly ApplicationDbContext _db;
-    private readonly ILogger<RoomRolePermissionsController> _logger;
+    private readonly ILogger<RoomPermissionsController> _logger;
 
-    public RoomRolePermissionsController(
-        TopicPermissionManager topicPermissionManager,
+    public RoomPermissionsController(
         ApplicationDbContext db,
-        ILogger<RoomRolePermissionsController> logger)
+        ILogger<RoomPermissionsController> logger)
     {
-        _topicPermissionManager = topicPermissionManager;
         _db = db;
         _logger = logger;
+    }
+
+    /// <summary>
+    /// Room権限一覧を取得
+    /// </summary>
+    [HttpGet("available")]
+    [RequireAny(IdentityPermissions.PermissionRead)]
+    public IActionResult GetAvailablePermissions()
+    {
+        var permissions = Permissions.PermissionHelper.GetRoomPermissions();
+
+        return Ok(permissions.Select(p => new
+        {
+            name = p,
+            scope = "room"
+        }).ToList());
     }
 
     /// <summary>
@@ -41,10 +53,10 @@ public class RoomRolePermissionsController : ControllerBase
         CancellationToken cancellationToken)
     {
         var roleGuid = (Guid)roleId;
-        var permissions = await _db.TopicRolePermissions
+        var permissions = await _db.RoomRolePermissions
             .AsNoTracking()
             .Where(p => p.RoomRoleId == roleGuid)
-            .Select(p => p.Name)
+            .Select(p => p.PermissionName)
             .ToListAsync(cancellationToken);
 
         return Ok(new { roleId = roleGuid, permissions });
@@ -57,7 +69,7 @@ public class RoomRolePermissionsController : ControllerBase
     [RequireAny(RoomPermissions.ManageRoles)]
     public async Task<IActionResult> AddPermissionToRole(
         [FromRoute] MaskedGuid roleId,
-        [FromBody] AddPermissionRequest request,
+        [FromBody] AddRoomPermissionRequest request,
         CancellationToken cancellationToken)
     {
         var roleGuid = (Guid)roleId;
@@ -70,26 +82,26 @@ public class RoomRolePermissionsController : ControllerBase
         }
 
         // 既に割り当てられているか確認
-        var existing = await _db.TopicRolePermissions
-            .AnyAsync(p => p.RoomRoleId == roleGuid && p.Name == request.PermissionName, cancellationToken);
+        var existing = await _db.RoomRolePermissions
+            .AnyAsync(p => p.RoomRoleId == roleGuid && p.PermissionName == request.PermissionName, cancellationToken);
 
         if (existing)
         {
             return Ok(new { message = "Permission already assigned" });
         }
 
-        var permission = new TopicRolePermission
+        var permission = new RoomRolePermission
         {
             RoomRoleId = roleGuid,
-            Name = request.PermissionName
+            PermissionName = request.PermissionName
         };
 
-        _db.TopicRolePermissions.Add(permission);
+        _db.RoomRolePermissions.Add(permission);
         await _db.SaveChangesAsync(cancellationToken);
 
         _logger.LogInformation("Permission {Permission} added to RoomRole {RoleId}", request.PermissionName, roleGuid);
 
-        return Ok(new { permissionId = permission.Id, name = permission.Name });
+        return Ok(new { permissionId = permission.Id, name = permission.PermissionName });
     }
 
     /// <summary>
@@ -104,15 +116,15 @@ public class RoomRolePermissionsController : ControllerBase
     {
         var roleGuid = (Guid)roleId;
 
-        var permission = await _db.TopicRolePermissions
-            .FirstOrDefaultAsync(p => p.RoomRoleId == roleGuid && p.Name == permissionName, cancellationToken);
+        var permission = await _db.RoomRolePermissions
+            .FirstOrDefaultAsync(p => p.RoomRoleId == roleGuid && p.PermissionName == permissionName, cancellationToken);
 
         if (permission == null)
         {
             return NotFound();
         }
 
-        _db.TopicRolePermissions.Remove(permission);
+        _db.RoomRolePermissions.Remove(permission);
         await _db.SaveChangesAsync(cancellationToken);
 
         _logger.LogInformation("Permission {Permission} removed from RoomRole {RoleId}", permissionName, roleGuid);
@@ -122,6 +134,6 @@ public class RoomRolePermissionsController : ControllerBase
 }
 
 /// <summary>
-/// 権限割り当てリクエスト
+/// Room権限割り当てリクエスト
 /// </summary>
-public record AddPermissionRequest(string PermissionName);
+public record AddRoomPermissionRequest(string PermissionName);

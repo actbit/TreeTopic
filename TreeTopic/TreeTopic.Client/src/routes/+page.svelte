@@ -98,6 +98,11 @@
 
       <div class="footer-section">
         <p>Secured by OIDC authentication</p>
+        <div class="footer-actions">
+          <a href="/tenants" class="create-tenant-link">
+            Create new workspace
+          </a>
+        </div>
       </div>
     </div>
 
@@ -246,6 +251,27 @@
     text-align: center;
     font-size: var(--font-size-sm);
     color: var(--color-text-light);
+    margin-bottom: 16px;
+  }
+
+  .footer-actions {
+    text-align: center;
+  }
+
+  .create-tenant-link {
+    display: inline-block;
+    padding: 10px 16px;
+    font-size: var(--font-size-sm);
+    color: var(--color-primary);
+    text-decoration: none;
+    border: 1px solid var(--color-primary);
+    border-radius: var(--border-radius-lg);
+    transition: all 0.2s ease;
+  }
+
+  .create-tenant-link:hover {
+    background-color: var(--color-primary);
+    color: var(--color-text-inverse);
   }
 
   .copyright {

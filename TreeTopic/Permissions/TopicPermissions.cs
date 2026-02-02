@@ -7,21 +7,27 @@ namespace TreeTopic.Permissions;
 public static class TopicPermissions
 {
     /// <summary>トピックの読み取り</summary>
-    public static readonly PermissionRequirement Read = new(PermissionScope.Topic, "topic.read");
+    public const string Read = "topic.read";
+    public static readonly PermissionRequirement ReadReq = new(PermissionScope.Topic, Read);
 
     /// <summary>トピックへの書き込み（サブトピック作成）</summary>
-    public static readonly PermissionRequirement Write = new(PermissionScope.Topic, "topic.write");
+    public const string Write = "topic.write";
+    public static readonly PermissionRequirement WriteReq = new(PermissionScope.Topic, Write);
 
     /// <summary>トピックの削除</summary>
-    public static readonly PermissionRequirement Delete = new(PermissionScope.Topic, "topic.delete");
+    public const string Delete = "topic.delete";
+    public static readonly PermissionRequirement DeleteReq = new(PermissionScope.Topic, Delete);
 
     /// <summary>トピックの管理（権限設定など）</summary>
-    public static readonly PermissionRequirement Manage = new(PermissionScope.Topic, "topic.manage");
+    public const string Manage = "topic.manage";
+    public static readonly PermissionRequirement ManageReq = new(PermissionScope.Topic, Manage);
 
     /// <summary>トピックのメッセージ読み取り</summary>
-    public static readonly PermissionRequirement ReadMessages = new(PermissionScope.Topic, "topic.readMessages");
+    public const string ReadMessages = "topic.readMessages";
+    public static readonly PermissionRequirement ReadMessagesReq = new(PermissionScope.Topic, ReadMessages);
 
     /// <summary>トピックへのメッセージ投稿</summary>
-    public static readonly PermissionRequirement WriteMessages = new(PermissionScope.Topic, "topic.writeMessages");
+    public const string WriteMessages = "topic.writeMessages";
+    public static readonly PermissionRequirement WriteMessagesReq = new(PermissionScope.Topic, WriteMessages);
 }
 

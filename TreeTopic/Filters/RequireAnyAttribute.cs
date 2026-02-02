@@ -41,22 +41,24 @@ public class RequireAnyAttribute : Attribute, IAsyncActionFilter
     public bool ResolveRoomIdFromTopic { get; set; } = true;
 
     /// <summary>
-    /// PermissionRequirementを直接受け取るコンストラクター
+    /// 文字列配列からPermissionRequirementを構築するコンストラクター
     /// </summary>
-    public RequireAnyAttribute(params PermissionRequirement[] requirements)
+    public RequireAnyAttribute(params string[] permissions)
     {
-        _requirements = requirements ?? Array.Empty<PermissionRequirement>();
+        _requirements = permissions?.Select(ParsePermissionRequirement).ToArray()
+            ?? Array.Empty<PermissionRequirement>();
     }
 
     private static PermissionRequirement ParsePermissionRequirement(string permission)
     {
-        if (permission.StartsWith("identity."))
+        if (permission.StartsWith("identity.") || permission.StartsWith("tenant."))
             return new PermissionRequirement(PermissionScope.Role, permission);
         if (permission.StartsWith("room."))
             return new PermissionRequirement(PermissionScope.Room, permission);
         if (permission.StartsWith("topic."))
             return new PermissionRequirement(PermissionScope.Topic, permission);
-        return new PermissionRequirement(PermissionScope.All, permission);
+        // デフォルトはRoleスコープ
+        return new PermissionRequirement(PermissionScope.Role, permission);
     }
 
     public async Task OnActionExecutionAsync(ActionExecutingContext context, ActionExecutionDelegate next)
@@ -173,29 +175,7 @@ public class RequireAnyAttribute : Attribute, IAsyncActionFilter
                 return await topicPermissionManager.HasPermissionAsync(
                     roomUser, topicId.Value, requirement.Name, cancellationToken);
 
-            case PermissionScope.All:
             default:
-                // 全体系チェック（後方互換）
-                // 1. Roleチェック
-                if (await CheckRolePermissionAsync(requirement.Name, roles, dbContext, cancellationToken))
-                    return true;
-
-                // 2. Roomチェック
-                if (roomUser != null)
-                {
-                    var roomPerms = await roomUserManager.GetPermissionsAsync(roomUser, cancellationToken);
-                    if (roomPerms.Contains(requirement.Name))
-                        return true;
-                }
-
-                // 3. Topicチェック
-                if (roomUser != null && topicId.HasValue)
-                {
-                    if (await topicPermissionManager.HasPermissionAsync(
-                        roomUser, topicId.Value, requirement.Name, cancellationToken))
-                        return true;
-                }
-
                 return false;
         }
     }

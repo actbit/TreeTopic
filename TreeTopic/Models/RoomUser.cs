@@ -1,4 +1,4 @@
-﻿using Finbuckle.MultiTenant;
+using Finbuckle.MultiTenant;
 using Finbuckle.MultiTenant.Abstractions;
 using System.ComponentModel.DataAnnotations.Schema;
 
@@ -11,15 +11,11 @@ namespace TreeTopic.Models
         public Guid ApplicationUserId { get; set; }
         public ApplicationUser ApplicationUser { get; set; } = null!;
 
-        [ForeignKey(nameof(Room))]
+    [ForeignKey(nameof(Room))]
         public Guid RoomId { get; set; }
         public Room Room { get; set; } = null!;
 
-        [ForeignKey(nameof(RoomRole))]
-        public Guid? RoomRoleId { get; set; }
-        public RoomRole? RoomRole { get; set; }
-
-        public string? Name { get; set; }
+    public string? Name { get; set; }
 
         public bool UseMainName { get; set; }
 
@@ -33,8 +29,14 @@ namespace TreeTopic.Models
     /// このユーザーのトピック権限設定
     /// </summary>
     public List<TopicUserPermission> TopicUserPermissions { get; set; } = new();
-    }
+
+    /// <summary>
+    /// RoomUserとRoomRoleの多対多関係
+    /// </summary>
+    public List<RoomUserRoomRole> RoomUserRoomRoles { get; set; } = new();
 }
+}
+
 
 
 
