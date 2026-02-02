@@ -102,7 +102,7 @@ public enum TopicDeleteStrategy
 /// 未読数などの統計情報を含むトピックDTO
 /// N+1問題を解決するために使用
 /// </summary>
-public class TopicWithStatsDto : TopicDto
+public class TopicWithStatsDto : TopicDetailDto
 {
     /// <summary>
     /// トピック内の全メッセージ数

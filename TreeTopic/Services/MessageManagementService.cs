@@ -13,7 +13,6 @@ using TreeTopic;
 using TreeTopic.Common;
 using TreeTopic.Dtos;
 using TreeTopic.Hubs;
-using TreeTopic.Hubs;
 using TreeTopic.Models;
 using TreeTopic.Repositories;
 using FileModel = TreeTopic.Models.File;
@@ -207,11 +206,11 @@ public class MessageManagementService : BaseService, IMessageManagementService
         await _roomUserSyncHub.Clients.Group(groupName).TopicUnreadUpdated(payload);
     }
 
-    private TopicDto MapTopicDto(Topic topic)
+    private TopicDetailDto MapTopicDto(Topic topic)
     {
         var hasChildren = _topicRepository.Query().Any(t => t.ParentId == topic.Id);
 
-        return new TopicDto
+        return new TopicDetailDto
         {
             Id = topic.Id,
             RoomId = topic.RoomId,
@@ -220,12 +219,13 @@ public class MessageManagementService : BaseService, IMessageManagementService
             Title = topic.Title,
             Description = topic.Description,
             HasChildren = hasChildren,
+            UnreadCount = 0,
             CreatedAt = topic.CreatedAt,
             UpdatedAt = topic.UpdatedAt
         };
     }
 
-    private TopicRealtimeDto MapTopicRealtime(TopicDto dto)
+    private TopicRealtimeDto MapTopicRealtime(TopicDetailDto dto)
     {
         var id = (Guid)dto.Id;
         var roomId = (Guid)dto.RoomId;
@@ -252,7 +252,7 @@ public class MessageManagementService : BaseService, IMessageManagementService
             dto.UpdatedAt);
     }
 
-    private Task BroadcastTopicCreatedAsync(TopicDto dto)
+    private Task BroadcastTopicCreatedAsync(TopicDetailDto dto)
     {
         var roomId = (Guid)dto.RoomId;
         var groupName = RoomTopicHubGroups.Room(_maskedUuidService.EncodeSynchronous(roomId));
@@ -261,7 +261,7 @@ public class MessageManagementService : BaseService, IMessageManagementService
         return _roomTopicHub.Clients.Group(groupName).TopicCreated(payload);
     }
 
-    private Task BroadcastTopicUpdatedAsync(TopicDto dto)
+    private Task BroadcastTopicUpdatedAsync(TopicDetailDto dto)
     {
         var roomId = (Guid)dto.RoomId;
         var groupName = RoomTopicHubGroups.Room(_maskedUuidService.EncodeSynchronous(roomId));
@@ -554,7 +554,7 @@ public class MessageManagementService : BaseService, IMessageManagementService
 
             var dto = await MapToDtoAsync(message, cancellationToken);
 
-            TopicDto? createdTopicDto = null;
+            TopicDetailDto? createdTopicDto = null;
             if (request.ChildTopic != null)
             {
                 var childRequest = request.ChildTopic;
@@ -625,13 +625,15 @@ public class MessageManagementService : BaseService, IMessageManagementService
                 dto.ChildTopicTitle = createdTopicDto.Title;
             }
 
+            // SignalRブロードキャスト（失敗してもメッセージ作成自体は成功させる）
             try
             {
                 await BroadcastMessageCreatedAsync(dto);
             }
             catch (Exception ex)
             {
-                Logger.LogError(ex, "Failed to broadcast message created for message {MessageId}", message.Id);
+                // ブロードキャスト失敗はログに記録するが、メッセージ作成処理は継続
+                Logger.LogError(ex, "Failed to broadcast message created for message {MessageId}. SignalR broadcast failed but message was created successfully.", message.Id);
             }
 
             // プッシュ通知と未読カウント更新（fire-and-forget）
@@ -677,13 +679,16 @@ public class MessageManagementService : BaseService, IMessageManagementService
                 .FirstOrDefaultAsync(cancellationToken);
 
             var dto = await MapToDtoAsync(updated ?? message, cancellationToken);
+
+            // SignalRブロードキャスト（失敗してもメッセージ更新自体は成功させる）
             try
             {
                 await BroadcastMessageUpdatedAsync(dto);
             }
             catch (Exception ex)
             {
-                Logger.LogError(ex, "Failed to broadcast message updated for message {MessageId}", messageId);
+                // ブロードキャスト失敗はログに記録するが、メッセージ更新処理は継続
+                Logger.LogError(ex, "Failed to broadcast message updated for message {MessageId}. SignalR broadcast failed but message was updated successfully.", messageId);
             }
             return Result<MessageDto>.Success(dto);
         }, nameof(UpdateMessageAsync));
@@ -706,13 +711,15 @@ public class MessageManagementService : BaseService, IMessageManagementService
             _messageRepository.Delete(message);
             await _messageRepository.SaveChangesAsync(cancellationToken);
 
+            // SignalRブロードキャスト（失敗してもメッセージ削除自体は成功させる）
             try
             {
                 await BroadcastMessageDeletedAsync(message.Id, message.TopicId);
             }
             catch (Exception ex)
             {
-                Logger.LogError(ex, "Failed to broadcast message deleted for message {MessageId}", message.Id);
+                // ブロードキャスト失敗はログに記録するが、メッセージ削除処理は継続
+                Logger.LogError(ex, "Failed to broadcast message deleted for message {MessageId}. SignalR broadcast failed but message was deleted successfully.", message.Id);
             }
 
             return Result.Success();
@@ -789,100 +796,120 @@ public class MessageManagementService : BaseService, IMessageManagementService
         bool includeEarlierMessages,
         CancellationToken cancellationToken)
     {
-        var anchor = await _messageRepository.Query()
-            .Where(m => m.Id == anchorMessageId)
-            .Select(m => new { m.Id, m.TopicId, m.CreatedAt })
-            .FirstOrDefaultAsync(cancellationToken);
-
-        if (anchor == null)
-            return Result<List<MessageDto>>.NotFound("Anchor message not found");
-
-        if (anchor.TopicId != sourceTopicId)
-            return Result<List<MessageDto>>.BadRequest("Anchor message must belong to the source topic");
-
-        var cutoffCreatedAt = anchor.CreatedAt;
-        var cutoffId = anchor.Id;
-
-        var messages = new List<Message>();
-
-        if (includeEarlierMessages)
+        // トランザクションを使用してデータ整合性を確保
+        using var transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
+        try
         {
-            var earlier = await _messageRepository.Query()
-                .Where(m => m.TopicId == sourceTopicId)
-                .Where(m =>
-                    m.CreatedAt < cutoffCreatedAt ||
-                    (m.CreatedAt == cutoffCreatedAt && m.Id < cutoffId))
-                .OrderBy(m => m.CreatedAt)
-                .ThenBy(m => m.Id)
-                .Include(m => m.RoomUser)
-                .ThenInclude(ru => ru.ApplicationUser)
-                .Include(m => m.Files)
-                .ToListAsync(cancellationToken);
-            messages.AddRange(earlier);
-        }
-
-        if (includeAnchorMessage)
-        {
-            var anchorMessage = await _messageRepository.Query()
-                .Where(m => m.TopicId == sourceTopicId && m.Id == anchorMessageId)
-                .Include(m => m.RoomUser)
-                .ThenInclude(ru => ru.ApplicationUser)
-                .Include(m => m.Files)
+            var anchor = await _messageRepository.Query()
+                .Where(m => m.Id == anchorMessageId)
+                .Select(m => new { m.Id, m.TopicId, m.CreatedAt })
                 .FirstOrDefaultAsync(cancellationToken);
-            if (anchorMessage != null && !messages.Any(m => m.Id == anchorMessage.Id))
+
+            if (anchor == null)
+                return Result<List<MessageDto>>.NotFound("Anchor message not found");
+
+            if (anchor.TopicId != sourceTopicId)
+                return Result<List<MessageDto>>.BadRequest("Anchor message must belong to the source topic");
+
+            var cutoffCreatedAt = anchor.CreatedAt;
+            var cutoffId = anchor.Id;
+
+            var messages = new List<Message>();
+
+            if (includeEarlierMessages)
             {
-                messages.Add(anchorMessage);
+                var earlier = await _messageRepository.Query()
+                    .Where(m => m.TopicId == sourceTopicId)
+                    .Where(m =>
+                        m.CreatedAt < cutoffCreatedAt ||
+                        (m.CreatedAt == cutoffCreatedAt && m.Id < cutoffId))
+                    .OrderBy(m => m.CreatedAt)
+                    .ThenBy(m => m.Id)
+                    .Include(m => m.RoomUser)
+                    .ThenInclude(ru => ru.ApplicationUser)
+                    .Include(m => m.Files)
+                    .ToListAsync(cancellationToken);
+                messages.AddRange(earlier);
             }
-        }
 
-        if (messages.Count == 0)
-            return Result<List<MessageDto>>.Success(new List<MessageDto>());
-
-        foreach (var message in messages)
-        {
-            message.TopicId = targetTopicId;
-            message.UpdatedAt = DateTime.UtcNow;
-            _messageRepository.Update(message);
-        }
-
-        await _messageRepository.SaveChangesAsync(cancellationToken);
-
-        // メッセージに紐づいた子Topicの親を移動先Topicに変更
-        var movedMessageIds = messages.Select(m => m.Id).ToList();
-        var childTopics = await _topicRepository.Query()
-            .Where(t => movedMessageIds.Contains(t.SourceMessageId!.Value))
-            .ToListAsync(cancellationToken);
-
-        if (childTopics.Count > 0)
-        {
-            foreach (var childTopic in childTopics)
+            if (includeAnchorMessage)
             {
-                childTopic.ParentId = targetTopicId;
+                var anchorMessage = await _messageRepository.Query()
+                    .Where(m => m.TopicId == sourceTopicId && m.Id == anchorMessageId)
+                    .Include(m => m.RoomUser)
+                    .ThenInclude(ru => ru.ApplicationUser)
+                    .Include(m => m.Files)
+                    .FirstOrDefaultAsync(cancellationToken);
+                if (anchorMessage != null && !messages.Any(m => m.Id == anchorMessage.Id))
+                {
+                    messages.Add(anchorMessage);
+                }
             }
-            await _topicRepository.SaveChangesAsync(cancellationToken);
 
-            // 子Topicの更新をブロードキャスト
-            foreach (var childTopic in childTopics)
+            if (messages.Count == 0)
+                return Result<List<MessageDto>>.Success(new List<MessageDto>());
+
+            foreach (var message in messages)
             {
-                var topicDto = MapTopicDto(childTopic);
-                await BroadcastTopicUpdatedAsync(topicDto);
+                message.TopicId = targetTopicId;
+                message.UpdatedAt = DateTime.UtcNow;
+                _messageRepository.Update(message);
             }
-        }
 
-        var dtos = new List<MessageDto>();
-        foreach (var message in messages)
+            await _messageRepository.SaveChangesAsync(cancellationToken);
+
+            // メッセージに紐づいた子Topicの親を移動先Topicに変更
+            var movedMessageIds = messages.Select(m => m.Id).ToList();
+            var childTopics = await _topicRepository.Query()
+                .Where(t => movedMessageIds.Contains(t.SourceMessageId!.Value))
+                .ToListAsync(cancellationToken);
+
+            if (childTopics.Count > 0)
+            {
+                foreach (var childTopic in childTopics)
+                {
+                    childTopic.ParentId = targetTopicId;
+                }
+                await _topicRepository.SaveChangesAsync(cancellationToken);
+
+                // トランザクションをコミット（ブロードキャスト前に確定）
+                await transaction.CommitAsync(cancellationToken);
+
+                // 子Topicの更新をブロードキャスト
+                foreach (var childTopic in childTopics)
+                {
+                    var topicDto = MapTopicDto(childTopic);
+                    await BroadcastTopicUpdatedAsync(topicDto);
+                }
+            }
+            else
+            {
+                // 子Topicがない場合もトランザクションをコミット
+                await transaction.CommitAsync(cancellationToken);
+            }
+
+            var dtos = new List<MessageDto>();
+            foreach (var message in messages)
+            {
+                await BroadcastMessageDeletedAsync(message.Id, sourceTopicId);
+                var dto = await MapToDtoAsync(message, cancellationToken);
+                dtos.Add(dto);
+            }
+
+            foreach (var dto in dtos)
+            {
+                await BroadcastMessageCreatedAsync(dto);
+            }
+
+            return Result<List<MessageDto>>.Success(dtos);
+        }
+        catch (Exception ex)
         {
-            await BroadcastMessageDeletedAsync(message.Id, sourceTopicId);
-            var dto = await MapToDtoAsync(message, cancellationToken);
-            dtos.Add(dto);
+            await transaction.RollbackAsync(cancellationToken);
+            Logger.LogError(ex, "Failed to move messages before anchor. SourceTopicId={SourceTopicId}, TargetTopicId={TargetTopicId}, AnchorMessageId={AnchorMessageId}",
+                sourceTopicId, targetTopicId, anchorMessageId);
+            throw;
         }
-
-        foreach (var dto in dtos)
-        {
-            await BroadcastMessageCreatedAsync(dto);
-        }
-
-        return Result<List<MessageDto>>.Success(dtos);
     }
 
     private async Task<Result<List<MessageDto>>> MoveMessagesByIdsInternalAsync(
@@ -891,65 +918,85 @@ public class MessageManagementService : BaseService, IMessageManagementService
         IReadOnlyCollection<Guid> messageIds,
         CancellationToken cancellationToken)
     {
-        var ids = messageIds.ToList();
-        if (ids.Count == 0)
-            return Result<List<MessageDto>>.Success(new List<MessageDto>());
-
-        var messages = await _messageRepository.Query()
-            .Where(m => ids.Contains(m.Id) && m.TopicId == sourceTopicId)
-            .Include(m => m.RoomUser)
-            .ThenInclude(ru => ru.ApplicationUser)
-            .Include(m => m.Files)
-            .ToListAsync(cancellationToken);
-
-        if (messages.Count == 0)
-            return Result<List<MessageDto>>.Success(new List<MessageDto>());
-
-        foreach (var message in messages)
+        // トランザクションを使用してデータ整合性を確保
+        using var transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
+        try
         {
-            message.TopicId = targetTopicId;
-            message.UpdatedAt = DateTime.UtcNow;
-            _messageRepository.Update(message);
-        }
+            var ids = messageIds.ToList();
+            if (ids.Count == 0)
+                return Result<List<MessageDto>>.Success(new List<MessageDto>());
 
-        await _messageRepository.SaveChangesAsync(cancellationToken);
+            var messages = await _messageRepository.Query()
+                .Where(m => ids.Contains(m.Id) && m.TopicId == sourceTopicId)
+                .Include(m => m.RoomUser)
+                .ThenInclude(ru => ru.ApplicationUser)
+                .Include(m => m.Files)
+                .ToListAsync(cancellationToken);
 
-        // メッセージに紐づいた子Topicの親を移動先Topicに変更
-        var movedMessageIds = messages.Select(m => m.Id).ToList();
-        var childTopics = await _topicRepository.Query()
-            .Where(t => movedMessageIds.Contains(t.SourceMessageId!.Value))
-            .ToListAsync(cancellationToken);
+            if (messages.Count == 0)
+                return Result<List<MessageDto>>.Success(new List<MessageDto>());
 
-        if (childTopics.Count > 0)
-        {
-            foreach (var childTopic in childTopics)
+            foreach (var message in messages)
             {
-                childTopic.ParentId = targetTopicId;
+                message.TopicId = targetTopicId;
+                message.UpdatedAt = DateTime.UtcNow;
+                _messageRepository.Update(message);
             }
-            await _topicRepository.SaveChangesAsync(cancellationToken);
 
-            // 子Topicの更新をブロードキャスト
-            foreach (var childTopic in childTopics)
+            await _messageRepository.SaveChangesAsync(cancellationToken);
+
+            // メッセージに紐づいた子Topicの親を移動先Topicに変更
+            var movedMessageIds = messages.Select(m => m.Id).ToList();
+            var childTopics = await _topicRepository.Query()
+                .Where(t => movedMessageIds.Contains(t.SourceMessageId!.Value))
+                .ToListAsync(cancellationToken);
+
+            if (childTopics.Count > 0)
             {
-                var topicDto = MapTopicDto(childTopic);
-                await BroadcastTopicUpdatedAsync(topicDto);
+                foreach (var childTopic in childTopics)
+                {
+                    childTopic.ParentId = targetTopicId;
+                }
+                await _topicRepository.SaveChangesAsync(cancellationToken);
+
+                // トランザクションをコミット（ブロードキャスト前に確定）
+                await transaction.CommitAsync(cancellationToken);
+
+                // 子Topicの更新をブロードキャスト
+                foreach (var childTopic in childTopics)
+                {
+                    var topicDto = MapTopicDto(childTopic);
+                    await BroadcastTopicUpdatedAsync(topicDto);
+                }
             }
-        }
+            else
+            {
+                // 子Topicがない場合もトランザクションをコミット
+                await transaction.CommitAsync(cancellationToken);
+            }
 
-        var dtos = new List<MessageDto>();
-        foreach (var message in messages)
+            var dtos = new List<MessageDto>();
+            foreach (var message in messages)
+            {
+                await BroadcastMessageDeletedAsync(message.Id, sourceTopicId);
+                var dto = await MapToDtoAsync(message, cancellationToken);
+                dtos.Add(dto);
+            }
+
+            foreach (var dto in dtos)
+            {
+                await BroadcastMessageCreatedAsync(dto);
+            }
+
+            return Result<List<MessageDto>>.Success(dtos);
+        }
+        catch (Exception ex)
         {
-            await BroadcastMessageDeletedAsync(message.Id, sourceTopicId);
-            var dto = await MapToDtoAsync(message, cancellationToken);
-            dtos.Add(dto);
+            await transaction.RollbackAsync(cancellationToken);
+            Logger.LogError(ex, "Failed to move messages by IDs. SourceTopicId={SourceTopicId}, TargetTopicId={TargetTopicId}, MessageCount={MessageCount}",
+                sourceTopicId, targetTopicId, messageIds.Count);
+            throw;
         }
-
-        foreach (var dto in dtos)
-        {
-            await BroadcastMessageCreatedAsync(dto);
-        }
-
-        return Result<List<MessageDto>>.Success(dtos);
     }
 
     private async Task ProcessUploadedFilesAsync(

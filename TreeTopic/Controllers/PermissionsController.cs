@@ -23,7 +23,7 @@ public class PermissionsController : ControllerBase
     }
 
     [HttpGet]
-    [RequirePermission(IdentityPermissions.PermissionRead)]
+    [RequireAny(IdentityPermissions.PermissionRead)]
     public async Task<ActionResult<List<PermissionDto>>> List(CancellationToken cancellationToken)
     {
         var result = await _permissionManagementService.ListPermissionsAsync();
@@ -38,7 +38,7 @@ public class PermissionsController : ControllerBase
     }
 
     [HttpGet("{permissionId}")]
-    [RequirePermission(IdentityPermissions.PermissionRead)]
+    [RequireAny(IdentityPermissions.PermissionRead)]
     public async Task<ActionResult<PermissionDto>> Get([FromRoute] MaskedGuid permissionId, CancellationToken cancellationToken)
     {
         var result = await _permissionManagementService.GetPermissionByIdAsync((Guid)permissionId);
@@ -53,7 +53,7 @@ public class PermissionsController : ControllerBase
     }
 
     [HttpPost]
-    [RequirePermission(IdentityPermissions.PermissionManage)]
+    [RequireAny(IdentityPermissions.PermissionManage)]
     public async Task<ActionResult<PermissionDto>> Create([FromBody] PermissionModificationRequest request)
     {
         if (!ModelState.IsValid)
@@ -73,7 +73,7 @@ public class PermissionsController : ControllerBase
     }
 
     [HttpPut("{permissionId}")]
-    [RequirePermission(IdentityPermissions.PermissionManage)]
+    [RequireAny(IdentityPermissions.PermissionManage)]
     public async Task<ActionResult<PermissionDto>> Update([FromRoute] MaskedGuid permissionId, [FromBody] PermissionModificationRequest request)
     {
         if (!ModelState.IsValid)
@@ -93,7 +93,7 @@ public class PermissionsController : ControllerBase
     }
 
     [HttpDelete("{permissionId}")]
-    [RequirePermission(IdentityPermissions.PermissionManage)]
+    [RequireAny(IdentityPermissions.PermissionManage)]
     public async Task<IActionResult> Delete([FromRoute] MaskedGuid permissionId)
     {
         var result = await _permissionManagementService.DeletePermissionAsync(permissionId);
@@ -121,7 +121,7 @@ public class PermissionsController : ControllerBase
     /// 利用可能なすべての権限一覧を取得（定義済み権限定数）
     /// </summary>
     [HttpGet("available")]
-    [RequirePermission(IdentityPermissions.PermissionRead)]
+    [RequireAny(IdentityPermissions.PermissionRead)]
     public IActionResult GetAvailablePermissions()
     {
         var permissions = new

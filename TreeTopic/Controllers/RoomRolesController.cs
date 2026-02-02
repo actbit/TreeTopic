@@ -28,7 +28,7 @@ public class RoomRolesController : ControllerBase
     /// すべてのロールを取得
     /// </summary>
     [HttpGet]
-    [RequirePermission(RoomPermissions.ManageRoles)]
+    [RequireAny(RoomPermissions.ManageRoles)]
     public async Task<ActionResult<List<RoomRoleDto>>> List(CancellationToken cancellationToken)
     {
         var result = await _roleService.ListRolesAsync(cancellationToken);
@@ -45,7 +45,7 @@ public class RoomRolesController : ControllerBase
     /// IDでロールを取得
     /// </summary>
     [HttpGet("{id}")]
-    [RequirePermission(RoomPermissions.ManageRoles)]
+    [RequireAny(RoomPermissions.ManageRoles)]
     public async Task<ActionResult<RoomRoleDto>> GetById([FromRoute] MaskedGuid id, CancellationToken cancellationToken)
     {
         var result = await _roleService.GetRoleByIdAsync((Guid)id, cancellationToken);
@@ -62,7 +62,7 @@ public class RoomRolesController : ControllerBase
     /// ロールを作成
     /// </summary>
     [HttpPost]
-    [RequirePermission(RoomPermissions.ManageRoles)]
+    [RequireAny(RoomPermissions.ManageRoles)]
     public async Task<ActionResult<RoomRoleDto>> Create([FromBody] CreateRoomRoleRequest request, CancellationToken cancellationToken)
     {
         if (!ModelState.IsValid)
@@ -87,7 +87,7 @@ public class RoomRolesController : ControllerBase
     /// ロールを更新
     /// </summary>
     [HttpPut("{id}")]
-    [RequirePermission(RoomPermissions.ManageRoles)]
+    [RequireAny(RoomPermissions.ManageRoles)]
     public async Task<ActionResult<RoomRoleDto>> Update(
         [FromRoute] MaskedGuid id,
         [FromBody] UpdateRoomRoleRequest request,
@@ -112,7 +112,7 @@ public class RoomRolesController : ControllerBase
     /// ロールを削除
     /// </summary>
     [HttpDelete("{id}")]
-    [RequirePermission(RoomPermissions.ManageRoles)]
+    [RequireAny(RoomPermissions.ManageRoles)]
     public async Task<IActionResult> Delete([FromRoute] MaskedGuid id, CancellationToken cancellationToken)
     {
         var result = await _roleService.DeleteRoleAsync((Guid)id, cancellationToken);

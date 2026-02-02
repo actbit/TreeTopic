@@ -20,7 +20,7 @@ public class RolesController : ControllerBase
     }
 
     [HttpGet]
-    [RequirePermission(IdentityPermissions.RoleRead)]
+    [RequireAny(IdentityPermissions.RoleRead)]
     public ActionResult<List<RoleDto>> List()
     {
         var roles = _roleManager.Roles.ToList();
@@ -28,7 +28,7 @@ public class RolesController : ControllerBase
     }
 
     [HttpPost]
-    [RequirePermission(IdentityPermissions.RoleManage)]
+    [RequireAny(IdentityPermissions.RoleManage)]
     public async Task<ActionResult<RoleDto>> Create([FromBody] RoleCreationRequest request)
     {
         if (!ModelState.IsValid)
@@ -53,7 +53,7 @@ public class RolesController : ControllerBase
     }
 
     [HttpDelete("{roleName}")]
-    [RequirePermission(IdentityPermissions.RoleManage)]
+    [RequireAny(IdentityPermissions.RoleManage)]
     public async Task<IActionResult> Delete(string roleName)
     {
         if (string.IsNullOrWhiteSpace(roleName))

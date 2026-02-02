@@ -410,9 +410,9 @@ public class TopicManagementService : BaseService, ITopicManagementService
     /// <summary>
     /// 単一トピックをDTOに変換（基本版: hasChildrenも未読も含まない）
     /// </summary>
-    private TopicDto MapToDtoBasic(Topic topic)
+    private TopicDetailDto MapToDtoBasic(Topic topic)
     {
-        return new TopicDto
+        return new TopicDetailDto
         {
             Id = topic.Id,
             RoomId = topic.RoomId,

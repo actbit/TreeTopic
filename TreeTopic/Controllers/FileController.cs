@@ -91,7 +91,7 @@ public class FileController : ControllerBase
     );
 
     [HttpGet]
-    [RequirePermission(RoomPermissions.Join)]
+    [RequireAny(RoomPermissions.Join)]
     public async Task<IActionResult> GetAll(CancellationToken cancellationToken)
     {
         var result = await _fileManagementService.GetAllFilesAsync(cancellationToken);
@@ -99,7 +99,7 @@ public class FileController : ControllerBase
     }
 
     [HttpGet("message/{messageId}")]
-    [RequirePermission(TopicPermissions.ReadMessages)]
+    [RequireAny(TopicPermissions.ReadMessages)]
     public async Task<IActionResult> GetByMessage([FromRoute] MaskedGuid messageId, CancellationToken cancellationToken)
     {
         var result = await _fileManagementService.GetFilesByMessageAsync((Guid)messageId, cancellationToken);
@@ -107,7 +107,7 @@ public class FileController : ControllerBase
     }
 
     [HttpGet("{fileId}")]
-    [RequirePermission(TopicPermissions.ReadMessages)]
+    [RequireAny(TopicPermissions.ReadMessages)]
     public async Task<IActionResult> GetById([FromRoute] MaskedGuid fileId, CancellationToken cancellationToken)
     {
         var result = await _fileManagementService.GetFileByIdAsync((Guid)fileId, cancellationToken);
@@ -115,7 +115,7 @@ public class FileController : ControllerBase
     }
 
     [HttpGet("room/{roomId}")]
-    [RequirePermission(RoomPermissions.Join)]
+    [RequireAny(RoomPermissions.Join)]
     public IActionResult GetByRoom([FromRoute] MaskedGuid roomId)
     {
         var tenant = RouteData.Values["tenant"]?.ToString() ?? "default";
@@ -171,7 +171,7 @@ public class FileController : ControllerBase
 
     [HttpPost("room/{roomId}")]
     [Consumes("multipart/form-data")]
-    [RequirePermission(RoomPermissions.Write)]
+    [RequireAny(RoomPermissions.Write)]
     public async Task<IActionResult> UploadToRoom(
         [FromRoute] MaskedGuid roomId,
         [FromForm] IFormFile file,
@@ -225,7 +225,7 @@ public class FileController : ControllerBase
     }
 
     [HttpPost]
-    [RequirePermission(TopicPermissions.WriteMessages)]
+    [RequireAny(TopicPermissions.WriteMessages)]
     public async Task<IActionResult> Create([FromBody] CreateFileRequest request, CancellationToken cancellationToken)
     {
         if (!ModelState.IsValid)
@@ -236,7 +236,7 @@ public class FileController : ControllerBase
     }
 
     [HttpPut("{fileId}")]
-    [RequirePermission(TopicPermissions.WriteMessages)]
+    [RequireAny(TopicPermissions.WriteMessages)]
     public async Task<IActionResult> Update([FromRoute] MaskedGuid fileId, [FromBody] UpdateFileRequest request, CancellationToken cancellationToken)
     {
         if (!ModelState.IsValid)
@@ -247,7 +247,7 @@ public class FileController : ControllerBase
     }
 
     [HttpDelete("{fileId}")]
-    [RequirePermission(TopicPermissions.WriteMessages)]
+    [RequireAny(TopicPermissions.WriteMessages)]
     public async Task<IActionResult> Delete([FromRoute] MaskedGuid fileId, CancellationToken cancellationToken)
     {
         var result = await _fileManagementService.DeleteFileAsync(fileId, cancellationToken);

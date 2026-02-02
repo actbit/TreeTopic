@@ -10,7 +10,7 @@ using TreeTopic.Common;
 namespace TreeTopic.Controllers;
 
 /// <summary>
-/// トピックレベルの個別ユーザー権限管理API
+/// トピックユーザー権限管理
 /// </summary>
 [ApiController]
 [Route("{tenant}/api/topics/{topicId}/user-permissions")]
@@ -32,7 +32,7 @@ public class TopicUserPermissionsController : ControllerBase
     /// トピックに割り当てられているユーザー権限一覧を取得
     /// </summary>
     [HttpGet]
-    [RequirePermission(TopicPermissions.Manage)]
+    [RequireAny(TopicPermissions.Manage)]
     public async Task<IActionResult> GetTopicUserPermissions(
         [FromRoute] MaskedGuid topicId,
         CancellationToken cancellationToken)
@@ -63,7 +63,7 @@ public class TopicUserPermissionsController : ControllerBase
     /// 特定ユーザーのトピック権限を取得
     /// </summary>
     [HttpGet("user/{roomUserId}")]
-    [RequirePermission(TopicPermissions.Manage)]
+    [RequireAny(TopicPermissions.Manage)]
     public async Task<IActionResult> GetUserTopicPermissions(
         [FromRoute] MaskedGuid topicId,
         [FromRoute] MaskedGuid roomUserId,
@@ -85,7 +85,7 @@ public class TopicUserPermissionsController : ControllerBase
     /// ユーザーにトピック権限を割り当て
     /// </summary>
     [HttpPost]
-    [RequirePermission(TopicPermissions.Manage)]
+    [RequireAny(TopicPermissions.Manage)]
     public async Task<IActionResult> AddPermissionToUser(
         [FromRoute] MaskedGuid topicId,
         [FromBody] AddUserPermissionRequest request,
@@ -104,6 +104,12 @@ public class TopicUserPermissionsController : ControllerBase
         if (roomUser == null)
         {
             return NotFound(new { message = "RoomUser not found" });
+        }
+
+        // RoomUserがトピックのルームに所属しているか検証
+        if (roomUser.RoomId != topic.RoomId)
+        {
+            return BadRequest(new { message = "RoomUser does not belong to the topic's room" });
         }
 
         // 既に割り当てられているか確認
@@ -134,7 +140,7 @@ public class TopicUserPermissionsController : ControllerBase
     /// ユーザーからトピック権限を削除
     /// </summary>
     [HttpDelete("{permissionId}")]
-    [RequirePermission(TopicPermissions.Manage)]
+    [RequireAny(TopicPermissions.Manage)]
     public async Task<IActionResult> RemovePermissionFromUser(
         [FromRoute] MaskedGuid topicId,
         [FromRoute] MaskedGuid permissionId,
@@ -162,7 +168,7 @@ public class TopicUserPermissionsController : ControllerBase
     /// ユーザーからトピック権限を削除（権限名指定）
     /// </summary>
     [HttpDelete("user/{roomUserId}/{permissionName}")]
-    [RequirePermission(TopicPermissions.Manage)]
+    [RequireAny(TopicPermissions.Manage)]
     public async Task<IActionResult> RemovePermissionFromUserByName(
         [FromRoute] MaskedGuid topicId,
         [FromRoute] MaskedGuid roomUserId,

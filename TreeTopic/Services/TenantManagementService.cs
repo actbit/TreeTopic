@@ -12,7 +12,6 @@ namespace TreeTopic.Services;
 
 /// <summary>
 /// テナント管理サービス
-/// テナント登録、初期化、マイグレーション実行を管理
 /// </summary>
 public class TenantManagementService
 {

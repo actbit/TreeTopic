@@ -7,18 +7,19 @@ namespace TreeTopic.Permissions;
 public static class IdentityPermissions
 {
     // ユーザー管理
-    public const string UserRead = "identity.user.read";
-    public const string UserManage = "identity.user.manage";
+    public static readonly PermissionRequirement UserRead = new(PermissionScope.Role, "identity.user.read");
+    public static readonly PermissionRequirement UserManage = new(PermissionScope.Role, "identity.user.manage");
 
     // ロール管理
-    public const string RoleRead = "identity.role.read";
-    public const string RoleManage = "identity.role.manage";
+    public static readonly PermissionRequirement RoleRead = new(PermissionScope.Role, "identity.role.read");
+    public static readonly PermissionRequirement RoleManage = new(PermissionScope.Role, "identity.role.manage");
 
     // 権限管理
-    public const string PermissionRead = "identity.permission.read";
-    public const string PermissionManage = "identity.permission.manage";
+    public static readonly PermissionRequirement PermissionRead = new(PermissionScope.Role, "identity.permission.read");
+    public static readonly PermissionRequirement PermissionManage = new(PermissionScope.Role, "identity.permission.manage");
 
     // テナント管理
-    public const string TenantRead = "identity.tenant.read";
-    public const string TenantManage = "identity.tenant.manage";
+    public static readonly PermissionRequirement TenantRead = new(PermissionScope.Role, "identity.tenant.read");
+    public static readonly PermissionRequirement TenantManage = new(PermissionScope.Role, "identity.tenant.manage");
 }
+

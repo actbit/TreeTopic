@@ -10,7 +10,7 @@ using TreeTopic.Models;
 namespace TreeTopic.Controllers;
 
 /// <summary>
-/// RoomRoleへの権限割り当て管理API
+/// ルームロール権限管理
 /// </summary>
 [ApiController]
 [Route("{tenant}/api/roomroles/{roleId}/permissions")]
@@ -35,7 +35,7 @@ public class RoomRolePermissionsController : ControllerBase
     /// RoomRoleに割り当てられている権限一覧を取得
     /// </summary>
     [HttpGet]
-    [RequirePermission(RoomPermissions.ManageRoles)]
+    [RequireAny(RoomPermissions.ManageRoles)]
     public async Task<IActionResult> GetRolePermissions(
         [FromRoute] MaskedGuid roleId,
         CancellationToken cancellationToken)
@@ -54,7 +54,7 @@ public class RoomRolePermissionsController : ControllerBase
     /// RoomRoleに権限を割り当て
     /// </summary>
     [HttpPost]
-    [RequirePermission(RoomPermissions.ManageRoles)]
+    [RequireAny(RoomPermissions.ManageRoles)]
     public async Task<IActionResult> AddPermissionToRole(
         [FromRoute] MaskedGuid roleId,
         [FromBody] AddPermissionRequest request,
@@ -96,7 +96,7 @@ public class RoomRolePermissionsController : ControllerBase
     /// RoomRoleから権限を削除
     /// </summary>
     [HttpDelete("{permissionName}")]
-    [RequirePermission(RoomPermissions.ManageRoles)]
+    [RequireAny(RoomPermissions.ManageRoles)]
     public async Task<IActionResult> RemovePermissionFromRole(
         [FromRoute] MaskedGuid roleId,
         [FromRoute] string permissionName,

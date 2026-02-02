@@ -129,24 +129,48 @@ public class RoomUserManager
     {
         var permissions = new HashSet<string>();
 
-        // 1. ロールから基本権限を取得
-        if (roomUser.RoomRole != null)
+        // 1. ロールから基本権限を取得（roomUserに既にロードされている場合はそれを使用）
+        if (roomUser.RoomRole?.Permissions != null)
         {
             foreach (var perm in roomUser.RoomRole.Permissions)
             {
                 permissions.Add(perm.PermissionName);
             }
         }
+        else if (roomUser.RoomRoleId.HasValue)
+        {
+            // RoomRoleはあるがPermissionsがロードされていない場合はクエリ実行
+            var rolePerms = await _context.RoomRolePermissions
+                .Where(rp => rp.RoomRoleId == roomUser.RoomRoleId.Value)
+                .Select(rp => rp.PermissionName)
+                .ToListAsync(cancellationToken);
+            foreach (var perm in rolePerms)
+            {
+                permissions.Add(perm);
+            }
+        }
 
         // 2. 個別設定で上書き（ある場合）
         // ※個別設定は「上書き」として扱うか「追加」として扱うか要検討
         // ここでは「追加」として扱う
-        var roomUserWithPerms = await FindByIdAsync(roomUser.Id, cancellationToken);
-        if (roomUserWithPerms != null)
+        // N+1問題を回避するため、roomUser.RoomPermissionが既にロードされているかチェック
+        if (roomUser.RoomPermission != null)
         {
-            foreach (var perm in roomUserWithPerms.RoomPermission)
+            foreach (var perm in roomUser.RoomPermission)
             {
                 permissions.Add(perm.Name);
+            }
+        }
+        else
+        {
+            // 個別設定を直接クエリ（FindByIdAsyncを使わない）
+            var userPerms = await _context.RoomPermissions
+                .Where(rp => rp.RoomUserId == roomUser.Id)
+                .Select(rp => rp.Name)
+                .ToListAsync(cancellationToken);
+            foreach (var perm in userPerms)
+            {
+                permissions.Add(perm);
             }
         }
 
@@ -262,11 +286,16 @@ public class RoomUserManager
             Name = permissionName
         };
 
-        _context.RoomPermissions.Add(permission);
-        await _context.SaveChangesAsync(cancellationToken);
-
-        _logger.LogInformation("Permission added to RoomUser: {Permission} -> {RoomUserId}", permissionName, roomUser.Id);
-        return permission;
+        return await PermissionHelper.AddWithTransactionAsync(
+            _context,
+            _context.RoomPermissions,
+            permission,
+            async (ctx, ct) => await ctx.RoomPermissions
+                .FirstOrDefaultAsync(rp => rp.RoomUserId == roomUser.Id && rp.Name == permissionName, ct),
+            _logger,
+            $"Permission added to RoomUser: {permissionName} -> {roomUser.Id}",
+            $"Failed to add permission to RoomUser: {permissionName} -> {roomUser.Id}",
+            cancellationToken);
     }
 
     /// <summary>
@@ -276,19 +305,15 @@ public class RoomUserManager
         Guid permissionId,
         CancellationToken cancellationToken = default)
     {
-        var permission = await _context.RoomPermissions
-            .FindAsync(new object[] { permissionId }, cancellationToken);
-
-        if (permission == null)
-        {
-            return false;
-        }
-
-        _context.RoomPermissions.Remove(permission);
-        await _context.SaveChangesAsync(cancellationToken);
-
-        _logger.LogInformation("Permission removed from RoomUser: {PermissionId}", permissionId);
-        return true;
+        return await PermissionHelper.RemoveWithTransactionAsync(
+            _context,
+            _context.RoomPermissions,
+            async (ctx, ct) => await ctx.RoomPermissions
+                .FindAsync(new object[] { permissionId }, ct),
+            _logger,
+            $"Permission removed from RoomUser: {permissionId}",
+            $"Failed to remove permission from RoomUser: {permissionId}",
+            cancellationToken);
     }
 
     /// <summary>

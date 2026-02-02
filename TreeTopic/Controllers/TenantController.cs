@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
 using MaskedUUID.AspNetCore.Types;
 using TreeTopic.Dtos;
@@ -12,7 +12,7 @@ using Finbuckle.MultiTenant.Abstractions;
 namespace TreeTopic.Controllers;
 
 /// <summary>
-/// テナント管理 API
+/// テナント管理
 /// </summary>
 [ApiController]
 [Route("{tenant}/api/[controller]")]
@@ -134,7 +134,7 @@ public class TenantController : ControllerBase
     /// </summary>
     [HttpGet("{identifier}")]
     [Authorize]
-    [RequirePermission(IdentityPermissions.TenantRead)]
+    [RequireAny(IdentityPermissions.TenantRead)]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -170,7 +170,7 @@ public class TenantController : ControllerBase
     /// </summary>
     [HttpGet]
     [Authorize]
-    [RequirePermission(IdentityPermissions.TenantRead)]
+    [RequireAny(IdentityPermissions.TenantRead)]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -202,7 +202,7 @@ public class TenantController : ControllerBase
     /// </summary>
     [HttpDelete("{tenantId}")]
     [Authorize]
-    [RequirePermission(IdentityPermissions.TenantManage)]
+    [RequireAny(IdentityPermissions.TenantManage)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]

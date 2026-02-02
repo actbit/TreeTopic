@@ -31,7 +31,7 @@ public class UsersController : ControllerBase
     }
 
     [HttpGet]
-    [RequirePermission(IdentityPermissions.UserRead)]
+    [RequireAny(IdentityPermissions.UserRead)]
     public async Task<ActionResult<List<UserSummaryDto>>> GetAll(CancellationToken cancellationToken)
     {
         var result = await _userManagementService.GetAllUsersAsync();
@@ -46,7 +46,7 @@ public class UsersController : ControllerBase
     }
 
     [HttpGet("{userId}")]
-    [RequirePermission(IdentityPermissions.UserRead)]
+    [RequireAny(IdentityPermissions.UserRead)]
     public async Task<ActionResult<UserSummaryDto>> GetById([FromRoute] MaskedGuid userId)
     {
         var result = await _userManagementService.GetUserByIdAsync((Guid)userId);
@@ -86,7 +86,7 @@ public class UsersController : ControllerBase
     }
 
     [HttpPost("{userId}/roles")]
-    [RequirePermission(IdentityPermissions.UserManage)]
+    [RequireAny(IdentityPermissions.UserManage)]
     public async Task<ActionResult<UserSummaryDto>> AddRole([FromRoute] MaskedGuid userId, [FromBody] RoleAssignmentRequest request)
     {
         var result = await _userManagementService.AddRoleToUserAsync((Guid)userId, request);
@@ -102,7 +102,7 @@ public class UsersController : ControllerBase
     }
 
     [HttpDelete("{userId}/roles")]
-    [RequirePermission(IdentityPermissions.UserManage)]
+    [RequireAny(IdentityPermissions.UserManage)]
     public async Task<ActionResult<UserSummaryDto>> RemoveRole([FromRoute] MaskedGuid userId, [FromBody] RoleAssignmentRequest request)
     {
         var result = await _userManagementService.RemoveRoleFromUserAsync(userId, request);
