@@ -94,7 +94,7 @@ public class TenantRolePermissionsController : ControllerBase
                 .Include(t => t.Detail)
                 .FirstOrDefaultAsync(t => t.Identifier == tenant, cancellationToken);
 
-            if (!tenantInfo?.Detail.CanManageRoles() ?? false)
+            if (!tenantInfo?.Detail.CanAssignRolesToUsers() ?? false)
             {
                 return BadRequest(new
                 {
@@ -153,7 +153,7 @@ public class TenantRolePermissionsController : ControllerBase
                 .Include(t => t.Detail)
                 .FirstOrDefaultAsync(t => t.Identifier == tenant, cancellationToken);
 
-            if (!tenantInfo?.Detail.CanManageRoles() ?? false)
+            if (!tenantInfo?.Detail.CanAssignRolesToUsers() ?? false)
             {
                 return BadRequest(new
                 {

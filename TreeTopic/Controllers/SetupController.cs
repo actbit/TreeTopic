@@ -4,6 +4,7 @@ using TreeTopic.Helpers;
 using TreeTopic.Services;
 using TreeTopic.Permissions;
 using TreeTopic.Dtos;
+using TreeTopic.Common;
 
 namespace TreeTopic.Controllers;
 
@@ -105,14 +106,8 @@ public class SetupController : ControllerBase
 
         if (result.IsFailure)
         {
-            return result.ToActionResult(tuple => new UserSummaryDto
-            {
-                Id = tuple.user.Id,
-                UserName = tuple.user.UserName,
-                Email = tuple.user.Email,
-                DisplayName = tuple.user.DisplayName,
-                Roles = tuple.roles
-            });
+            var errorResponse = new ErrorResponse(result.Error!);
+            return new ObjectResult(errorResponse) { StatusCode = result.StatusCode };
         }
 
         var (user, roles) = result.Data!;
@@ -138,14 +133,8 @@ public class SetupController : ControllerBase
 
         if (result.IsFailure)
         {
-            return result.ToActionResult(tuple => new UserSummaryDto
-            {
-                Id = tuple.user.Id,
-                UserName = tuple.user.UserName,
-                Email = tuple.user.Email,
-                DisplayName = tuple.user.DisplayName,
-                Roles = tuple.roles
-            });
+            var errorResponse = new ErrorResponse(result.Error!);
+            return new ObjectResult(errorResponse) { StatusCode = result.StatusCode };
         }
 
         var (user, roles) = result.Data!;

@@ -36,27 +36,6 @@ public class Program
         var builder = WebApplication.CreateBuilder(args);
         builder.AddServiceDefaults();
 
-        static bool IsApiRequest(HttpRequest request)
-        {
-            var path = request.Path.Value ?? string.Empty;
-            if (path.EndsWith("/auth/me", StringComparison.OrdinalIgnoreCase) ||
-                path.EndsWith("/auth/check", StringComparison.OrdinalIgnoreCase))
-                return true;
-
-            if (AuthenticationConstants.Paths.IsApiPath(path))
-                return true;
-
-            var accept = request.Headers["Accept"].ToString();
-            if (!string.IsNullOrEmpty(accept) && accept.Contains("application/json", StringComparison.OrdinalIgnoreCase))
-                return true;
-
-            var xRequestedWith = request.Headers["X-Requested-With"].ToString();
-            if (string.Equals(xRequestedWith, "XMLHttpRequest", StringComparison.OrdinalIgnoreCase))
-                return true;
-
-            return false;
-        }
-
         var keysDir = Path.Combine(builder.Environment.ContentRootPath, ".keys");
         builder.Services.AddDataProtection()
             .PersistKeysToFileSystem(new DirectoryInfo(keysDir))
@@ -120,7 +99,7 @@ public class Program
                 {
                     OnRedirectToLogin = ctx =>
                     {
-                        var isApi = IsApiRequest(ctx.Request);
+                        var isApi = ctx.Request.IsApiRequest();
                         var logger = ctx.HttpContext.RequestServices.GetRequiredService<ILogger<Program>>();
                         logger.LogDebug("[OnRedirectToLogin] Path: {Path}, IsApi: {IsApi}", ctx.Request.Path, isApi);
 
@@ -167,7 +146,7 @@ public class Program
                     },
                     OnRedirectToAccessDenied = ctx =>
                     {
-                        if (IsApiRequest(ctx.Request))
+                        if (ctx.Request.IsApiRequest())
                         {
                             ctx.Response.StatusCode = StatusCodes.Status403Forbidden;
                             return Task.CompletedTask;
@@ -635,101 +614,7 @@ public class Program
 
         app.UseRouting();
 
-        
-        app.Use(async (context, next) =>
-        {
-            var baseCookieName = builder.Configuration["Authentication:CookieName"] ?? "TreeTopic.Cookie";
-            var deleteOptions = new CookieOptions
-            {
-                Path = AuthenticationConstants.Cookie.CookiePath,
-                Secure = true,
-                SameSite = SameSiteMode.None
-            };
-
-            void DeleteChunkedCookieSet(string cookieKey)
-            {
-                context.Response.Cookies.Delete(cookieKey, deleteOptions);
-                for (var i = 1; i <= 5; i++)
-                {
-                    var chunkName = $"{cookieKey}C{i}";
-                    context.Response.Cookies.Delete(chunkName, deleteOptions);
-                }
-            }
-
-            var tenantSeparator = AuthenticationConstants.Cookie.TenantCookieNameSeparator;
-            var tenantSuffix = AuthenticationConstants.Cookie.TenantCookieSuffix;
-
-            foreach (var cookie in context.Request.Cookies)
-            {
-                var key = cookie.Key;
-                if (!key.StartsWith(baseCookieName, StringComparison.OrdinalIgnoreCase))
-                    continue;
-
-                // Only handle base cookie or tenant-suffixed cookie: ".TreeTopic.Auth" or ".TreeTopic.Auth_{tenant}"
-                var baseKey = key;
-                if (!string.Equals(key, baseCookieName, StringComparison.OrdinalIgnoreCase))
-                {
-                    if (key.Length <= baseCookieName.Length + 1 || key[baseCookieName.Length] != tenantSeparator[0])
-                        continue;
-
-                    // validate tenant suffix chars
-                    if (!key.EndsWith(tenantSuffix, StringComparison.OrdinalIgnoreCase))
-                        continue;
-
-                    var tenantPart = key.Substring(baseCookieName.Length + 1, key.Length - baseCookieName.Length - 1 - tenantSuffix.Length);
-                    var tenantValid = tenantPart.Length > 0;
-                    if (tenantValid)
-                    {
-                        foreach (var ch in tenantPart)
-                        {
-                            if (!(char.IsLetterOrDigit(ch) || ch == '-' || ch == '_'))
-                            {
-                                tenantValid = false;
-                                break;
-                            }
-                        }
-                    }
-                    if (!tenantValid)
-                        continue;
-                }
-
-                if (cookie.Value.StartsWith("chunks-", StringComparison.OrdinalIgnoreCase))
-                {
-                    DeleteChunkedCookieSet(baseKey);
-                    continue;
-                }
-
-                // If this is a chunk cookie (ends with C + digits), delete the chunk set for its base.
-                var lastIndex = key.LastIndexOf('C');
-                if (lastIndex > baseCookieName.Length &&
-                    lastIndex < key.Length - 1)
-                {
-                    var digitOk = true;
-                    for (var i = lastIndex + 1; i < key.Length; i++)
-                    {
-                        if (!char.IsDigit(key[i]))
-                        {
-                            digitOk = false;
-                            break;
-                        }
-                    }
-                    if (!digitOk)
-                        continue;
-
-                    baseKey = key.Substring(0, lastIndex);
-                    // Ensure baseKey still matches base cookie pattern to avoid accidental deletions.
-                    if (string.Equals(baseKey, baseCookieName, StringComparison.OrdinalIgnoreCase) ||
-                        (baseKey.Length > baseCookieName.Length + 1 &&
-                         baseKey.StartsWith(baseCookieName + tenantSeparator, StringComparison.OrdinalIgnoreCase) &&
-                         baseKey.EndsWith(tenantSuffix, StringComparison.OrdinalIgnoreCase)))
-                    {
-                        DeleteChunkedCookieSet(baseKey);
-                    }
-                }
-            }
-
-            await next();
-        });
+        app.UseMiddleware<InvalidCookieCleanupMiddleware>();
 
         app.UseMultiTenant();
 

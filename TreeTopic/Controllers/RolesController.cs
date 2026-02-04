@@ -6,6 +6,7 @@ using TreeTopic.Dtos;
 using TreeTopic.Filters;
 using TreeTopic.Permissions;
 using TreeTopic.Models;
+using TreeTopic.Data;
 
 namespace TreeTopic.Controllers;
 
@@ -14,10 +15,12 @@ namespace TreeTopic.Controllers;
 public class RolesController : ControllerBase
 {
     private readonly RoleManager<ApplicationRole> _roleManager;
+    private readonly TenantCatalogDbContext _tenantDb;
 
-    public RolesController(RoleManager<ApplicationRole> roleManager)
+    public RolesController(RoleManager<ApplicationRole> roleManager, TenantCatalogDbContext tenantDb)
     {
         _roleManager = roleManager;
+        _tenantDb = tenantDb;
     }
 
     [HttpGet]
@@ -77,7 +80,7 @@ public class RolesController : ControllerBase
                 .Include(t => t.Detail)
                 .FirstOrDefaultAsync(t => t.Identifier == tenant);
 
-            if (!tenantInfo?.Detail.CanManageRoles() ?? false)
+            if (!tenantInfo?.Detail.CanAssignRolesToUsers() ?? false)
             {
                 return BadRequest(new
                 {
