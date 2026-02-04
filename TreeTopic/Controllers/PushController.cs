@@ -43,6 +43,7 @@ public class PushController : ControllerBase
     }
 
     [HttpGet("vapid-public-key")]
+    [AllowAnonymous]
     public async Task<IActionResult> GetVapidPublicKey()
     {
         try

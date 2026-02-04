@@ -100,6 +100,7 @@ public class AuthController : ControllerBase
     /// ログアウト
     /// </summary>
     [HttpGet("logout")]
+    [Authorize]
     public IActionResult Logout()
     {
         _logger.LogInformation("Logout initiated");
@@ -119,6 +120,7 @@ public class AuthController : ControllerBase
     /// 現在のユーザー情報を取得
     /// </summary>
     [HttpGet("me")]
+    [Authorize]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetCurrentUser()
@@ -172,6 +174,7 @@ public class AuthController : ControllerBase
     /// ログイン状態をチェック
     /// </summary>
     [HttpGet("check")]
+    [Authorize]
     [ProducesResponseType(StatusCodes.Status200OK)]
     public IActionResult CheckAuth()
     {
@@ -182,6 +185,7 @@ public class AuthController : ControllerBase
     /// 現在のユーザーの権限をチェック
     /// </summary>
     [HttpGet("me/permissions")]
+    [Authorize]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> CheckUserPermissions()
