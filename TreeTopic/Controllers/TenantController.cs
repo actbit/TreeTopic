@@ -134,7 +134,7 @@ public class TenantController : ControllerBase
     /// </summary>
     [HttpGet("{identifier}")]
     [Authorize]
-    [RequireAny(IdentityPermissions.TenantRead)]
+    [RequireAny(TenantPermissions.TenantRead)]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -170,7 +170,7 @@ public class TenantController : ControllerBase
     /// </summary>
     [HttpGet]
     [Authorize]
-    [RequireAny(IdentityPermissions.TenantRead)]
+    [RequireAny(TenantPermissions.TenantRead)]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -218,7 +218,9 @@ public class TenantController : ControllerBase
             {
                 Identifier = tenantInfo.Identifier,
                 Name = tenantInfo.Name,
-                RoleClaimName = tenantInfo.Detail?.RoleClaimName
+                RoleClaimName = tenantInfo.Detail?.RoleClaimName,
+                CanAssignRolesToUsers = tenantInfo.Detail?.CanAssignRolesToUsers() ?? true,
+                CanCreateUsers = tenantInfo.Detail?.CanCreateUsers() ?? true
             });
         }
         catch (Exception ex)
@@ -233,7 +235,7 @@ public class TenantController : ControllerBase
     /// </summary>
     [HttpDelete]
     [Authorize]
-    [RequireAny(IdentityPermissions.TenantManage)]
+    [RequireAny(TenantPermissions.TenantManage)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -310,4 +312,6 @@ public class TenantDetailDto
     public string? Identifier { get; set; }
     public string? Name { get; set; }
     public string? RoleClaimName { get; set; }
+    public bool CanAssignRolesToUsers { get; set; }
+    public bool CanCreateUsers { get; set; }
 }

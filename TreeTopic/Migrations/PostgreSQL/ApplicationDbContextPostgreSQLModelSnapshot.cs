@@ -2,21 +2,18 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
-using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using TreeTopic.Data;
 
 #nullable disable
 
-namespace TreeTopic.Migrations.Application.PostgreSQL
+namespace TreeTopic.Migrations.PostgreSQL
 {
     [DbContext(typeof(ApplicationDbContextPostgreSQL))]
-    [Migration("20260204000332_InitialCreatePostgreSQL")]
-    partial class InitialCreatePostgreSQL
+    partial class ApplicationDbContextPostgreSQLModelSnapshot : ModelSnapshot
     {
-        /// <inheritdoc />
-        protected override void BuildTargetModel(ModelBuilder modelBuilder)
+        protected override void BuildModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -522,8 +519,7 @@ namespace TreeTopic.Migrations.Application.PostgreSQL
 
                     b.Property<string>("TenantId")
                         .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
+                        .HasColumnType("text");
 
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -533,8 +529,6 @@ namespace TreeTopic.Migrations.Application.PostgreSQL
                     b.HasIndex("RoleId");
 
                     b.ToTable("Permissions");
-
-                    b.HasAnnotation("Finbuckle:MultiTenant", true);
                 });
 
             modelBuilder.Entity("TreeTopic.Models.PushSubscription", b =>

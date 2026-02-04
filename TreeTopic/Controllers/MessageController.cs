@@ -38,7 +38,7 @@ public class MessageController : ControllerBase
     }
 
     [HttpGet]
-    [RequireAny(TopicPermissions.ReadMessages)]
+    [RequireAny(TopicPermissions.ReadMessages, TenantPermissions.TopicReadMessages)]
     public async Task<IActionResult> GetAll(CancellationToken cancellationToken)
     {
         var result = await _messageManagementService.GetAllMessagesAsync(cancellationToken);
@@ -46,7 +46,7 @@ public class MessageController : ControllerBase
     }
 
     [HttpGet("topic/{topicId}")]
-    [RequireAny(TopicPermissions.ReadMessages)]
+    [RequireAny(TopicPermissions.ReadMessages, TenantPermissions.TopicReadMessages)]
     public async Task<IActionResult> GetByTopic([FromRoute] MaskedGuid topicId, CancellationToken cancellationToken)
     {
         var result = await _messageManagementService.GetMessagesByTopicAsync((Guid)topicId, CurrentUserId, cancellationToken);
@@ -54,7 +54,7 @@ public class MessageController : ControllerBase
     }
 
     [HttpGet("topic/{topicId}/after/{messageId}")]
-    [RequireAny(TopicPermissions.ReadMessages)]
+    [RequireAny(TopicPermissions.ReadMessages, TenantPermissions.TopicReadMessages)]
     public async Task<IActionResult> GetAfter(
         [FromRoute] MaskedGuid topicId,
         [FromRoute] MaskedGuid messageId,
@@ -66,7 +66,7 @@ public class MessageController : ControllerBase
     }
 
     [HttpGet("topic/{topicId}/before/{messageId}")]
-    [RequireAny(TopicPermissions.ReadMessages)]
+    [RequireAny(TopicPermissions.ReadMessages, TenantPermissions.TopicReadMessages)]
     public async Task<IActionResult> GetBefore(
         [FromRoute] MaskedGuid topicId,
         [FromRoute] MaskedGuid messageId,
@@ -78,7 +78,7 @@ public class MessageController : ControllerBase
     }
 
     [HttpGet("{messageId}")]
-    [RequireAny(TopicPermissions.ReadMessages)]
+    [RequireAny(TopicPermissions.ReadMessages, TenantPermissions.TopicReadMessages)]
     public async Task<IActionResult> GetById([FromRoute] MaskedGuid messageId, CancellationToken cancellationToken)
     {
         var result = await _messageManagementService.GetMessageByIdAsync((Guid)messageId, cancellationToken);
@@ -86,7 +86,7 @@ public class MessageController : ControllerBase
     }
 
     [HttpPost]
-    [RequireAny(TopicPermissions.WriteMessages)]
+    [RequireAny(TopicPermissions.WriteMessages, TenantPermissions.TopicWriteMessages)]
     public async Task<IActionResult> Create([FromBody] CreateMessageRequest request, CancellationToken cancellationToken)
     {
         if (!ModelState.IsValid)
@@ -98,7 +98,7 @@ public class MessageController : ControllerBase
 
     [HttpPost("upload")]
     [Consumes("multipart/form-data")]
-    [RequireAny(TopicPermissions.WriteMessages)]
+    [RequireAny(TopicPermissions.WriteMessages, TenantPermissions.TopicWriteMessages)]
     public async Task<IActionResult> CreateWithFiles([FromForm] CreateMessageRequest request, CancellationToken cancellationToken)
     {
         if (!ModelState.IsValid)
@@ -109,7 +109,7 @@ public class MessageController : ControllerBase
     }
 
     [HttpPut("{messageId}")]
-    [RequireAny(TopicPermissions.WriteMessages)]
+    [RequireAny(TopicPermissions.WriteMessages, TenantPermissions.TopicWriteMessages)]
     public async Task<IActionResult> Update([FromRoute] MaskedGuid messageId, [FromBody] UpdateMessageRequest request, CancellationToken cancellationToken)
     {
         if (!ModelState.IsValid)
@@ -120,7 +120,7 @@ public class MessageController : ControllerBase
     }
 
     [HttpPost("move")]
-    [RequireAny(TopicPermissions.WriteMessages)]
+    [RequireAny(TopicPermissions.WriteMessages, TenantPermissions.TopicWriteMessages)]
     public async Task<IActionResult> MoveMessages([FromBody] MoveMessagesRequest request, CancellationToken cancellationToken)
     {
         if (!ModelState.IsValid)
@@ -138,7 +138,7 @@ public class MessageController : ControllerBase
     }
 
     [HttpDelete("{messageId}")]
-    [RequireAny(TopicPermissions.WriteMessages)]
+    [RequireAny(TopicPermissions.WriteMessages, TenantPermissions.TopicWriteMessages)]
     public async Task<IActionResult> Delete([FromRoute] MaskedGuid messageId, CancellationToken cancellationToken)
     {
         var result = await _messageManagementService.DeleteMessageAsync(messageId, CurrentUserId, cancellationToken);
@@ -146,15 +146,10 @@ public class MessageController : ControllerBase
     }
 
     [HttpPost("topic/{topicId}/markAsRead")]
-    [RequireAny(TopicPermissions.ReadMessages)]
+    [RequireAny(TopicPermissions.ReadMessages, TenantPermissions.TopicReadMessages)]
     public async Task<IActionResult> MarkTopicAsRead([FromRoute] MaskedGuid topicId, CancellationToken cancellationToken)
     {
         var result = await _messageManagementService.MarkTopicAsReadAsync((Guid)topicId, CurrentUserId, cancellationToken);
         return result.ToApiResult();
     }
-
 }
-
-
-
-

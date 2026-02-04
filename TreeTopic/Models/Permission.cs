@@ -1,11 +1,9 @@
-﻿using Finbuckle.MultiTenant.Abstractions;
-using Finbuckle.MultiTenant;
+﻿using Finbuckle.MultiTenant;
 using System.ComponentModel.DataAnnotations.Schema;
 
 namespace TreeTopic.Models
 {
-    [MultiTenant]
-    public class Permission:BaseModel
+    public class Permission : BaseModel
     {
         public string? Name { get; set; }
 

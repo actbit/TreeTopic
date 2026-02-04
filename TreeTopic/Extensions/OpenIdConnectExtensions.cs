@@ -9,6 +9,7 @@ using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 using System.Security.Claims;
 using TreeTopic.Models;
 using TreeTopic.Services;
+using TreeTopic.Data;
 using Finbuckle.MultiTenant;
 using Microsoft.Extensions.Hosting;
 using TreeTopic.Constants;
@@ -131,19 +132,42 @@ public static class OpenIdConnectExtensions
 
         // redirect_uri を設定（query に tenant を含める）
         var configuration = ctx.HttpContext.RequestServices.GetRequiredService<IConfiguration>();
+        var tenantDb = ctx.HttpContext.RequestServices.GetRequiredService<TenantCatalogDbContext>();
+        var tenantInfo = await tenantDb.Tenants
+            .Include(t => t.Detail)
+            .FirstOrDefaultAsync(t => t.Identifier == tenantId);
+
         var publicBaseUrl = configuration["Authentication:PublicBaseUrl"];
         if (!string.IsNullOrWhiteSpace(publicBaseUrl) &&
             Uri.TryCreate(publicBaseUrl, UriKind.Absolute, out var publicBaseUri))
         {
-            ctx.ProtocolMessage.RedirectUri =
-                $"{publicBaseUri.Scheme}://{publicBaseUri.Authority}{AuthenticationConstants.Paths.OidcCallbackPath}?tenant={Uri.EscapeDataString(tenantId)}";
+            // デフォルトテナント（OIDC未登録）の場合はtenantなし
+            if (tenantInfo?.Detail?.HasOidcSettings() ?? false)
+            {
+                ctx.ProtocolMessage.RedirectUri =
+                    $"{publicBaseUri.Scheme}://{publicBaseUri.Authority}{AuthenticationConstants.Paths.OidcCallbackPath}?tenant={Uri.EscapeDataString(tenantId)}";
+            }
+            else
+            {
+                ctx.ProtocolMessage.RedirectUri =
+                    $"{publicBaseUri.Scheme}://{publicBaseUri.Authority}{AuthenticationConstants.Paths.OidcCallbackPath}";
+            }
         }
         else
         {
             var scheme = ctx.HttpContext.Request.Scheme;
             var host = ctx.HttpContext.Request.Host;
-            ctx.ProtocolMessage.RedirectUri =
-                $"{scheme}://{host}{AuthenticationConstants.Paths.OidcCallbackPath}?tenant={Uri.EscapeDataString(tenantId)}";
+            // デフォルトテナント（OIDC未登録）の場合はtenantなし
+            if (tenantInfo?.Detail?.HasOidcSettings() ?? false)
+            {
+                ctx.ProtocolMessage.RedirectUri =
+                    $"{scheme}://{host}{AuthenticationConstants.Paths.OidcCallbackPath}?tenant={Uri.EscapeDataString(tenantId)}";
+            }
+            else
+            {
+                ctx.ProtocolMessage.RedirectUri =
+                    $"{scheme}://{host}{AuthenticationConstants.Paths.OidcCallbackPath}";
+            }
         }
 
         // Properties に tenant を保存
@@ -294,15 +318,15 @@ public static class OpenIdConnectExtensions
             else
             {
                 // User doesn't exist in database
-                // Check if RoleClaimName is set - if NOT set (default OIDC), user must be pre-created
-                if (string.IsNullOrEmpty(roleClaimName))
+                // Check if OIDC is configured - if NOT configured, user must be pre-created
+                if (!tenant.Detail.HasOidcSettings())
                 {
-                    // Default OIDC mode - user must be pre-created through setup
-                    logger.LogError("[OnTokenValidated] User {Sub} does not exist in database and RoleClaimName is not set for tenant {TenantId}. User must be created first.", subClaim, tenantId);
+                    // No OIDC mode - user must be pre-created through setup or DefaultUserController
+                    logger.LogError("[OnTokenValidated] User {Sub} does not exist in database and OIDC is not configured for tenant {TenantId}. User must be created first.", subClaim, tenantId);
                     ctx.Fail("User account not found. Please contact your administrator to create an account.");
                     return;
                 }
-                // If RoleClaimName is set, user will be auto-created by UserSyncService
+                // If OIDC is configured, user will be auto-created by UserSyncService
             }
         }
 

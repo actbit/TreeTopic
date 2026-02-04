@@ -5,54 +5,47 @@ using Microsoft.EntityFrameworkCore;
 using TreeTopic.Filters;
 using TreeTopic.Permissions;
 using TreeTopic.Models;
+using TreeTopic.Services;
+using TreeTopic.Data;
 
 namespace TreeTopic.Controllers;
 
 /// <summary>
-/// ApplicationRole（Identityロール）権限管理
-/// TenantレベルのロールにIdentity権限を割り当てる
+/// ApplicationRole（テナントロール）権限管理
+/// TenantレベルのロールにTenant権限を割り当てる
 /// </summary>
 [ApiController]
-[Route("{tenant}/api/identityroles/{roleName}/permissions")]
+[Route("{tenant}/api/tenantroles/{roleName}/permissions")]
 [Authorize]
-public class IdentityRolePermissionsController : ControllerBase
+public class TenantRolePermissionsController : ControllerBase
 {
     private readonly ApplicationDbContext _db;
-    private readonly ILogger<IdentityRolePermissionsController> _logger;
+    private readonly ILogger<TenantRolePermissionsController> _logger;
+    private readonly TenantCatalogDbContext _tenantDb;
 
-    public IdentityRolePermissionsController(
+    public TenantRolePermissionsController(
         ApplicationDbContext db,
-        ILogger<IdentityRolePermissionsController> _logger)
+        ILogger<TenantRolePermissionsController> _logger,
+        TenantCatalogDbContext tenantDb)
     {
         _db = db;
         this._logger = _logger;
+        _tenantDb = tenantDb;
     }
 
     /// <summary>
-    /// Identity権限一覧を取得
+    /// Tenant権限一覧を取得（PermissionScanServiceで動的取得）
     /// </summary>
     [HttpGet("available")]
-    [RequireAny(IdentityPermissions.PermissionRead)]
-    public IActionResult GetAvailablePermissions()
+    [RequireAny(TenantPermissions.PermissionRead)]
+    public IActionResult GetAvailablePermissions([FromServices] PermissionScanService permissionScanService)
     {
-        var permissions = new[]
-        {
-            new { name = IdentityPermissions.UserRead, label = "ユーザー閲覧", description = "ユーザー情報を閲覧できます" },
-            new { name = IdentityPermissions.UserManage, label = "ユーザー管理", description = "ユーザー情報を変更できます" },
-            new { name = IdentityPermissions.RoleRead, label = "ロール閲覧", description = "ロール情報を閲覧できます" },
-            new { name = IdentityPermissions.RoleManage, label = "ロール管理", description = "ロールを管理できます" },
-            new { name = IdentityPermissions.PermissionRead, label = "権限閲覧", description = "権限設定を閲覧できます" },
-            new { name = IdentityPermissions.PermissionManage, label = "権限管理", description = "権限を管理できます" },
-            new { name = IdentityPermissions.TenantRead, label = "テナント閲覧", description = "テナント情報を閲覧できます" },
-            new { name = IdentityPermissions.TenantManage, label = "テナント管理", description = "テナントを管理できます" }
-        };
+        var permissions = permissionScanService.GetTenantPermissions();
 
         return Ok(permissions.Select(p => new
         {
-            name = p.name,
-            label = p.label,
-            description = p.description,
-            scope = "identity"
+            name = p.Name,
+            scope = p.Scope.ToString()
         }).ToList());
     }
 
@@ -60,7 +53,7 @@ public class IdentityRolePermissionsController : ControllerBase
     /// ApplicationRoleに割り当てられている権限一覧を取得
     /// </summary>
     [HttpGet]
-    [RequireAny(IdentityPermissions.RoleRead)]
+    [RequireAny(TenantPermissions.RoleRead)]
     public async Task<IActionResult> GetRolePermissions(
         [FromRoute] string roleName,
         CancellationToken cancellationToken)
@@ -87,12 +80,30 @@ public class IdentityRolePermissionsController : ControllerBase
     /// ApplicationRoleに権限を割り当て
     /// </summary>
     [HttpPost]
-    [RequireAny(IdentityPermissions.RoleManage)]
+    [RequireAny(TenantPermissions.RoleManage)]
     public async Task<IActionResult> AddPermissionToRole(
         [FromRoute] string roleName,
-        [FromBody] AddIdentityPermissionRequest request,
+        [FromBody] AddTenantPermissionRequest request,
         CancellationToken cancellationToken)
     {
+        // OIDCロール同期が有効な場合はロール管理を禁止
+        var tenant = HttpContext.GetRouteValue("tenant")?.ToString();
+        if (!string.IsNullOrEmpty(tenant))
+        {
+            var tenantInfo = await _tenantDb.Tenants
+                .Include(t => t.Detail)
+                .FirstOrDefaultAsync(t => t.Identifier == tenant, cancellationToken);
+
+            if (!tenantInfo?.Detail.CanManageRoles() ?? false)
+            {
+                return BadRequest(new
+                {
+                    message = "Role management is not allowed when OIDC role claim is configured. " +
+                              "Roles are automatically managed by the OIDC provider."
+                });
+            }
+        }
+
         // ロールの存在確認
         var role = await _db.Roles
             .FirstOrDefaultAsync(r => r.Name == roleName, cancellationToken);
@@ -128,12 +139,30 @@ public class IdentityRolePermissionsController : ControllerBase
     /// ApplicationRoleから権限を削除
     /// </summary>
     [HttpDelete("{permissionName}")]
-    [RequireAny(IdentityPermissions.RoleManage)]
+    [RequireAny(TenantPermissions.RoleManage)]
     public async Task<IActionResult> RemovePermissionFromRole(
         [FromRoute] string roleName,
         [FromRoute] string permissionName,
         CancellationToken cancellationToken)
     {
+        // OIDCロール同期が有効な場合はロール管理を禁止
+        var tenant = HttpContext.GetRouteValue("tenant")?.ToString();
+        if (!string.IsNullOrEmpty(tenant))
+        {
+            var tenantInfo = await _tenantDb.Tenants
+                .Include(t => t.Detail)
+                .FirstOrDefaultAsync(t => t.Identifier == tenant, cancellationToken);
+
+            if (!tenantInfo?.Detail.CanManageRoles() ?? false)
+            {
+                return BadRequest(new
+                {
+                    message = "Role management is not allowed when OIDC role claim is configured. " +
+                              "Roles are automatically managed by the OIDC provider."
+                });
+            }
+        }
+
         // ロールの存在確認
         var role = await _db.Roles
             .FirstOrDefaultAsync(r => r.Name == roleName, cancellationToken);
@@ -160,6 +189,6 @@ public class IdentityRolePermissionsController : ControllerBase
 }
 
 /// <summary>
-/// Identity権限割り当てリクエスト
+/// Tenant権限割り当てリクエスト
 /// </summary>
-public record AddIdentityPermissionRequest(string PermissionName);
+public record AddTenantPermissionRequest(string PermissionName);

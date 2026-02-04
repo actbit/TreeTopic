@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using TreeTopic.Filters;
 using TreeTopic.Models;
 using TreeTopic.Permissions;
+using TreeTopic.Services;
 
 namespace TreeTopic.Controllers;
 
@@ -12,7 +13,7 @@ namespace TreeTopic.Controllers;
 /// Room権限管理
 /// </summary>
 [ApiController]
-[Route("{tenant}/api/roomroles/{roleId}/permissions")]
+[Route("{tenant}/api/roomroles/{roleName}/permissions")]
 [Authorize]
 public class RoomPermissionsController : ControllerBase
 {
@@ -28,18 +29,18 @@ public class RoomPermissionsController : ControllerBase
     }
 
     /// <summary>
-    /// Room権限一覧を取得
+    /// Room権限一覧を取得（PermissionScanServiceで動的取得）
     /// </summary>
     [HttpGet("available")]
-    [RequireAny(IdentityPermissions.PermissionRead)]
-    public IActionResult GetAvailablePermissions()
+    [RequireAny(TenantPermissions.PermissionRead)]
+    public IActionResult GetAvailablePermissions([FromServices] PermissionScanService permissionScanService)
     {
-        var permissions = Permissions.PermissionHelper.GetRoomPermissions();
+        var permissions = permissionScanService.GetRoomPermissions();
 
         return Ok(permissions.Select(p => new
         {
-            name = p,
-            scope = "room"
+            name = p.Name,
+            scope = p.Scope.ToString()
         }).ToList());
     }
 
@@ -47,35 +48,42 @@ public class RoomPermissionsController : ControllerBase
     /// RoomRoleに割り当てられている権限一覧を取得
     /// </summary>
     [HttpGet]
-    [RequireAny(RoomPermissions.ManageRoles)]
+    [RequireAny(RoomPermissions.ManageRoles, TenantPermissions.RoomManage)]
     public async Task<IActionResult> GetRolePermissions(
-        [FromRoute] MaskedGuid roleId,
+        [FromRoute] string roleName,
         CancellationToken cancellationToken)
     {
-        var roleGuid = (Guid)roleId;
+        // ロールの存在確認
+        var role = await _db.RoomRoles
+            .AsNoTracking()
+            .FirstOrDefaultAsync(r => r.Name == roleName, cancellationToken);
+        if (role == null)
+        {
+            return NotFound(new { message = "RoomRole not found" });
+        }
+
         var permissions = await _db.RoomRolePermissions
             .AsNoTracking()
-            .Where(p => p.RoomRoleId == roleGuid)
+            .Where(p => p.RoomRoleId == role.Id)
             .Select(p => p.PermissionName)
             .ToListAsync(cancellationToken);
 
-        return Ok(new { roleId = roleGuid, permissions });
+        return Ok(new { roleName, roleId = role.Id, permissions });
     }
 
     /// <summary>
     /// RoomRoleに権限を割り当て
     /// </summary>
     [HttpPost]
-    [RequireAny(RoomPermissions.ManageRoles)]
+    [RequireAny(RoomPermissions.ManageRoles, TenantPermissions.RoomManage)]
     public async Task<IActionResult> AddPermissionToRole(
-        [FromRoute] MaskedGuid roleId,
+        [FromRoute] string roleName,
         [FromBody] AddRoomPermissionRequest request,
         CancellationToken cancellationToken)
     {
-        var roleGuid = (Guid)roleId;
-
-        // RoomRoleの存在確認
-        var role = await _db.RoomRoles.FindAsync(new[] { roleGuid }, cancellationToken);
+        // ロールの存在確認
+        var role = await _db.RoomRoles
+            .FirstOrDefaultAsync(r => r.Name == roleName, cancellationToken);
         if (role == null)
         {
             return NotFound(new { message = "RoomRole not found" });
@@ -83,7 +91,7 @@ public class RoomPermissionsController : ControllerBase
 
         // 既に割り当てられているか確認
         var existing = await _db.RoomRolePermissions
-            .AnyAsync(p => p.RoomRoleId == roleGuid && p.PermissionName == request.PermissionName, cancellationToken);
+            .AnyAsync(p => p.RoomRoleId == role.Id && p.PermissionName == request.PermissionName, cancellationToken);
 
         if (existing)
         {
@@ -92,14 +100,14 @@ public class RoomPermissionsController : ControllerBase
 
         var permission = new RoomRolePermission
         {
-            RoomRoleId = roleGuid,
+            RoomRoleId = role.Id,
             PermissionName = request.PermissionName
         };
 
         _db.RoomRolePermissions.Add(permission);
         await _db.SaveChangesAsync(cancellationToken);
 
-        _logger.LogInformation("Permission {Permission} added to RoomRole {RoleId}", request.PermissionName, roleGuid);
+        _logger.LogInformation("Permission {Permission} added to RoomRole {RoleName}", request.PermissionName, roleName);
 
         return Ok(new { permissionId = permission.Id, name = permission.PermissionName });
     }
@@ -108,16 +116,22 @@ public class RoomPermissionsController : ControllerBase
     /// RoomRoleから権限を削除
     /// </summary>
     [HttpDelete("{permissionName}")]
-    [RequireAny(RoomPermissions.ManageRoles)]
+    [RequireAny(RoomPermissions.ManageRoles, TenantPermissions.RoomManage)]
     public async Task<IActionResult> RemovePermissionFromRole(
-        [FromRoute] MaskedGuid roleId,
+        [FromRoute] string roleName,
         [FromRoute] string permissionName,
         CancellationToken cancellationToken)
     {
-        var roleGuid = (Guid)roleId;
+        // ロールの存在確認
+        var role = await _db.RoomRoles
+            .FirstOrDefaultAsync(r => r.Name == roleName, cancellationToken);
+        if (role == null)
+        {
+            return NotFound(new { message = "RoomRole not found" });
+        }
 
         var permission = await _db.RoomRolePermissions
-            .FirstOrDefaultAsync(p => p.RoomRoleId == roleGuid && p.PermissionName == permissionName, cancellationToken);
+            .FirstOrDefaultAsync(p => p.RoomRoleId == role.Id && p.PermissionName == permissionName, cancellationToken);
 
         if (permission == null)
         {
@@ -127,7 +141,7 @@ public class RoomPermissionsController : ControllerBase
         _db.RoomRolePermissions.Remove(permission);
         await _db.SaveChangesAsync(cancellationToken);
 
-        _logger.LogInformation("Permission {Permission} removed from RoomRole {RoleId}", permissionName, roleGuid);
+        _logger.LogInformation("Permission {Permission} removed from RoomRole {RoleName}", permissionName, roleName);
 
         return NoContent();
     }

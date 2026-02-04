@@ -1,7 +1,7 @@
 <script lang="ts">
   import Modal from '../common/Modal.svelte';
-  import { onMount } from 'svelte';
-  import { api } from '$lib/api/client';
+  import { api, roomRolePermissionsApi, permissionsApi } from '$lib/api';
+  import type { AvailablePermissions, Role } from '$lib/types';
   import { ui, activeModals } from '$lib/stores/ui';
   import { page } from '$app/stores';
 
@@ -11,8 +11,8 @@
   let tenant = $derived.by(() => modal?.data?.tenant ?? $page.params.tenant ?? '');
   let roomId = $derived.by(() => modal?.data?.roomId ?? '');
 
-  let roles = $state<any[]>([]);
-  let availablePermissions = $state<{ room: any[]; topic: any[] }>({ room: [], topic: [] });
+  let roles = $state<Role[]>([]);
+  let availablePermissions = $state<AvailablePermissions>({ tenant: [], topic: [], room: [] });
   let isLoading = $state(true);
   let error = $state<string | null>(null);
   let showCreateRole = $state(false);
@@ -33,23 +33,27 @@
       isLoading = true;
 
       // Fetch roles
-      const rolesData = await api.get<any[]>(`/${tenant}/api/roomroles`);
+      const rolesData = await api.get<Role[]>(`/${tenant}/api/roomroles`);
       roles = rolesData;
 
       // Fetch permissions for each role
       const permPromises = roles.map(async (role) => {
-        const perms = await api.get<any>(`/${tenant}/api/roomroles/${role.id}/permissions`);
-        return { roleId: role.id, permissions: perms.permissions || [] };
+        try {
+          const perms = await roomRolePermissionsApi.getRolePermissions(tenant, role.name);
+          return { roleName: role.name, permissions: perms.permissions || [] };
+        } catch {
+          return { roleName: role.name, permissions: [] };
+        }
       });
 
       const permsData = await Promise.all(permPromises);
       rolePermissions = {};
       permsData.forEach((p) => {
-        rolePermissions[p.roleId] = p.permissions;
+        rolePermissions[p.roleName] = p.permissions;
       });
 
       // Fetch available permissions
-      availablePermissions = await api.get<any>(`/${tenant}/api/permissions/available`);
+      availablePermissions = await permissionsApi.getAvailablePermissions(tenant);
 
       error = null;
     } catch (err: any) {
@@ -59,19 +63,19 @@
     }
   }
 
-  async function togglePermission(roleId: string, permissionName: string) {
+  async function togglePermission(roleName: string, permissionName: string) {
     try {
-      const currentPerms = rolePermissions[roleId] || [];
+      const currentPerms = rolePermissions[roleName] || [];
       const hasPermission = currentPerms.includes(permissionName);
 
       if (hasPermission) {
         // Remove permission
-        await api.delete(`/${tenant}/api/roomroles/${roleId}/permissions/${encodeURIComponent(permissionName)}`);
-        rolePermissions[roleId] = currentPerms.filter((p) => p !== permissionName);
+        await roomRolePermissionsApi.removePermission(tenant, roleName, permissionName);
+        rolePermissions[roleName] = currentPerms.filter((p) => p !== permissionName);
       } else {
         // Add permission
-        await api.post(`/${tenant}/api/roomroles/${roleId}/permissions`, { permissionName });
-        rolePermissions[roleId] = [...currentPerms, permissionName];
+        await roomRolePermissionsApi.addPermission(tenant, roleName, { permissionName });
+        rolePermissions[roleName] = [...currentPerms, permissionName];
       }
     } catch (err: any) {
       error = err.message || 'Failed to update permissions';
@@ -107,8 +111,8 @@
     }
   }
 
-  function hasPermission(roleId: string, permissionName: string): boolean {
-    return (rolePermissions[roleId] || []).includes(permissionName);
+  function hasPermission(roleName: string, permissionName: string): boolean {
+    return (rolePermissions[roleName] || []).includes(permissionName);
   }
 
   function formatPermissionName(name: string): string {
@@ -208,7 +212,7 @@
           <!-- Role and permission list -->
           <div class="space-y-4">
             {#each roles as role}
-              {@const perms = rolePermissions[role.id] || []}
+              {@const perms = rolePermissions[role.name] || []}
               <div class="border border-border rounded-lg overflow-hidden">
                 <div class="bg-surface p-4 border-b border-border flex justify-between items-center">
                   <div>
@@ -233,9 +237,9 @@
                     <p class="text-xs text-text-light mb-2 font-medium">Room Permissions</p>
                     <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
                       {#each availablePermissions.room as perm}
-                        {@const hasPerm = hasPermission(role.id, perm.name)}
+                        {@const hasPerm = hasPermission(role.name, perm.name)}
                         <button
-                          onclick={() => togglePermission(role.id, perm.name)}
+                          onclick={() => togglePermission(role.name, perm.name)}
                           class="flex items-center gap-2 p-2 rounded border transition-colors text-left text-sm {hasPerm
                             ? 'bg-primary bg-opacity-10 border-primary text-primary'
                             : 'border-border hover:bg-surface'}"
@@ -249,7 +253,7 @@
                               </svg>
                             {/if}
                           </span>
-                          <span class="text-xs">{perm.label}</span>
+                          <span class="text-xs">{formatPermissionName(perm.name)}</span>
                         </button>
                       {/each}
                     </div>
@@ -260,9 +264,9 @@
                     <p class="text-xs text-text-light mb-2 font-medium">Topic Permissions</p>
                     <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
                       {#each availablePermissions.topic as perm}
-                        {@const hasPerm = hasPermission(role.id, perm.name)}
+                        {@const hasPerm = hasPermission(role.name, perm.name)}
                         <button
-                          onclick={() => togglePermission(role.id, perm.name)}
+                          onclick={() => togglePermission(role.name, perm.name)}
                           class="flex items-center gap-2 p-2 rounded border transition-colors text-left text-sm {hasPerm
                             ? 'bg-primary bg-opacity-10 border-primary text-primary'
                             : 'border-border hover:bg-surface'}"
@@ -276,7 +280,7 @@
                               </svg>
                             {/if}
                           </span>
-                          <span class="text-xs">{perm.label}</span>
+                          <span class="text-xs">{formatPermissionName(perm.name)}</span>
                         </button>
                       {/each}
                     </div>

@@ -4,7 +4,7 @@
   import RoomRolePermissionModal from './RoomRolePermissionModal.svelte';
   import TopicUserPermissionModal from './TopicUserPermissionModal.svelte';
   import RoomUserPermissionModal from './RoomUserPermissionModal.svelte';
-  import IdentityRolePermissionModal from './IdentityRolePermissionModal.svelte';
+  import TenantRolePermissionModal from './TenantRolePermissionModal.svelte';
   import TenantCreateModal from './TenantCreateModal.svelte';
 
   let activeModalsList = $derived.by(() => $activeModals);
@@ -32,8 +32,8 @@
       <RoomUserPermissionModal />
     {/if}
 
-    {#if modal.id === 'identity-role-permission'}
-      <IdentityRolePermissionModal />
+    {#if modal.id === 'tenant-role-permission'}
+      <TenantRolePermissionModal />
     {/if}
 
     {#if modal.id === 'tenant-create'}

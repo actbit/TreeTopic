@@ -1,47 +1,59 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using TreeTopic.Dtos;
 using TreeTopic.Models;
 using Finbuckle.MultiTenant;
 using Finbuckle.MultiTenant.Abstractions;
 using TreeTopic.Services;
+using TreeTopic.Filters;
+using TreeTopic.Data;
 
 namespace TreeTopic.Controllers;
 
 [ApiController]
-[Route("auth/users")]
-[Authorize]
+[Route("{tenant}/api/setup/[controller]")]
+[AllowAnonymous]
+[RequireSetupToken]
 public class DefaultUserController : ControllerBase
 {
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly IMultiTenantContextAccessor<ApplicationTenantInfo> _tenantAccessor;
     private readonly IconService _iconService;
     private readonly ILogger<DefaultUserController> _logger;
+    private readonly TenantCatalogDbContext _tenantDb;
 
     public DefaultUserController(
         UserManager<ApplicationUser> userManager,
         IMultiTenantContextAccessor<ApplicationTenantInfo> tenantAccessor,
         IconService iconService,
-        ILogger<DefaultUserController> logger)
+        ILogger<DefaultUserController> logger,
+        TenantCatalogDbContext tenantDb)
     {
         _userManager = userManager;
         _tenantAccessor = tenantAccessor;
         _iconService = iconService;
         _logger = logger;
+        _tenantDb = tenantDb;
     }
 
     [HttpPost]
-    public async Task<IActionResult> CreateDefaultGoogleUser([FromBody] CreateDefaultUserRequest request)
+    public async Task<IActionResult> CreateUser([FromRoute] string tenant, [FromBody] CreateDefaultUserRequest request)
     {
         if (!ModelState.IsValid)
         {
             return ValidationProblem(ModelState);
         }
 
-        if (_tenantAccessor.MultiTenantContext?.TenantInfo != null)
+        // OIDC設定がある場合はエラー
+        var tenantInfo = await _tenantDb.Tenants
+            .Include(t => t.Detail)
+            .FirstOrDefaultAsync(t => t.Identifier == tenant);
+
+        if (tenantInfo?.Detail?.HasOidcSettings() ?? false)
         {
-            return BadRequest(new { message = "Users can only be created for the default Google tenant." });
+            return BadRequest(new { message = "User creation through setup is not allowed when OIDC is configured." });
         }
 
         var email = request.Email.Trim();
@@ -82,8 +94,8 @@ public class DefaultUserController : ControllerBase
             await _userManager.UpdateAsync(user);
         }
 
-        _logger.LogInformation("Default Google user created: {Email}", user.Email);
-        return CreatedAtAction(nameof(CreateDefaultGoogleUser), new { user.Id, user.Email }, new { user.Id, user.Email });
+        _logger.LogInformation("User created through setup: {Email}", user.Email);
+        return CreatedAtAction(nameof(CreateUser), new { tenant, user.Id, user.Email }, new { user.Id, user.Email });
     }
 
 }

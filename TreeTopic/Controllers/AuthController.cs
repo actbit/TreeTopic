@@ -9,6 +9,7 @@ using Finbuckle.MultiTenant;
 using TreeTopic.Models;
 using TreeTopic.Constants;
 using TreeTopic.Services;
+using TreeTopic.Permissions;
 
 namespace TreeTopic.Controllers;
 
@@ -174,6 +175,57 @@ public class AuthController : ControllerBase
     public IActionResult CheckAuth()
     {
         return Ok(new { isAuthenticated = User.Identity?.IsAuthenticated ?? false });
+    }
+
+    /// <summary>
+    /// 現在のユーザーの権限をチェック
+    /// </summary>
+    [HttpGet("me/permissions")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> CheckUserPermissions()
+    {
+        if (!User.Identity?.IsAuthenticated ?? true)
+        {
+            return Unauthorized();
+        }
+
+        var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (!Guid.TryParse(userId, out var userGuid))
+        {
+            return Unauthorized();
+        }
+
+        // DBコンテキストを取得
+        var dbContext = HttpContext.RequestServices.GetRequiredService<ApplicationDbContext>();
+        var userManager = HttpContext.RequestServices.GetRequiredService<UserManager<ApplicationUser>>();
+
+        // ApplicationUserを取得
+        var appUser = await userManager.FindByIdAsync(userGuid.ToString());
+        if (appUser == null)
+        {
+            return Unauthorized();
+        }
+
+        // ユーザーのロールを取得
+        var roles = await userManager.GetRolesAsync(appUser);
+
+        // ユーザーの全ての権限を取得
+        var userPermissions = await dbContext.Permissions
+            .AsNoTracking()
+            .Include(p => p.Role)
+            .Where(p => p.Role != null && roles.Contains(p.Role.Name))
+            .Select(p => p.Name)
+            .Distinct()
+            .ToListAsync(HttpContext.RequestAborted);
+
+        // RoleManage権限をチェック
+        var hasRoleManagePermission = userPermissions.Contains(TenantPermissions.RoleManage);
+
+        return Ok(new {
+            hasRoleManagePermission,
+            permissions = userPermissions
+        });
     }
 }
 

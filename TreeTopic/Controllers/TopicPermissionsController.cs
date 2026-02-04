@@ -7,6 +7,7 @@ using TreeTopic.Models;
 using TreeTopic.Permissions;
 using TreeTopic.Constants;
 using TreeTopic.Common;
+using TreeTopic.Services;
 
 namespace TreeTopic.Controllers;
 
@@ -30,18 +31,18 @@ public class TopicPermissionsController : ControllerBase
     }
 
     /// <summary>
-    /// Topic権限一覧を取得
+    /// Topic権限一覧を取得（PermissionScanServiceで動的取得）
     /// </summary>
     [HttpGet("available")]
-    [RequireAny(IdentityPermissions.PermissionRead)]
-    public IActionResult GetAvailablePermissions()
+    [RequireAny(TenantPermissions.PermissionRead)]
+    public IActionResult GetAvailablePermissions([FromServices] PermissionScanService permissionScanService)
     {
-        var permissions = Permissions.PermissionHelper.GetTopicPermissions();
+        var permissions = permissionScanService.GetTopicPermissions();
 
         return Ok(permissions.Select(p => new
         {
-            name = p,
-            scope = "topic"
+            name = p.Name,
+            scope = p.Scope.ToString()
         }).ToList());
     }
 
@@ -49,7 +50,7 @@ public class TopicPermissionsController : ControllerBase
     /// トピックに割り当てられているユーザー権限一覧を取得
     /// </summary>
     [HttpGet("users")]
-    [RequireAny(TopicPermissions.Manage)]
+    [RequireAny(TopicPermissions.Manage, TenantPermissions.TopicManage)]
     public async Task<IActionResult> GetTopicUserPermissions(
         [FromRoute] MaskedGuid topicId,
         CancellationToken cancellationToken)
@@ -80,7 +81,7 @@ public class TopicPermissionsController : ControllerBase
     /// 特定ユーザーのトピック権限を取得
     /// </summary>
     [HttpGet("users/{roomUserId}")]
-    [RequireAny(TopicPermissions.Manage)]
+    [RequireAny(TopicPermissions.Manage, TenantPermissions.TopicManage)]
     public async Task<IActionResult> GetUserTopicPermissions(
         [FromRoute] MaskedGuid topicId,
         [FromRoute] MaskedGuid roomUserId,
@@ -102,7 +103,7 @@ public class TopicPermissionsController : ControllerBase
     /// ユーザーにトピック権限を割り当て
     /// </summary>
     [HttpPost("users")]
-    [RequireAny(TopicPermissions.Manage)]
+    [RequireAny(TopicPermissions.Manage, TenantPermissions.TopicManage)]
     public async Task<IActionResult> AddPermissionToUser(
         [FromRoute] MaskedGuid topicId,
         [FromBody] AddTopicPermissionToUserRequest request,
@@ -156,37 +157,9 @@ public class TopicPermissionsController : ControllerBase
     /// <summary>
     /// ユーザーからトピック権限を削除
     /// </summary>
-    [HttpDelete("users/{permissionId}")]
-    [RequireAny(TopicPermissions.Manage)]
-    public async Task<IActionResult> RemovePermissionFromUser(
-        [FromRoute] MaskedGuid topicId,
-        [FromRoute] MaskedGuid permissionId,
-        CancellationToken cancellationToken)
-    {
-        var permissionGuid = (Guid)permissionId;
-
-        var permission = await _db.TopicUserPermissions
-            .FirstOrDefaultAsync(p => p.Id == permissionGuid, cancellationToken);
-
-        if (permission == null)
-        {
-            return NotFound();
-        }
-
-        _db.TopicUserPermissions.Remove(permission);
-        await _db.SaveChangesAsync(cancellationToken);
-
-        _logger.LogInformation("Permission {PermissionId} removed", permissionGuid);
-
-        return NoContent();
-    }
-
-    /// <summary>
-    /// ユーザーからトピック権限を削除（権限名指定）
-    /// </summary>
     [HttpDelete("users/{roomUserId}/{permissionName}")]
-    [RequireAny(TopicPermissions.Manage)]
-    public async Task<IActionResult> RemovePermissionFromUserByName(
+    [RequireAny(TopicPermissions.Manage, TenantPermissions.TopicManage)]
+    public async Task<IActionResult> RemovePermissionFromUser(
         [FromRoute] MaskedGuid topicId,
         [FromRoute] MaskedGuid roomUserId,
         [FromRoute] string permissionName,
@@ -215,7 +188,7 @@ public class TopicPermissionsController : ControllerBase
     /// トピックに割り当てられているTopicRolePermission（RoomRole権限）一覧を取得
     /// </summary>
     [HttpGet("role-permissions")]
-    [RequireAny(TopicPermissions.Manage)]
+    [RequireAny(TopicPermissions.Manage, TenantPermissions.TopicManage)]
     public async Task<IActionResult> GetTopicRolePermissions(
         [FromRoute] MaskedGuid topicId,
         CancellationToken cancellationToken)
@@ -245,7 +218,7 @@ public class TopicPermissionsController : ControllerBase
     /// トピックにRoomRole権限を割り当て（TopicRolePermissionとして追加）
     /// </summary>
     [HttpPost("role-permissions")]
-    [RequireAny(TopicPermissions.Manage)]
+    [RequireAny(TopicPermissions.Manage, TenantPermissions.TopicManage)]
     public async Task<IActionResult> AddTopicRolePermission(
         [FromRoute] MaskedGuid topicId,
         [FromBody] AddTopicRolePermissionRequest request,
@@ -260,7 +233,8 @@ public class TopicPermissionsController : ControllerBase
             return NotFound(new { message = "Topic not found" });
         }
 
-        var roomRole = await _db.RoomRoles.FindAsync(new[] { request.RoomRoleId }, cancellationToken);
+        var roomRole = await _db.RoomRoles
+            .FirstOrDefaultAsync(r => r.Name == request.RoleName, cancellationToken);
         if (roomRole == null)
         {
             return NotFound(new { message = "RoomRole not found" });
@@ -268,7 +242,7 @@ public class TopicPermissionsController : ControllerBase
 
         // 既に割り当てられているか確認
         var existing = await _db.TopicRolePermissions
-            .AnyAsync(p => p.TopicId == topicGuid && p.RoomRoleId == request.RoomRoleId && p.Name == request.PermissionName, cancellationToken);
+            .AnyAsync(p => p.TopicId == topicGuid && p.RoomRoleId == roomRole.Id && p.Name == request.PermissionName, cancellationToken);
 
         if (existing)
         {
@@ -278,14 +252,14 @@ public class TopicPermissionsController : ControllerBase
         var permission = new TopicRolePermission
         {
             TopicId = topicGuid,
-            RoomRoleId = request.RoomRoleId,
+            RoomRoleId = roomRole.Id,
             Name = request.PermissionName
         };
 
         _db.TopicRolePermissions.Add(permission);
         await _db.SaveChangesAsync(cancellationToken);
 
-        _logger.LogInformation("Permission {Permission} added to RoomRole {RoleId} for Topic {TopicId}", request.PermissionName, request.RoomRoleId, topicGuid);
+        _logger.LogInformation("Permission {Permission} added to RoomRole {RoleName} for Topic {TopicId}", request.PermissionName, request.RoleName, topicGuid);
 
         return Ok(new { permissionId = permission.Id, name = permission.Name });
     }
@@ -293,19 +267,26 @@ public class TopicPermissionsController : ControllerBase
     /// <summary>
     /// トピックからRoomRole権限を削除
     /// </summary>
-    [HttpDelete("role-permissions/{roleId}/{permissionName}")]
-    [RequireAny(TopicPermissions.Manage)]
+    [HttpDelete("role-permissions/{roleName}/{permissionName}")]
+    [RequireAny(TopicPermissions.Manage, TenantPermissions.TopicManage)]
     public async Task<IActionResult> RemoveTopicRolePermission(
         [FromRoute] MaskedGuid topicId,
-        [FromRoute] MaskedGuid roleId,
+        [FromRoute] string roleName,
         [FromRoute] string permissionName,
         CancellationToken cancellationToken)
     {
         var topicGuid = (Guid)topicId;
-        var roleGuid = (Guid)roleId;
+
+        // RoomRoleの存在確認
+        var roomRole = await _db.RoomRoles
+            .FirstOrDefaultAsync(r => r.Name == roleName, cancellationToken);
+        if (roomRole == null)
+        {
+            return NotFound(new { message = "RoomRole not found" });
+        }
 
         var permission = await _db.TopicRolePermissions
-            .FirstOrDefaultAsync(p => p.TopicId == topicGuid && p.RoomRoleId == roleGuid && p.Name == permissionName, cancellationToken);
+            .FirstOrDefaultAsync(p => p.TopicId == topicGuid && p.RoomRoleId == roomRole.Id && p.Name == permissionName, cancellationToken);
 
         if (permission == null)
         {
@@ -315,7 +296,7 @@ public class TopicPermissionsController : ControllerBase
         _db.TopicRolePermissions.Remove(permission);
         await _db.SaveChangesAsync(cancellationToken);
 
-        _logger.LogInformation("Permission {Permission} removed from RoomRole {RoleId} for Topic {TopicId}", permissionName, roleGuid, topicGuid);
+        _logger.LogInformation("Permission {Permission} removed from RoomRole {RoleName} for Topic {TopicId}", permissionName, roleName, topicGuid);
 
         return NoContent();
     }
@@ -329,4 +310,4 @@ public record AddTopicPermissionToUserRequest(Guid RoomUserId, string Permission
 /// <summary>
 /// TopicRolePermission割り当てリクエスト
 /// </summary>
-public record AddTopicRolePermissionRequest(Guid RoomRoleId, string PermissionName);
+public record AddTopicRolePermissionRequest(string RoleName, string PermissionName);

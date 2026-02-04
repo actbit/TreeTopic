@@ -105,4 +105,41 @@ public class PermissionScanService
     {
         return Permissions.Count;
     }
+
+    /// <summary>
+    /// tenant. プレフィックスの権限を取得
+    /// </summary>
+    public IEnumerable<PermissionRequirement> GetTenantPermissions()
+    {
+        return Permissions.Where(p => p.Name.StartsWith("tenant.", StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// topic. プレフィックスの権限を取得
+    /// </summary>
+    public IEnumerable<PermissionRequirement> GetTopicPermissions()
+    {
+        return Permissions.Where(p => p.Name.StartsWith("topic.", StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// room. プレフィックスの権限を取得
+    /// </summary>
+    public IEnumerable<PermissionRequirement> GetRoomPermissions()
+    {
+        return Permissions.Where(p => p.Name.StartsWith("room.", StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// プレフィックス別に権限を取得（tenant, topic, room）
+    /// </summary>
+    public Dictionary<string, List<PermissionRequirement>> GetPermissionsByCategory()
+    {
+        return new Dictionary<string, List<PermissionRequirement>>
+        {
+            ["tenant"] = GetTenantPermissions().ToList(),
+            ["topic"] = GetTopicPermissions().ToList(),
+            ["room"] = GetRoomPermissions().ToList()
+        };
+    }
 }

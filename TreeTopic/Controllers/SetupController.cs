@@ -1,19 +1,29 @@
 using Microsoft.AspNetCore.Mvc;
+using MaskedUUID.AspNetCore.Types;
 using TreeTopic.Helpers;
 using TreeTopic.Services;
+using TreeTopic.Permissions;
+using TreeTopic.Dtos;
 
 namespace TreeTopic.Controllers;
 
 [ApiController]
-[Route("{tenant}/api/setup/[controller]")]
+[Route("{tenant}/api/[controller]")]
 [RequireSetupToken]
 public class SetupController : ControllerBase
 {
     private readonly SetupTokenValidationService _tokenValidator;
+    private readonly PermissionScanService _permissionScanService;
+    private readonly UserManagementService _userManagementService;
 
-    public SetupController(SetupTokenValidationService tokenValidator)
+    public SetupController(
+        SetupTokenValidationService tokenValidator,
+        PermissionScanService permissionScanService,
+        UserManagementService userManagementService)
     {
         _tokenValidator = tokenValidator;
+        _permissionScanService = permissionScanService;
+        _userManagementService = userManagementService;
     }
 
     /// <summary>
@@ -50,5 +60,102 @@ public class SetupController : ControllerBase
             return BadRequest(new { message = "Failed to invalidate token" });
 
         return Ok();
+    }
+
+    /// <summary>
+    /// 利用可能な権限一覧を取得（Setup用）
+    /// </summary>
+    [HttpGet("permissions/available")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public IActionResult GetAvailablePermissions()
+    {
+        var permissions = _permissionScanService.GetPermissionsByCategory();
+
+        var result = new
+        {
+            tenant = permissions["tenant"].Select(p => new
+            {
+                name = p.Name,
+                scope = p.Scope.ToString()
+            }),
+            topic = permissions["topic"].Select(p => new
+            {
+                name = p.Name,
+                scope = p.Scope.ToString()
+            }),
+            room = permissions["room"].Select(p => new
+            {
+                name = p.Name,
+                scope = p.Scope.ToString()
+            })
+        };
+
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// UserにRoleを割り当て（Setup用）
+    /// </summary>
+    [HttpPost("users/{userId}/roles")]
+    public async Task<ActionResult<UserSummaryDto>> AddRoleToUser(
+        MaskedGuid userId,
+        [FromBody] RoleAssignmentRequest request)
+    {
+        var result = await _userManagementService.AddRoleToUserAsync((Guid)userId, request);
+
+        if (result.IsFailure)
+        {
+            return result.ToActionResult(tuple => new UserSummaryDto
+            {
+                Id = tuple.user.Id,
+                UserName = tuple.user.UserName,
+                Email = tuple.user.Email,
+                DisplayName = tuple.user.DisplayName,
+                Roles = tuple.roles
+            });
+        }
+
+        var (user, roles) = result.Data!;
+        return Ok(new UserSummaryDto
+        {
+            Id = user.Id,
+            UserName = user.UserName,
+            Email = user.Email,
+            DisplayName = user.DisplayName,
+            Roles = roles
+        });
+    }
+
+    /// <summary>
+    /// UserからRoleを削除（Setup用）
+    /// </summary>
+    [HttpDelete("users/{userId}/roles")]
+    public async Task<ActionResult<UserSummaryDto>> RemoveRoleFromUser(
+        MaskedGuid userId,
+        [FromBody] RoleAssignmentRequest request)
+    {
+        var result = await _userManagementService.RemoveRoleFromUserAsync(userId, request);
+
+        if (result.IsFailure)
+        {
+            return result.ToActionResult(tuple => new UserSummaryDto
+            {
+                Id = tuple.user.Id,
+                UserName = tuple.user.UserName,
+                Email = tuple.user.Email,
+                DisplayName = tuple.user.DisplayName,
+                Roles = tuple.roles
+            });
+        }
+
+        var (user, roles) = result.Data!;
+        return Ok(new UserSummaryDto
+        {
+            Id = user.Id,
+            UserName = user.UserName,
+            Email = user.Email,
+            DisplayName = user.DisplayName,
+            Roles = roles
+        });
     }
 }

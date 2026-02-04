@@ -126,6 +126,17 @@
     return (userPermissions[userId] || []).includes(permissionName);
   }
 
+  function formatPermissionName(name: string): string {
+    return name
+      .split('.')
+      .map((part, i) => {
+        if (part === 'topic') return '';
+        return part.charAt(0).toUpperCase() + part.slice(1);
+      })
+      .join(' ')
+      .trim();
+  }
+
   function handleClose() {
     ui.closeModal(modalId);
   }
@@ -191,7 +202,7 @@
                 >
                   <option value="">Select a permission</option>
                   {#each availablePermissions as perm}
-                    <option value={perm.name}>{perm.label} - {perm.description}</option>
+                    <option value={perm.name}>{formatPermissionName(perm.name)}</option>
                   {/each}
                 </select>
               </div>
@@ -257,10 +268,7 @@
                   {#if perms.length > 0}
                     <div class="pt-2 border-t border-border">
                       <p class="text-xs text-text-light">
-                        Permissions granted: {perms.map((p) => {
-                          const perm = availablePermissions.find((ap) => ap.name === p);
-                          return perm?.label || p;
-                        }).join(', ')}
+                        Permissions granted: {perms.map((p) => formatPermissionName(p)).join(', ')}
                       </p>
                     </div>
                   {/if}
@@ -280,8 +288,8 @@
             {#each availablePermissions as perm}
               <div class="flex items-center justify-between p-3 bg-surface rounded">
                 <div class="flex-1">
-                  <p class="font-medium text-text text-sm">{perm.label}</p>
-                  <p class="text-xs text-text-light">{perm.description}</p>
+                  <p class="font-medium text-text text-sm">{formatPermissionName(perm.name)}</p>
+                  <p class="text-xs text-text-light">{perm.name}</p>
                 </div>
               </div>
             {/each}

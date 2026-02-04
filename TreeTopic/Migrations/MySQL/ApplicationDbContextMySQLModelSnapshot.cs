@@ -3,20 +3,17 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
-using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using TreeTopic.Data;
 
 #nullable disable
 
-namespace TreeTopic.Migrations.Application.MySQL
+namespace TreeTopic.Migrations.MySQL
 {
     [DbContext(typeof(ApplicationDbContextMySQL))]
-    [Migration("20260204000407_InitialCreateMySQL")]
-    partial class InitialCreateMySQL
+    partial class ApplicationDbContextMySQLModelSnapshot : ModelSnapshot
     {
-        /// <inheritdoc />
-        protected override void BuildTargetModel(ModelBuilder modelBuilder)
+        protected override void BuildModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -532,8 +529,7 @@ namespace TreeTopic.Migrations.Application.MySQL
 
                     b.Property<string>("TenantId")
                         .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("varchar(64)");
+                        .HasColumnType("longtext");
 
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("datetime(6)");
@@ -543,8 +539,6 @@ namespace TreeTopic.Migrations.Application.MySQL
                     b.HasIndex("RoleId");
 
                     b.ToTable("Permissions");
-
-                    b.HasAnnotation("Finbuckle:MultiTenant", true);
                 });
 
             modelBuilder.Entity("TreeTopic.Models.PushSubscription", b =>

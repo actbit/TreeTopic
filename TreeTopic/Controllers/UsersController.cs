@@ -21,7 +21,6 @@ public class UsersController : ControllerBase
     private readonly UserManagementService _userManagementService;
     private readonly IconService _iconService;
     private readonly UserManager<ApplicationUser> _userManager;
-    private readonly SetupTokenValidationService _setupTokenValidator;
     private readonly TenantCatalogDbContext _tenantDb;
     private readonly ILogger<UsersController> _logger;
 
@@ -29,51 +28,21 @@ public class UsersController : ControllerBase
         UserManagementService userManagementService,
         IconService iconService,
         UserManager<ApplicationUser> userManager,
-        SetupTokenValidationService setupTokenValidator,
         TenantCatalogDbContext tenantDb,
         ILogger<UsersController> logger)
     {
         _userManagementService = userManagementService;
         _iconService = iconService;
         _userManager = userManager;
-        _setupTokenValidator = setupTokenValidator;
         _tenantDb = tenantDb;
         _logger = logger;
     }
 
-    /// <summary>
-    /// SetupToken の Authorization ヘッダーから検証
-    /// </summary>
-    private async Task<bool> ValidateSetupTokenFromHeader(string tenant)
-    {
-        var authHeader = Request.Headers["Authorization"].ToString();
-        if (authHeader.StartsWith("Bearer "))
-        {
-            var token = authHeader.Substring("Bearer ".Length).Trim();
-
-            // テナント識別子からテナントIDを解決
-            var tenantInfo = await _tenantDb.Tenants.FirstOrDefaultAsync(t => t.Identifier == tenant);
-            if (tenantInfo == null)
-            {
-                return false;
-            }
-
-            return await _setupTokenValidator.ValidateSetupTokenAsync(tenantInfo.Id, token);
-        }
-        return false;
-    }
-
     [HttpGet]
     [Authorize]
+    [RequireAny(TenantPermissions.UserRead)]
     public async Task<ActionResult<List<UserSummaryDto>>> GetAll([FromRoute] string tenant, CancellationToken cancellationToken)
     {
-        // Allow access for all logged-in users OR setupToken
-        var hasSetupToken = await ValidateSetupTokenFromHeader(tenant);
-        var isAuthenticated = User.Identity?.IsAuthenticated == true;
-
-        if (!isAuthenticated && !hasSetupToken)
-            return Unauthorized();
-
         var result = await _userManagementService.GetAllUsersAsync();
 
         if (result.IsFailure)
@@ -86,7 +55,7 @@ public class UsersController : ControllerBase
     }
 
     [HttpGet("{userId}")]
-    [RequireAny(IdentityPermissions.UserRead)]
+    [RequireAny(TenantPermissions.UserRead)]
     public async Task<ActionResult<UserSummaryDto>> GetById([FromRoute] MaskedGuid userId)
     {
         var result = await _userManagementService.GetUserByIdAsync((Guid)userId);
@@ -102,6 +71,7 @@ public class UsersController : ControllerBase
     }
 
     [HttpGet("me")]
+    [Authorize]
     public async Task<ActionResult<ApplicationUserDto>> GetMe(CancellationToken cancellationToken)
     {
         var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
@@ -126,18 +96,26 @@ public class UsersController : ControllerBase
     }
 
     [HttpPost("{userId}/roles")]
+    [Authorize]
+    [RequireAny(TenantPermissions.UserManage)]
     public async Task<ActionResult<UserSummaryDto>> AddRole(
         [FromRoute] string tenant,
         [FromRoute] MaskedGuid userId,
         [FromBody] RoleAssignmentRequest request)
     {
-        // Allow access with either permission OR setupToken
-        var hasPermission = User.HasClaim(c =>
-            c.Type == "permission" && c.Value == IdentityPermissions.UserManage);
-        var hasSetupToken = await ValidateSetupTokenFromHeader(tenant);
+        // OIDCロール同期が有効な場合はUserへのRole割り当てを禁止
+        var tenantInfo = await _tenantDb.Tenants
+            .Include(t => t.Detail)
+            .FirstOrDefaultAsync(t => t.Identifier == tenant);
 
-        if (!hasPermission && !hasSetupToken)
-            return Forbid();
+        if (tenantInfo?.Detail != null && !tenantInfo.Detail.CanAssignRolesToUsers())
+        {
+            return BadRequest(new
+            {
+                message = "Role assignment is not allowed when OIDC role claim is configured. " +
+                          "User roles are automatically managed by the OIDC provider."
+            });
+        }
 
         var result = await _userManagementService.AddRoleToUserAsync((Guid)userId, request);
 
@@ -152,18 +130,26 @@ public class UsersController : ControllerBase
     }
 
     [HttpDelete("{userId}/roles")]
+    [Authorize]
+    [RequireAny(TenantPermissions.UserManage)]
     public async Task<ActionResult<UserSummaryDto>> RemoveRole(
         [FromRoute] string tenant,
         [FromRoute] MaskedGuid userId,
         [FromBody] RoleAssignmentRequest request)
     {
-        // Allow access with either permission OR setupToken
-        var hasPermission = User.HasClaim(c =>
-            c.Type == "permission" && c.Value == IdentityPermissions.UserManage);
-        var hasSetupToken = await ValidateSetupTokenFromHeader(tenant);
+        // OIDCロール同期が有効な場合はUserへのRole割り当てを禁止
+        var tenantInfo = await _tenantDb.Tenants
+            .Include(t => t.Detail)
+            .FirstOrDefaultAsync(t => t.Identifier == tenant);
 
-        if (!hasPermission && !hasSetupToken)
-            return Forbid();
+        if (tenantInfo?.Detail != null && !tenantInfo.Detail.CanAssignRolesToUsers())
+        {
+            return BadRequest(new
+            {
+                message = "Role assignment is not allowed when OIDC role claim is configured. " +
+                          "User roles are automatically managed by the OIDC provider."
+            });
+        }
 
         var result = await _userManagementService.RemoveRoleFromUserAsync(userId, request);
 
@@ -179,6 +165,7 @@ public class UsersController : ControllerBase
 
    
     [HttpPut("me")]
+    [Authorize]
     public async Task<ActionResult<ApplicationUserDto>> UpdateMe([FromBody] UpdateUserRequest request, CancellationToken cancellationToken)
     {
         var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
@@ -214,6 +201,7 @@ public class UsersController : ControllerBase
     }
 
     [HttpPost("me/icon")]
+    [Authorize]
     [Consumes("multipart/form-data")]
     public async Task<IActionResult> UploadMyIcon([FromForm] IFormFile file, CancellationToken cancellationToken)
     {
@@ -236,28 +224,29 @@ public class UsersController : ControllerBase
     }
 
     /// <summary>
-    /// Create a new user (for OIDC default mode - only allowed when RoleClaimName is not set)
+    /// Create a new user (only allowed when OIDC is not configured)
     /// </summary>
     [HttpPost]
     [Authorize]
-    [RequireAny(IdentityPermissions.UserManagement)]
+    [RequireAny(TenantPermissions.UserManagement)]
     public async Task<ActionResult<UserSummaryDto>> CreateUser(
         [FromRoute] string tenant,
         [FromBody] CreateUserRequest request)
     {
-        // Check if RoleClaimName is set - if so, user creation is not allowed
+        // OIDC設定がある場合はユーザー作成を禁止
         var tenantInfo = await _tenantDb.Tenants
             .Include(t => t.Detail)
             .FirstOrDefaultAsync(t => t.Identifier == tenant);
 
-        if (tenantInfo?.Detail?.RoleClaimName != null &&
-            tenantInfo.Detail.RoleClaimName.Trim() != string.Empty)
+        if (!tenantInfo?.Detail.CanCreateUsers() ?? false)
         {
-            return BadRequest(new
-            {
-                message = "User creation is not allowed when OIDC role claim is configured. " +
-                          "Users are automatically managed by the OIDC provider."
-            });
+            var hasOidcRoleSync = tenantInfo?.Detail.HasOidcRoleSync() ?? false;
+            var message = hasOidcRoleSync
+                ? "User creation is not allowed when OIDC role claim is configured. " +
+                  "Users are automatically managed by the OIDC provider."
+                : "User creation is not allowed when OIDC is configured. " +
+                  "Users are authenticated through the OIDC provider.";
+            return BadRequest(new { message });
         }
 
         var result = await _userManagementService.CreateUserAsync(request);
@@ -277,7 +266,7 @@ public class UsersController : ControllerBase
     /// </summary>
     [HttpPost("{userId}/ban")]
     [Authorize]
-    [RequireAny(IdentityPermissions.UserManagement)]
+    [RequireAny(TenantPermissions.UserManagement)]
     public async Task<ActionResult<UserSummaryDto>> BanUser(
         [FromRoute] string tenant,
         [FromRoute] MaskedGuid userId,
@@ -304,7 +293,7 @@ public class UsersController : ControllerBase
     /// </summary>
     [HttpDelete("{userId}/ban")]
     [Authorize]
-    [RequireAny(IdentityPermissions.UserManagement)]
+    [RequireAny(TenantPermissions.UserManagement)]
     public async Task<ActionResult<UserSummaryDto>> UnbanUser(
         [FromRoute] string tenant,
         [FromRoute] MaskedGuid userId)

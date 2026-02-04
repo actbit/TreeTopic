@@ -26,7 +26,7 @@ public class RoomController : ControllerBase
     private Guid CurrentUserId => Guid.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? Guid.Empty.ToString());
 
     [HttpGet]
-    [RequireAny(RoomPermissions.Read)]
+    [RequireAny(RoomPermissions.Read, TenantPermissions.RoomRead)]
     public async Task<IActionResult> GetAll(CancellationToken cancellationToken)
     {
         var result = await _roomManagementService.GetAllRoomsAsync(cancellationToken);
@@ -34,7 +34,7 @@ public class RoomController : ControllerBase
     }
 
     [HttpGet("{roomId}")]
-    [RequireAny(RoomPermissions.Join)]
+    [RequireAny(RoomPermissions.Join, TenantPermissions.RoomRead)]
     public async Task<IActionResult> GetById([FromRoute] MaskedGuid roomId, CancellationToken cancellationToken)
     {
         var result = await _roomManagementService.GetRoomByIdAsync((Guid)roomId, cancellationToken);
@@ -42,7 +42,7 @@ public class RoomController : ControllerBase
     }
 
     [HttpPost]
-    [RequireAny(RoomPermissions.Manage)]
+    [RequireAny(RoomPermissions.Manage, TenantPermissions.RoomManage)]
     public async Task<IActionResult> Create([FromBody] CreateRoomRequest request, CancellationToken cancellationToken)
     {
         if (!ModelState.IsValid)
@@ -53,7 +53,7 @@ public class RoomController : ControllerBase
     }
 
     [HttpPut("{roomId}")]
-    [RequireAny(RoomPermissions.Manage)]
+    [RequireAny(RoomPermissions.Manage, TenantPermissions.RoomManage)]
     public async Task<IActionResult> Update([FromRoute] MaskedGuid roomId, [FromBody] UpdateRoomRequest request, CancellationToken cancellationToken)
     {
         if (!ModelState.IsValid)
@@ -64,7 +64,7 @@ public class RoomController : ControllerBase
     }
 
     [HttpDelete("{roomId}")]
-    [RequireAny(RoomPermissions.Manage)]
+    [RequireAny(RoomPermissions.Manage, TenantPermissions.RoomManage)]
     public async Task<IActionResult> Delete([FromRoute] MaskedGuid roomId, CancellationToken cancellationToken)
     {
         var result = await _roomManagementService.DeleteRoomAsync((Guid)roomId, cancellationToken);

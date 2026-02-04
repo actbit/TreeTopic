@@ -3,13 +3,15 @@
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
-  import { api, createRoleWithSetupToken, getRolesWithSetupToken, getTenantDetail, invalidateSetupToken, getUsersWithSetupToken, assignUserRoleWithSetupToken, removeUserRoleWithSetupToken } from '$lib/api/client';
+  import { api, createRoleWithSetupToken, getRolesWithSetupToken, getTenantDetail, invalidateSetupToken, getUsersWithSetupToken, assignUserRoleWithSetupToken, removeUserRoleWithSetupToken, createUserWithSetupToken } from '$lib/api/client';
 
   // 型定義
   interface TenantDetail {
     identifier: string;
     name: string;
     roleClaimName?: string;
+    canAssignRolesToUsers: boolean;
+    canCreateUsers: boolean;
   }
 
   interface Role {
@@ -47,7 +49,11 @@
 
   // Tenant detail
   let tenantDetail = $state<TenantDetail | null>(null);
-  let canManageRoles = $state(false);
+  let canAssignRolesToUsers = $state(false);
+
+  // User creation state
+  let newUserEmail = $state('');
+  let showUserCreation = $state(false);
 
   onMount(async () => {
     // Check for setup token in sessionStorage
@@ -97,12 +103,12 @@
     try {
       const response = await getTenantDetail(tenant!);
       tenantDetail = response as TenantDetail;
-      // Role management is only allowed when OIDC role claim name is null/empty
-      canManageRoles = !tenantDetail.roleClaimName || tenantDetail.roleClaimName.trim() === '';
+      // バックエンドで判定された結果を使用
+      canAssignRolesToUsers = tenantDetail.canAssignRolesToUsers;
     } catch (err) {
       console.error('Error loading tenant detail:', err);
-      // Default to allowing role management if there's an error
-      canManageRoles = true;
+      // Default to allowing role assignment if there's an error
+      canAssignRolesToUsers = true;
     }
   }
 
@@ -132,19 +138,33 @@
 
   async function loadAvailablePermissions() {
     try {
-      // This would call an endpoint to get available identity permissions
-      // For now, use common permissions
-      availablePermissions = [
-        'UserRead',
-        'UserManage',
-        'RoleRead',
-        'RoleManage',
-        'TenantRead',
-        'TenantManage'
-      ];
+      if (!setupToken) {
+        availablePermissions = [];
+        return;
+      }
+
+      // 動的に権限を取得（Setup用エンドポイント）
+      const response = await api.get<any>(`/${tenant}/api/setup/permissions/available`, {
+        headers: { 'Authorization': `Bearer ${setupToken}` }
+      });
+
+      // tenant権限のみを取得（元の形式: tenant.user.read）
+      availablePermissions = (response.tenant || []).map((p: any) => p.name);
     } catch (err) {
       console.error('Error loading permissions:', err);
+      availablePermissions = [];
     }
+  }
+
+  function formatPermissionName(permissionName: string): string {
+    return permissionName
+      .split('.')
+      .map((part, index) => {
+        if (index === 0) return ''; // プレフィックス（tenant）を削除
+        return part.charAt(0).toUpperCase() + part.slice(1);
+      })
+      .filter(p => p !== '')
+      .join('');
   }
 
   async function loadCurrentUser() {
@@ -160,6 +180,29 @@
     } catch (err) {
       console.error('Error loading current user:', err);
       currentUser = null;
+    }
+  }
+
+  async function createUser() {
+    if (!newUserEmail.trim() || !setupToken) {
+      error = 'Email is required';
+      return;
+    }
+
+    try {
+      isLoading = true;
+      error = null;
+
+      await createUserWithSetupToken(tenant!, newUserEmail.trim(), setupToken!);
+      newUserEmail = '';
+      showUserCreation = false;
+
+      // Reload users to get the newly created user
+      await loadCurrentUser();
+    } catch (err: any) {
+      error = err.message || 'Failed to create user';
+    } finally {
+      isLoading = false;
     }
   }
 
@@ -356,16 +399,46 @@
           </div>
         {/if}
 
-        {#if !canManageRoles}
+        {#if !canAssignRolesToUsers}
           <div class="info-banner">
             <p>
-              Role management is handled through your OIDC provider.
-              Roles are automatically synced from the <strong>{tenantDetail?.roleClaimName || 'role'}</strong> claim.
+              User role assignment is handled through your OIDC provider.
+              User roles are automatically synced from the <strong>{tenantDetail?.roleClaimName || 'role'}</strong> claim.
             </p>
           </div>
         {/if}
 
-        {#if canManageRoles}
+        {#if !canAssignRolesToUsers && !currentUser}
+          <div class="user-creation-section">
+            <h3>Create Your Account</h3>
+            <p class="user-creation-info">
+              Before configuring roles, you need to create your account. Enter your email address below.
+            </p>
+            <div class="user-creation-form">
+              <input
+                type="email"
+                bind:value={newUserEmail}
+                placeholder="your-email@example.com"
+                disabled={isLoading}
+                class="email-input"
+              />
+              <button
+                onclick={createUser}
+                disabled={isLoading || !newUserEmail.trim()}
+                class="create-user-button"
+              >
+                {#if isLoading}
+                  <span class="loading-spinner"></span>
+                {:else}
+                  Create Account
+                {/if}
+              </button>
+            </div>
+          </div>
+        {/if}
+
+
+        {#if true}
           <div class="form-section">
             <div class="form-group">
               <label for="role-name">Role Name</label>
@@ -422,7 +495,7 @@
                               }}
                               disabled={isLoading}
                             />
-                            <span>{permission}</span>
+                            <span>{formatPermissionName(permission)}</span>
                           </label>
                         {/each}
                       </div>
@@ -436,7 +509,7 @@
           </div>
         {/if}
 
-        {#if currentUser && canManageRoles}
+        {#if currentUser && canAssignRolesToUsers}
           <div class="user-role-section">
             <h3>Assign Role to Yourself</h3>
             <p class="user-info">Current user: <strong>{currentUser.userName}</strong></p>
@@ -471,7 +544,7 @@
                 class="role-select"
               >
                 <option value="">Select a role...</option>
-                {#each roles.filter(role => !currentUser.roles?.includes(role.name)) as role (role.id)}
+                {#each roles.filter(role => !currentUser?.roles?.includes(role.name)) as role (role.id)}
                   <option value={role.name}>{role.name}</option>
                 {/each}
               </select>
@@ -491,17 +564,29 @@
         {/if}
 
         <div class="footer-section">
-          <button
-            onclick={completeSetup}
-            disabled={isLoading}
-            class="complete-button"
-          >
-            {#if isLoading}
-              <span class="loading-spinner"></span>
-            {:else}
+          {#if !hasRoleManagePermission}
+            <div class="error-banner">
+              <p>RoleManage権限がありません。設定を完了するにはRoleManage権限が必要です。</p>
+            </div>
+            <button
+              disabled
+              class="complete-button disabled"
+            >
               Complete Setup
-            {/if}
-          </button>
+            </button>
+          {:else}
+            <button
+              onclick={completeSetup}
+              disabled={isLoading}
+              class="complete-button"
+            >
+              {#if isLoading}
+                <span class="loading-spinner"></span>
+              {:else}
+                Complete Setup
+              {/if}
+            </button>
+          {/if}
         </div>
       </div>
 
@@ -765,6 +850,76 @@
   }
 
   .permission-checkbox input:disabled {
+    cursor: not-allowed;
+  }
+
+  .user-creation-section {
+    margin-bottom: 24px;
+    padding: 16px;
+    background-color: rgba(74, 144, 226, 0.1);
+    border: 1px solid rgba(74, 144, 226, 0.3);
+    border-radius: var(--border-radius-lg);
+  }
+
+  .user-creation-section h3 {
+    font-size: var(--font-size-base);
+    font-weight: 600;
+    color: var(--color-text);
+    margin: 0 0 8px 0;
+  }
+
+  .user-creation-info {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-light);
+    margin: 0 0 12px 0;
+  }
+
+  .user-creation-form {
+    display: flex;
+    gap: 12px;
+  }
+
+  .email-input {
+    flex: 1;
+    padding: 10px 12px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--border-radius-lg);
+    background-color: var(--color-background);
+    color: var(--color-text);
+    font-size: var(--font-size-sm);
+    font-family: inherit;
+  }
+
+  .email-input:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.1);
+  }
+
+  .email-input:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  .create-user-button {
+    padding: 10px 20px;
+    background-color: var(--color-primary);
+    color: var(--color-text-inverse);
+    border-radius: var(--border-radius-lg);
+    border: none;
+    cursor: pointer;
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+  }
+
+  .create-user-button:hover:not(:disabled) {
+    background-color: var(--color-primary-hover);
+  }
+
+  .create-user-button:disabled {
+    opacity: 0.6;
     cursor: not-allowed;
   }
 

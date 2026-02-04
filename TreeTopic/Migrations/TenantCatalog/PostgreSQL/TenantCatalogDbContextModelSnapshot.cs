@@ -8,7 +8,7 @@ using TreeTopic;
 
 #nullable disable
 
-namespace TreeTopic.Migrations.TenantCatalog
+namespace TreeTopic.Migrations.TenantCatalog.PostgreSQL
 {
     [DbContext(typeof(TenantCatalogDbContext))]
     partial class TenantCatalogDbContextModelSnapshot : ModelSnapshot

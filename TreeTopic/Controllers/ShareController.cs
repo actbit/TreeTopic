@@ -218,7 +218,7 @@ public class ShareController : ControllerBase
     }
 
     [HttpGet("room/{roomId}")]
-    [RequireAny(RoomPermissions.Join)]
+    [RequireAny(RoomPermissions.Join, TenantPermissions.RoomRead)]
     public async Task<IActionResult> GetByRoom(
         [FromRoute] MaskedGuid roomId,
         [FromQuery] MaskedGuid? topicId,
@@ -288,7 +288,7 @@ public class ShareController : ControllerBase
 
     [HttpPost("room/{roomId}")]
     [Consumes("multipart/form-data")]
-    [RequireAny(RoomPermissions.Write)]
+    [RequireAny(RoomPermissions.Write, TenantPermissions.RoomManage)]
     public async Task<IActionResult> UploadToRoom(
         [FromRoute] MaskedGuid roomId,
         [FromForm] IFormFile file,
@@ -455,7 +455,7 @@ public class ShareController : ControllerBase
     }
 
     [HttpPost("room/{roomId}/brainstorm")]
-    [RequireAny(RoomPermissions.Write)]
+    [RequireAny(RoomPermissions.Write, TenantPermissions.RoomManage)]
     public async Task<IActionResult> ShareBrainstorm(
         [FromRoute] MaskedGuid roomId,
         [FromBody] CreateBrainstormShareRequest request,
@@ -484,7 +484,7 @@ public class ShareController : ControllerBase
     }
 
     [HttpDelete("room/{roomId}/{shareId}")]
-    [RequireAny(RoomPermissions.Delete)]
+    [RequireAny(RoomPermissions.Delete, TenantPermissions.RoomManage)]
     public async Task<IActionResult> DeleteShare(
         [FromRoute] MaskedGuid roomId,
         [FromRoute] MaskedGuid shareId,

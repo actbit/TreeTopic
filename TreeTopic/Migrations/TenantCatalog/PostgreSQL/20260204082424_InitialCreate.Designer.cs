@@ -9,10 +9,10 @@ using TreeTopic;
 
 #nullable disable
 
-namespace TreeTopic.Migrations.TenantCatalog
+namespace TreeTopic.Migrations.TenantCatalog.PostgreSQL
 {
     [DbContext(typeof(TenantCatalogDbContext))]
-    [Migration("20260204000438_InitialCreate")]
+    [Migration("20260204082424_InitialCreate")]
     partial class InitialCreate
     {
         /// <inheritdoc />

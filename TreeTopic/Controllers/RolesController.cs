@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using TreeTopic.Dtos;
 using TreeTopic.Filters;
 using TreeTopic.Permissions;
@@ -20,15 +21,27 @@ public class RolesController : ControllerBase
     }
 
     [HttpGet]
-    [RequireAny(IdentityPermissions.RoleRead)]
-    public ActionResult<List<RoleDto>> List()
+    [Authorize]
+    public async Task<ActionResult<List<RoleDto>>> List()
     {
-        var roles = _roleManager.Roles.ToList();
-        return Ok(roles.Select(r => new RoleDto { Id = r.Id, Name = r.Name }).ToList());
+        // Allow access with either RoleRead OR UserManagement permission
+        var hasPermission = User.HasClaim(c =>
+            c.Type == "permission" && (
+                c.Value == TenantPermissions.RoleRead ||
+                c.Value == TenantPermissions.UserManagement));
+
+        if (!hasPermission)
+            return Forbid();
+
+        var roles = await _roleManager.Roles
+            .Include(r => r.Authorities)
+            .ToListAsync();
+
+        return Ok(roles.Select(MapRoleToDto).ToList());
     }
 
     [HttpPost]
-    [RequireAny(IdentityPermissions.RoleManage)]
+    [RequireAny(TenantPermissions.RoleManage)]
     public async Task<ActionResult<RoleDto>> Create([FromBody] RoleCreationRequest request)
     {
         if (!ModelState.IsValid)
@@ -49,13 +62,31 @@ public class RolesController : ControllerBase
             return ValidationProblem(new ValidationProblemDetails(result.Errors.ToDictionary(e => e.Code, e => new[] { e.Description })));
         }
 
-        return CreatedAtAction(nameof(List), new { id = role.Id }, new RoleDto { Id = role.Id, Name = role.Name });
+        return CreatedAtAction(nameof(List), new { id = role.Id }, MapRoleToDto(role));
     }
 
     [HttpDelete("{roleName}")]
-    [RequireAny(IdentityPermissions.RoleManage)]
+    [RequireAny(TenantPermissions.RoleManage)]
     public async Task<IActionResult> Delete(string roleName)
     {
+        // OIDCロール同期が有効な場合はロール管理を禁止
+        var tenant = HttpContext.GetRouteValue("tenant")?.ToString();
+        if (!string.IsNullOrEmpty(tenant))
+        {
+            var tenantInfo = await _tenantDb.Tenants
+                .Include(t => t.Detail)
+                .FirstOrDefaultAsync(t => t.Identifier == tenant);
+
+            if (!tenantInfo?.Detail.CanManageRoles() ?? false)
+            {
+                return BadRequest(new
+                {
+                    message = "Role management is not allowed when OIDC role claim is configured. " +
+                              "Roles are automatically managed by the OIDC provider."
+                });
+            }
+        }
+
         if (string.IsNullOrWhiteSpace(roleName))
         {
             return BadRequest(new { message = "Role name cannot be empty" });
@@ -74,5 +105,15 @@ public class RolesController : ControllerBase
         }
 
         return NoContent();
+    }
+
+    private static RoleDto MapRoleToDto(ApplicationRole role)
+    {
+        return new RoleDto
+        {
+            Id = role.Id,
+            Name = role.Name,
+            Permissions = role.Authorities?.Select(a => a.Name).ToList()
+        };
     }
 }

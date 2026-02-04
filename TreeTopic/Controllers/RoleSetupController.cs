@@ -85,31 +85,16 @@ public class RoleSetupController : ControllerBase
     }
 
     [HttpPost("permissions/add")]
-    public async Task<ActionResult<PermissionDto>> AddPermission(string tenant)
+    public async Task<ActionResult<PermissionDto>> AddPermission(string tenant, [FromBody] SetupPermissionRequest request)
     {
-        // 属性で検証済みのSetupTokenを取得
-        var setupToken = HttpContext.Items["ValidatedSetupToken"]?.ToString();
-
-        // ロール名とパーミッション名をボディから取得
-        using var reader = new StreamReader(HttpContext.Request.Body);
-        var body = await reader.ReadToEndAsync();
-        var json = System.Text.Json.JsonDocument.Parse(body);
-
-        var roleName = json.RootElement.GetProperty("roleName").GetString();
-        var permissionName = json.RootElement.GetProperty("permissionName").GetString();
-
-        if (string.IsNullOrEmpty(roleName) || string.IsNullOrEmpty(permissionName))
+        if (!ModelState.IsValid)
         {
-            return BadRequest(new { message = "roleName and permissionName are required" });
+            return ValidationProblem(ModelState);
         }
 
-        // SetupToken を使ってリクエストを作成
-        var request = new SetupPermissionRequest
-        {
-            SetupToken = setupToken!,
-            RoleName = roleName,
-            PermissionName = permissionName
-        };
+        // 属性で検証済みのSetupTokenを取得
+        var setupToken = HttpContext.Items["ValidatedSetupToken"]?.ToString();
+        request.SetupToken = setupToken!;
 
         var result = await _roleManagementService.AddPermissionToRoleAsync(tenant, request);
 
@@ -136,27 +121,16 @@ public class RoleSetupController : ControllerBase
     }
 
     [HttpPost("permissions/delete")]
-    public async Task<IActionResult> DeletePermission(string tenant, [FromBody] dynamic requestData)
+    public async Task<IActionResult> DeletePermission(string tenant, [FromBody] SetupPermissionDeletionRequest request)
     {
-        // 属性で検証済みのSetupTokenを取得
-        var setupToken = HttpContext.Items["ValidatedSetupToken"]?.ToString();
-
-        // ロール名とパーミッション名をボディから取得
-        var roleName = (string?)requestData.roleName;
-        var permissionName = (string?)requestData.permissionName;
-
-        if (string.IsNullOrEmpty(roleName) || string.IsNullOrEmpty(permissionName))
+        if (!ModelState.IsValid)
         {
-            return BadRequest(new { message = "roleName and permissionName are required" });
+            return ValidationProblem(ModelState);
         }
 
-        // SetupToken を使ってリクエストを作成
-        var request = new SetupPermissionDeletionRequest
-        {
-            SetupToken = setupToken!,
-            RoleName = roleName,
-            PermissionName = permissionName
-        };
+        // 属性で検証済みのSetupTokenを取得
+        var setupToken = HttpContext.Items["ValidatedSetupToken"]?.ToString();
+        request.SetupToken = setupToken!;
 
         var result = await _roleManagementService.DeletePermissionFromRoleAsync(tenant, request);
 
@@ -169,29 +143,16 @@ public class RoleSetupController : ControllerBase
     }
 
     [HttpPost("default")]
-    public async Task<ActionResult<RoleSetupCompletionResponse>> SetDefaultRole(string tenant, [FromBody] dynamic requestData)
+    public async Task<ActionResult<RoleSetupCompletionResponse>> SetDefaultRole(string tenant, [FromBody] SetupDefaultRoleRequest request)
     {
-        // 属性で検証済みのSetupTokenを取得
-        var setupToken = HttpContext.Items["ValidatedSetupToken"]?.ToString();
-
-        // データをボディから取得
-        var defaultRoleName = (string?)requestData.defaultRoleName;
-        var description = (string?)requestData.description;
-        var defaultPermissions = (List<string>?)requestData.defaultPermissions;
-
-        if (string.IsNullOrEmpty(defaultRoleName))
+        if (!ModelState.IsValid)
         {
-            return BadRequest(new { message = "defaultRoleName is required" });
+            return ValidationProblem(ModelState);
         }
 
-        // SetupToken を使ってリクエストを作成
-        var request = new SetupDefaultRoleRequest
-        {
-            SetupToken = setupToken!,
-            DefaultRoleName = defaultRoleName,
-            Description = description,
-            DefaultPermissions = defaultPermissions ?? new List<string>()
-        };
+        // 属性で検証済みのSetupTokenを取得
+        var setupToken = HttpContext.Items["ValidatedSetupToken"]?.ToString();
+        request.SetupToken = setupToken!;
 
         var result = await _roleManagementService.SetupDefaultRoleAsync(tenant, request);
 

@@ -1,17 +1,17 @@
 <script lang="ts">
   import Modal from '../common/Modal.svelte';
-  import { onMount } from 'svelte';
-  import { api } from '$lib/api/client';
+  import { api, tenantRolePermissionsApi, permissionsApi } from '$lib/api';
+  import type { AvailablePermissions, Role } from '$lib/types';
   import { ui, activeModals } from '$lib/stores/ui';
   import { page } from '$app/stores';
 
-  const modalId = 'identity-role-permission';
+  const modalId = 'tenant-role-permission';
   let modal = $derived.by(() => $activeModals.find((m) => m.id === modalId) ?? null);
   let isOpen = $derived.by(() => modal !== null);
   let tenant = $derived.by(() => modal?.data?.tenant ?? $page.params.tenant ?? '');
 
-  let roles = $state<any[]>([]);
-  let availablePermissions = $state<any[]>([]);
+  let roles = $state<Role[]>([]);
+  let availablePermissions = $state<AvailablePermissions>({ tenant: [], topic: [], room: [] });
   let isLoading = $state(true);
   let error = $state<string | null>(null);
   let showCreateRole = $state(false);
@@ -31,13 +31,13 @@
       isLoading = true;
 
       // Fetch roles
-      const rolesData = await api.get<any[]>(`/${tenant}/api/roles`);
+      const rolesData = await api.get<Role[]>(`/${tenant}/api/roles`);
       roles = rolesData;
 
       // Fetch permissions for each role
       const permPromises = roles.map(async (role) => {
         try {
-          const perms = await api.get<any>(`/${tenant}/api/identityroles/${role.name}/permissions`);
+          const perms = await tenantRolePermissionsApi.getRolePermissions(tenant, role.name);
           return { roleName: role.name, permissions: perms.permissions || [] };
         } catch {
           return { roleName: role.name, permissions: [] };
@@ -51,10 +51,7 @@
       });
 
       // Fetch available permissions
-      availablePermissions = await api.get<any>(`/${tenant}/api/identityroles/${roles[0]?.name || '_'}/permissions/available`);
-      if (!Array.isArray(availablePermissions)) {
-        availablePermissions = [];
-      }
+      availablePermissions = await permissionsApi.getAvailablePermissions(tenant);
 
       error = null;
     } catch (err: any) {
@@ -71,11 +68,11 @@
 
       if (hasPermission) {
         // Remove permission
-        await api.delete(`/${tenant}/api/identityroles/${roleName}/permissions/${encodeURIComponent(permissionName)}`);
+        await tenantRolePermissionsApi.removePermission(tenant, roleName, permissionName);
         rolePermissions[roleName] = currentPerms.filter((p) => p !== permissionName);
       } else {
         // Add permission
-        await api.post(`/${tenant}/api/identityroles/${roleName}/permissions`, { permissionName });
+        await tenantRolePermissionsApi.addPermission(tenant, roleName, { permissionName });
         rolePermissions[roleName] = [...currentPerms, permissionName];
       }
     } catch (err: any) {
@@ -118,7 +115,7 @@
     return name
       .split('.')
       .map((part) => {
-        if (part === 'identity') return '';
+        if (part === 'tenant') return '';
         return part.charAt(0).toUpperCase() + part.slice(1);
       })
       .filter(p => p !== '')
@@ -166,9 +163,9 @@
             <h4 class="font-medium text-text mb-3">Create New Role</h4>
             <div class="space-y-3">
               <div>
-                <label for="identity-role-name-input" class="block text-sm font-medium text-text mb-1">Role Name</label>
+                <label for="tenant-role-name-input" class="block text-sm font-medium text-text mb-1">Role Name</label>
                 <input
-                  id="identity-role-name-input"
+                  id="tenant-role-name-input"
                   type="text"
                   bind:value={newRoleName}
                   placeholder="e.g. Administrators, Moderators"
@@ -217,9 +214,9 @@
                 </div>
 
                 <div class="p-4">
-                  <h4 class="text-sm font-medium text-text mb-3">Identity Permissions</h4>
+                  <h4 class="text-sm font-medium text-text mb-3">Tenant Permissions</h4>
                   <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
-                    {#each availablePermissions as perm}
+                    {#each (availablePermissions.tenant || []) as perm}
                       {@const hasPerm = hasPermission(role.name, perm.name)}
                       <button
                         onclick={() => togglePermission(role.name, perm.name)}
@@ -236,7 +233,7 @@
                             </svg>
                           {/if}
                         </span>
-                        <span class="text-xs">{perm.label}</span>
+                        <span class="text-xs">{formatPermissionName(perm.name)}</span>
                       </button>
                     {/each}
                   </div>

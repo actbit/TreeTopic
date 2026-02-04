@@ -33,7 +33,7 @@ public class RoomUserPermissionsController : ControllerBase
     /// Room権限一覧を取得
     /// </summary>
     [HttpGet("available")]
-    [RequireAny(IdentityPermissions.PermissionRead)]
+    [RequireAny(TenantPermissions.PermissionRead)]
     public IActionResult GetAvailablePermissions()
     {
         var permissions = Permissions.PermissionHelper.GetRoomPermissions();
@@ -49,7 +49,7 @@ public class RoomUserPermissionsController : ControllerBase
     /// RoomUserに割り当てられている権限一覧を取得
     /// </summary>
     [HttpGet]
-    [RequireAny(RoomPermissions.ManageUsers)]
+    [RequireAny(RoomPermissions.ManageUsers, TenantPermissions.RoomManage)]
     public async Task<IActionResult> GetUserPermissions(
         [FromRoute] MaskedGuid roomUserId,
         CancellationToken cancellationToken)
@@ -68,7 +68,7 @@ public class RoomUserPermissionsController : ControllerBase
     /// RoomUserに権限を割り当て
     /// </summary>
     [HttpPost]
-    [RequireAny(RoomPermissions.ManageUsers)]
+    [RequireAny(RoomPermissions.ManageUsers, TenantPermissions.RoomManage)]
     public async Task<IActionResult> AddPermissionToUser(
         [FromRoute] MaskedGuid roomUserId,
         [FromBody] AddRoomUserPermissionRequest request,
@@ -110,7 +110,7 @@ public class RoomUserPermissionsController : ControllerBase
     /// RoomUserから権限を削除
     /// </summary>
     [HttpDelete("{permissionName}")]
-    [RequireAny(RoomPermissions.ManageUsers)]
+    [RequireAny(RoomPermissions.ManageUsers, TenantPermissions.RoomManage)]
     public async Task<IActionResult> RemovePermissionFromUser(
         [FromRoute] MaskedGuid roomUserId,
         [FromRoute] string permissionName,
@@ -138,7 +138,7 @@ public class RoomUserPermissionsController : ControllerBase
     /// RoomUserのすべての権限を削除
     /// </summary>
     [HttpDelete]
-    [RequireAny(RoomPermissions.ManageUsers)]
+    [RequireAny(RoomPermissions.ManageUsers, TenantPermissions.RoomManage)]
     public async Task<IActionResult> RemoveAllPermissionsFromUser(
         [FromRoute] MaskedGuid roomUserId,
         CancellationToken cancellationToken)

@@ -580,6 +580,12 @@ export async function getUsersWithSetupToken(tenant: string, setupToken: string)
   });
 }
 
+export async function createUserWithSetupToken(tenant: string, email: string, setupToken: string) {
+  return api.post(`/${tenant}/api/setup/defaultuser`, { email }, {
+    headers: { 'Authorization': `Bearer ${setupToken}` }
+  });
+}
+
 export async function assignUserRoleWithSetupToken(
   tenant: string,
   userId: string,
@@ -587,7 +593,7 @@ export async function assignUserRoleWithSetupToken(
   setupToken: string
 ) {
   return api.post(
-    `/${tenant}/api/users/${userId}/roles`,
+    `/${tenant}/api/setup/users/${userId}/roles`,
     { roleName },
     { headers: { 'Authorization': `Bearer ${setupToken}` } }
   );
@@ -599,7 +605,7 @@ export async function removeUserRoleWithSetupToken(
   roleName: string,
   setupToken: string
 ) {
-  const url = apiClientConfig.baseUrl ? `${apiClientConfig.baseUrl}/${tenant}/api/users/${userId}/roles` : `/${tenant}/api/users/${userId}/roles`;
+  const url = apiClientConfig.baseUrl ? `${apiClientConfig.baseUrl}/${tenant}/api/setup/users/${userId}/roles` : `/${tenant}/api/setup/users/${userId}/roles`;
 
   const response = await fetch(url, {
     method: 'DELETE',
@@ -619,6 +625,43 @@ export async function invalidateSetupToken(tenant: string, setupToken: string) {
   return api.post(`/${tenant}/api/setup/token/invalidate`, {}, {
     headers: { 'Authorization': `Bearer ${setupToken}` }
   });
+}
+
+export async function checkUserPermissions(tenant: string) {
+  return api.get(`/${tenant}/api/auth/me/permissions`);
+}
+
+// User management functions
+export async function createUser(tenant: string, email: string) {
+  return api.post(`/${tenant}/api/users`, { email });
+}
+
+export async function banUser(tenant: string, userId: string, reason: string) {
+  return api.post(`/${tenant}/api/users/${userId}/ban`, { reason });
+}
+
+export async function unbanUser(tenant: string, userId: string) {
+  return api.del(`/${tenant}/api/users/${userId}/ban`);
+}
+
+export async function assignUserRole(tenant: string, userId: string, roleName: string) {
+  return api.post(`/${tenant}/api/users/${userId}/roles`, { roleName });
+}
+
+export async function removeUserRole(tenant: string, userId: string, roleName: string) {
+  const url = apiClientConfig.baseUrl ? `${apiClientConfig.baseUrl}/${tenant}/api/users/${userId}/roles` : `/${tenant}/api/users/${userId}/roles`;
+
+  const response = await fetch(url, {
+    method: 'DELETE',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json'
+    },
+    body: JSON.stringify({ roleName }),
+    credentials: 'include',
+  });
+
+  return handleResponse(response);
 }
 
 export default api;
