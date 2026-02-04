@@ -6,7 +6,6 @@ using TreeTopic.Dtos;
 using TreeTopic.Filters;
 using TreeTopic.Permissions;
 using TreeTopic.Models;
-using TreeTopic.Data;
 
 namespace TreeTopic.Controllers;
 
@@ -15,12 +14,10 @@ namespace TreeTopic.Controllers;
 public class RolesController : ControllerBase
 {
     private readonly RoleManager<ApplicationRole> _roleManager;
-    private readonly TenantCatalogDbContext _tenantDb;
 
-    public RolesController(RoleManager<ApplicationRole> roleManager, TenantCatalogDbContext tenantDb)
+    public RolesController(RoleManager<ApplicationRole> roleManager)
     {
         _roleManager = roleManager;
-        _tenantDb = tenantDb;
     }
 
     [HttpGet]
@@ -72,24 +69,6 @@ public class RolesController : ControllerBase
     [RequireAny(TenantPermissions.RoleManage)]
     public async Task<IActionResult> Delete(string roleName)
     {
-        // OIDCロール同期が有効な場合はロール管理を禁止
-        var tenant = HttpContext.GetRouteValue("tenant")?.ToString();
-        if (!string.IsNullOrEmpty(tenant))
-        {
-            var tenantInfo = await _tenantDb.Tenants
-                .Include(t => t.Detail)
-                .FirstOrDefaultAsync(t => t.Identifier == tenant);
-
-            if (!tenantInfo?.Detail.CanAssignRolesToUsers() ?? false)
-            {
-                return BadRequest(new
-                {
-                    message = "Role management is not allowed when OIDC role claim is configured. " +
-                              "Roles are automatically managed by the OIDC provider."
-                });
-            }
-        }
-
         if (string.IsNullOrWhiteSpace(roleName))
         {
             return BadRequest(new { message = "Role name cannot be empty" });

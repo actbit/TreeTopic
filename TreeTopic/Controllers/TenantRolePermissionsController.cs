@@ -6,7 +6,6 @@ using TreeTopic.Filters;
 using TreeTopic.Permissions;
 using TreeTopic.Models;
 using TreeTopic.Services;
-using TreeTopic.Data;
 
 namespace TreeTopic.Controllers;
 
@@ -21,16 +20,13 @@ public class TenantRolePermissionsController : ControllerBase
 {
     private readonly ApplicationDbContext _db;
     private readonly ILogger<TenantRolePermissionsController> _logger;
-    private readonly TenantCatalogDbContext _tenantDb;
 
     public TenantRolePermissionsController(
         ApplicationDbContext db,
-        ILogger<TenantRolePermissionsController> _logger,
-        TenantCatalogDbContext tenantDb)
+        ILogger<TenantRolePermissionsController> _logger)
     {
         _db = db;
         this._logger = _logger;
-        _tenantDb = tenantDb;
     }
 
     /// <summary>
@@ -86,24 +82,6 @@ public class TenantRolePermissionsController : ControllerBase
         [FromBody] AddTenantPermissionRequest request,
         CancellationToken cancellationToken)
     {
-        // OIDCロール同期が有効な場合はロール管理を禁止
-        var tenant = HttpContext.GetRouteValue("tenant")?.ToString();
-        if (!string.IsNullOrEmpty(tenant))
-        {
-            var tenantInfo = await _tenantDb.Tenants
-                .Include(t => t.Detail)
-                .FirstOrDefaultAsync(t => t.Identifier == tenant, cancellationToken);
-
-            if (!tenantInfo?.Detail.CanAssignRolesToUsers() ?? false)
-            {
-                return BadRequest(new
-                {
-                    message = "Role management is not allowed when OIDC role claim is configured. " +
-                              "Roles are automatically managed by the OIDC provider."
-                });
-            }
-        }
-
         // ロールの存在確認
         var role = await _db.Roles
             .FirstOrDefaultAsync(r => r.Name == roleName, cancellationToken);
@@ -145,24 +123,6 @@ public class TenantRolePermissionsController : ControllerBase
         [FromRoute] string permissionName,
         CancellationToken cancellationToken)
     {
-        // OIDCロール同期が有効な場合はロール管理を禁止
-        var tenant = HttpContext.GetRouteValue("tenant")?.ToString();
-        if (!string.IsNullOrEmpty(tenant))
-        {
-            var tenantInfo = await _tenantDb.Tenants
-                .Include(t => t.Detail)
-                .FirstOrDefaultAsync(t => t.Identifier == tenant, cancellationToken);
-
-            if (!tenantInfo?.Detail.CanAssignRolesToUsers() ?? false)
-            {
-                return BadRequest(new
-                {
-                    message = "Role management is not allowed when OIDC role claim is configured. " +
-                              "Roles are automatically managed by the OIDC provider."
-                });
-            }
-        }
-
         // ロールの存在確認
         var role = await _db.Roles
             .FirstOrDefaultAsync(r => r.Name == roleName, cancellationToken);

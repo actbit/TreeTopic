@@ -574,12 +574,6 @@ export async function getTenantDetail(tenant: string) {
   return api.get(`/${tenant}/api/tenant/detail`);
 }
 
-export async function getUsersWithSetupToken(tenant: string, setupToken: string) {
-  return api.get(`/${tenant}/api/users`, {
-    headers: { 'Authorization': `Bearer ${setupToken}` }
-  });
-}
-
 export async function createUserWithSetupToken(tenant: string, email: string, setupToken: string) {
   return api.post(`/${tenant}/api/setup/defaultuser`, { email }, {
     headers: { 'Authorization': `Bearer ${setupToken}` }
@@ -625,6 +619,10 @@ export async function invalidateSetupToken(tenant: string, setupToken: string) {
   return api.post(`/${tenant}/api/setup/token/invalidate`, {}, {
     headers: { 'Authorization': `Bearer ${setupToken}` }
   });
+}
+
+export async function getCurrentUser(tenant: string) {
+  return api.get(`/${tenant}/auth/me`);
 }
 
 export async function checkUserPermissions(tenant: string) {

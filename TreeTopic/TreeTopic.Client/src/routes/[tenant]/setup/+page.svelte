@@ -3,7 +3,7 @@
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
-  import { api, createRoleWithSetupToken, getRolesWithSetupToken, getTenantDetail, invalidateSetupToken, getUsersWithSetupToken, assignUserRoleWithSetupToken, removeUserRoleWithSetupToken, createUserWithSetupToken } from '$lib/api/client';
+  import { api, createRoleWithSetupToken, getRolesWithSetupToken, getTenantDetail, invalidateSetupToken, getCurrentUser, assignUserRoleWithSetupToken, removeUserRoleWithSetupToken, createUserWithSetupToken } from '$lib/api/client';
 
   // 型定義
   interface TenantDetail {
@@ -169,14 +169,8 @@
 
   async function loadCurrentUser() {
     try {
-      if (!setupToken) {
-        currentUser = null;
-        return;
-      }
-      const response = await getUsersWithSetupToken(tenant!, setupToken) as User[];
-      if (response && response.length > 0) {
-        currentUser = response[0];
-      }
+      const response = await getCurrentUser(tenant!) as User;
+      currentUser = response;
     } catch (err) {
       console.error('Error loading current user:', err);
       currentUser = null;
