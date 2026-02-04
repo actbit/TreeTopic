@@ -35,7 +35,7 @@ public class TenantController : ControllerBase
     /// <summary>
     /// 新しいテナントを登録（認可不要）
     /// </summary>
-    [HttpPost("register")]
+    [HttpPost("/api/tenants/register")]
     [AllowAnonymous]
     [ProducesResponseType(StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -198,9 +198,40 @@ public class TenantController : ControllerBase
     }
 
     /// <summary>
+    /// テナント詳細情報を取得（setupToken認可もサポート）
+    /// </summary>
+    [HttpGet("detail")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    public async Task<ActionResult<TenantDetailDto>> GetTenantDetail([FromRoute] string tenant)
+    {
+        try
+        {
+            var tenantInfo = await _tenantService.GetTenantByIdentifierAsync(tenant);
+            if (tenantInfo == null)
+            {
+                return NotFound(new { message = $"Tenant '{tenant}' not found" });
+            }
+
+            return Ok(new TenantDetailDto
+            {
+                Identifier = tenantInfo.Identifier,
+                Name = tenantInfo.Name,
+                RoleClaimName = tenantInfo.Detail?.RoleClaimName
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting tenant detail: {Identifier}", tenant);
+            return StatusCode(StatusCodes.Status500InternalServerError);
+        }
+    }
+
+    /// <summary>
     /// テナントを削除
     /// </summary>
-    [HttpDelete("{tenantId}")]
+    [HttpDelete]
     [Authorize]
     [RequireAny(IdentityPermissions.TenantManage)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
@@ -208,21 +239,27 @@ public class TenantController : ControllerBase
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
-    public async Task<IActionResult> DeleteTenant([FromRoute] MaskedGuid tenantId)
+    public async Task<IActionResult> DeleteTenant()
     {
         try
         {
-            await _tenantService.DeleteTenantAsync(tenantId);
+            var tenant = HttpContext.GetMultiTenantContext<ApplicationTenantInfo>()?.TenantInfo;
+            if (tenant == null)
+            {
+                return NotFound(new { message = "Tenant not found" });
+            }
+
+            await _tenantService.DeleteTenantAsync(tenant.Id);
             return NoContent();
         }
         catch (InvalidOperationException ex)
         {
-            _logger.LogWarning(ex, "Tenant not found: {TenantId}", tenantId);
+            _logger.LogWarning(ex, "Tenant not found");
             return NotFound(new { message = ex.Message });
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error deleting tenant: {TenantId}", tenantId);
+            _logger.LogError(ex, "Error deleting tenant");
             return StatusCode(StatusCodes.Status500InternalServerError);
         }
     }
@@ -265,6 +302,12 @@ public class PublicTenantInfo
     public string? Name { get; set; }
 }
 
-
-
-
+/// <summary>
+/// テナント詳細情報DTO
+/// </summary>
+public class TenantDetailDto
+{
+    public string? Identifier { get; set; }
+    public string? Name { get; set; }
+    public string? RoleClaimName { get; set; }
+}

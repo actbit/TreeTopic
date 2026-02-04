@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 using TreeTopic.Common;
 using TreeTopic.Common.Helpers;
 using TreeTopic.Dtos;
@@ -20,17 +21,24 @@ public class RoleManagementService : BaseService
         _setupTokenValidator = setupTokenValidator;
     }
 
+    public async Task<Result<IEnumerable<ApplicationRole>>> GetAllRolesAsync(string tenant)
+    {
+        return await ExecuteAsync(async () =>
+        {
+            // すべてのロールとそのパーミッションを取得
+            var allRoles = await _roleManager.Roles
+                .Include(r => r.Authorities)
+                .ToListAsync();
+
+            return Result<IEnumerable<ApplicationRole>>.Success(allRoles);
+        }, nameof(GetAllRolesAsync));
+    }
+
     public async Task<Result<ApplicationRole>> CreateRoleAsync(
         string tenant, SetupRoleCreationRequest request)
     {
         return await ExecuteAsync(async () =>
         {
-            // SetupToken の検証
-            if (!await _setupTokenValidator.ValidateSetupTokenAsync(tenant, request.SetupToken))
-            {
-                return Result<ApplicationRole>.Unauthorized("Invalid or expired setup token");
-            }
-
             // Validate role name is not empty
             var nameValidation = ValidationHelper.ValidateRequired(request.Name, "Role name");
             if (nameValidation.IsFailure)
@@ -64,12 +72,6 @@ public class RoleManagementService : BaseService
     {
         return await ExecuteAsync(async () =>
         {
-            // SetupToken の検証
-            if (!await _setupTokenValidator.ValidateSetupTokenAsync(tenant, request.SetupToken))
-            {
-                return Result.Unauthorized("Invalid or expired setup token");
-            }
-
             // ロール名を検証
             var roleNameValidation = ValidationHelper.ValidateRequired(request.RoleName, "Role name");
             if (roleNameValidation.IsFailure)
@@ -101,12 +103,6 @@ public class RoleManagementService : BaseService
     {
         return await ExecuteAsync(async () =>
         {
-            // SetupToken の検証
-            if (!await _setupTokenValidator.ValidateSetupTokenAsync(tenant, request.SetupToken))
-            {
-                return Result<Permission>.Unauthorized("Invalid or expired setup token");
-            }
-
             // ロール名を検証
             var roleNameValidation = ValidationHelper.ValidateRequired(request.RoleName, "Role name");
             if (roleNameValidation.IsFailure)
@@ -164,12 +160,6 @@ public class RoleManagementService : BaseService
     {
         return await ExecuteAsync(async () =>
         {
-            // SetupToken の検証
-            if (!await _setupTokenValidator.ValidateSetupTokenAsync(tenant, request.SetupToken))
-            {
-                return Result.Unauthorized("Invalid or expired setup token");
-            }
-
             // ロール名を検証
             var roleNameValidation = ValidationHelper.ValidateRequired(request.RoleName, "Role name");
             if (roleNameValidation.IsFailure)
@@ -214,12 +204,6 @@ public class RoleManagementService : BaseService
     {
         return await ExecuteAsync(async () =>
         {
-            // SetupToken の検証
-            if (!await _setupTokenValidator.ValidateSetupTokenAsync(tenant, request.SetupToken))
-            {
-                return Result<RoleSetupCompletionResponse>.Unauthorized("Invalid or expired setup token");
-            }
-
             // Validate role name is not empty
             var nameValidation = ValidationHelper.ValidateRequired(request.DefaultRoleName, "Default role name");
             if (nameValidation.IsFailure)

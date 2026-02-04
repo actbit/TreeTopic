@@ -206,6 +206,15 @@ namespace TreeTopic.Migrations.Application.MySQL
                     b.Property<int>("AccessFailedCount")
                         .HasColumnType("int");
 
+                    b.Property<string>("BanReason")
+                        .HasColumnType("longtext");
+
+                    b.Property<DateTime?>("BannedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("BannedBy")
+                        .HasColumnType("longtext");
+
                     b.Property<string>("ConcurrencyStamp")
                         .IsConcurrencyToken()
                         .HasColumnType("longtext");
@@ -222,6 +231,9 @@ namespace TreeTopic.Migrations.Application.MySQL
 
                     b.Property<string>("IconFileName")
                         .HasColumnType("longtext");
+
+                    b.Property<bool>("IsBanned")
+                        .HasColumnType("tinyint(1)");
 
                     b.Property<bool>("LockoutEnabled")
                         .HasColumnType("tinyint(1)");
@@ -739,9 +751,6 @@ namespace TreeTopic.Migrations.Application.MySQL
                         .IsRequired()
                         .HasColumnType("BINARY(16)");
 
-                    b.Property<byte[]>("RoomRoleId")
-                        .HasColumnType("BINARY(16)");
-
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(64)
@@ -762,9 +771,44 @@ namespace TreeTopic.Migrations.Application.MySQL
 
                     b.HasIndex("RoomId");
 
+                    b.ToTable("RoomUsers");
+
+                    b.HasAnnotation("Finbuckle:MultiTenant", true);
+                });
+
+            modelBuilder.Entity("TreeTopic.Models.RoomUserRoomRole", b =>
+                {
+                    b.Property<byte[]>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("BINARY(16)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<byte[]>("RoomRoleId")
+                        .IsRequired()
+                        .HasColumnType("BINARY(16)");
+
+                    b.Property<byte[]>("RoomUserId")
+                        .IsRequired()
+                        .HasColumnType("BINARY(16)");
+
+                    b.Property<string>("TenantId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.HasKey("Id");
+
                     b.HasIndex("RoomRoleId");
 
-                    b.ToTable("RoomUsers");
+                    b.HasIndex("RoomUserId", "RoomRoleId")
+                        .IsUnique();
+
+                    b.ToTable("RoomUserRoomRoles");
 
                     b.HasAnnotation("Finbuckle:MultiTenant", true);
                 });
@@ -1272,16 +1316,28 @@ namespace TreeTopic.Migrations.Application.MySQL
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("TreeTopic.Models.RoomRole", "RoomRole")
-                        .WithMany("RoomUsers")
-                        .HasForeignKey("RoomRoleId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
                     b.Navigation("ApplicationUser");
 
                     b.Navigation("Room");
+                });
+
+            modelBuilder.Entity("TreeTopic.Models.RoomUserRoomRole", b =>
+                {
+                    b.HasOne("TreeTopic.Models.RoomRole", "RoomRole")
+                        .WithMany("RoomUserRoomRoles")
+                        .HasForeignKey("RoomRoleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("TreeTopic.Models.RoomUser", "RoomUser")
+                        .WithMany("RoomUserRoomRoles")
+                        .HasForeignKey("RoomUserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
 
                     b.Navigation("RoomRole");
+
+                    b.Navigation("RoomUser");
                 });
 
             modelBuilder.Entity("TreeTopic.Models.ShareItem", b =>
@@ -1475,7 +1531,7 @@ namespace TreeTopic.Migrations.Application.MySQL
                 {
                     b.Navigation("Permissions");
 
-                    b.Navigation("RoomUsers");
+                    b.Navigation("RoomUserRoomRoles");
 
                     b.Navigation("TopicRolePermissions");
                 });
@@ -1483,6 +1539,8 @@ namespace TreeTopic.Migrations.Application.MySQL
             modelBuilder.Entity("TreeTopic.Models.RoomUser", b =>
                 {
                     b.Navigation("RoomPermission");
+
+                    b.Navigation("RoomUserRoomRoles");
 
                     b.Navigation("TopicUserPermissions");
                 });

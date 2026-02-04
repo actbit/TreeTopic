@@ -258,23 +258,51 @@ public static class OpenIdConnectExtensions
 
         var identity = (ClaimsIdentity)ctx.Principal!.Identity!;
 
-        // Prefer the internal Identity user id as NameIdentifier to satisfy FK constraints.
+        // Get tenant info for RoleClaimName check
+        var tenantDb = ctx.HttpContext.RequestServices.GetRequiredService<TenantCatalogDbContext>();
+        var tenant = await tenantDb.Tenants
+            .Include(t => t.Detail)
+            .FirstOrDefaultAsync(t => t.Identifier == tenantId);
+        var roleClaimName = tenant?.Detail?.RoleClaimName;
+
+        // Check user existence and ban status
         var subClaim = ctx.Principal?.FindFirst("sub")?.Value
             ?? ctx.Principal?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        string? identityUserId = null;
         if (!string.IsNullOrEmpty(subClaim))
         {
             var dbContext = ctx.HttpContext.RequestServices.GetRequiredService<ApplicationDbContext>();
             var user = await dbContext.Users.FirstOrDefaultAsync(u => u.Sub == subClaim);
+
             if (user != null)
             {
-                identityUserId = user.Id.ToString();
+                // Check if user is banned
+                if (user.IsBanned)
+                {
+                    logger.LogWarning("[OnTokenValidated] User {UserId} is banned. Reason: {Reason}", user.Id, user.BanReason ?? "No reason provided");
+                    ctx.Fail($"This account has been banned. {user.BanReason ?? "Contact administrator for details."}");
+                    return;
+                }
+
+                // Update identityUserId with actual user id
                 var existingNameId = identity.FindFirst(ClaimTypes.NameIdentifier);
                 if (existingNameId != null)
                 {
                     identity.RemoveClaim(existingNameId);
                 }
-                identity.AddClaim(new Claim(ClaimTypes.NameIdentifier, identityUserId));
+                identity.AddClaim(new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()));
+            }
+            else
+            {
+                // User doesn't exist in database
+                // Check if RoleClaimName is set - if NOT set (default OIDC), user must be pre-created
+                if (string.IsNullOrEmpty(roleClaimName))
+                {
+                    // Default OIDC mode - user must be pre-created through setup
+                    logger.LogError("[OnTokenValidated] User {Sub} does not exist in database and RoleClaimName is not set for tenant {TenantId}. User must be created first.", subClaim, tenantId);
+                    ctx.Fail("User account not found. Please contact your administrator to create an account.");
+                    return;
+                }
+                // If RoleClaimName is set, user will be auto-created by UserSyncService
             }
         }
 
@@ -287,10 +315,9 @@ public static class OpenIdConnectExtensions
 
         // Reduce cookie size by keeping only essential claims.
         var minimalClaims = new List<Claim>();
-        var nameId = identityUserId != null
-            ? new Claim(ClaimTypes.NameIdentifier, identityUserId)
-            : (ctx.Principal.FindFirst(ClaimTypes.NameIdentifier)
-                ?? ctx.Principal.FindFirst("sub"));
+        var nameId = identity.FindFirst(ClaimTypes.NameIdentifier)
+            ?? ctx.Principal.FindFirst(ClaimTypes.NameIdentifier)
+            ?? ctx.Principal.FindFirst("sub");
         if (nameId != null)
         {
             minimalClaims.Add(new Claim(ClaimTypes.NameIdentifier, nameId.Value));
@@ -311,9 +338,28 @@ public static class OpenIdConnectExtensions
             minimalClaims.Add(new Claim(ClaimTypes.Name, name.Value));
         }
 
-        foreach (var role in ctx.Principal.FindAll(ClaimTypes.Role))
+        // Use the roleClaimName we already retrieved above
+        if (!string.IsNullOrEmpty(roleClaimName))
         {
-            minimalClaims.Add(new Claim(ClaimTypes.Role, role.Value));
+            // RoleClaimNameが設定されている場合：OIDCプロバイダーのロールクレームを使用
+            var roleClaims = ctx.Principal.FindAll(roleClaimName);
+            foreach (var claim in roleClaims)
+            {
+                minimalClaims.Add(new Claim(ClaimTypes.Role, claim.Value));
+            }
+
+            ctx.HttpContext.RequestServices.GetRequiredService<ILogger<Program>>()
+                .LogInformation("[OnTokenValidated] Extracted {Count} roles from OIDC claim '{ClaimName}' for tenant {TenantId}",
+                    roleClaims.Count(), roleClaimName, tenantId);
+        }
+        else
+        {
+            // RoleClaimNameが未設定の場合：Identity側のロールを使用（OIDCからのロールは無視）
+            ctx.HttpContext.RequestServices.GetRequiredService<ILogger<Program>>()
+                .LogInformation("[OnTokenValidated] RoleClaimName not set, using Identity-managed roles for tenant {TenantId}", tenantId);
+
+            // OIDCからのロールクレームを追加しない
+            // 代わりに、ユーザーのロールはIdentityのUserManager経由で管理
         }
 
         var tenantClaim = ctx.Principal.FindFirst("tenant");

@@ -7,7 +7,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace TreeTopic.Migrations.Application.PostgreSQL
 {
     /// <inheritdoc />
-    public partial class InitialCreate : Migration
+    public partial class InitialCreatePostgreSQL : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -36,6 +36,10 @@ namespace TreeTopic.Migrations.Application.PostgreSQL
                     IconFileName = table.Column<string>(type: "text", nullable: true),
                     Sub = table.Column<string>(type: "text", nullable: true),
                     TenantId = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false),
+                    IsBanned = table.Column<bool>(type: "boolean", nullable: false),
+                    BannedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    BannedBy = table.Column<string>(type: "text", nullable: true),
+                    BanReason = table.Column<string>(type: "text", nullable: true),
                     UserName = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
                     NormalizedUserName = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
                     Email = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
@@ -282,7 +286,6 @@ namespace TreeTopic.Migrations.Application.PostgreSQL
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
                     ApplicationUserId = table.Column<Guid>(type: "uuid", nullable: false),
                     RoomId = table.Column<Guid>(type: "uuid", nullable: false),
-                    RoomRoleId = table.Column<Guid>(type: "uuid", nullable: true),
                     Name = table.Column<string>(type: "text", nullable: true),
                     UseMainName = table.Column<bool>(type: "boolean", nullable: false),
                     IconFileName = table.Column<string>(type: "text", nullable: true),
@@ -300,12 +303,6 @@ namespace TreeTopic.Migrations.Application.PostgreSQL
                         principalTable: "AspNetUsers",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Restrict);
-                    table.ForeignKey(
-                        name: "FK_RoomUsers_RoomRoles_RoomRoleId",
-                        column: x => x.RoomRoleId,
-                        principalTable: "RoomRoles",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.SetNull);
                     table.ForeignKey(
                         name: "FK_RoomUsers_Rooms_RoomId",
                         column: x => x.RoomId,
@@ -330,6 +327,34 @@ namespace TreeTopic.Migrations.Application.PostgreSQL
                     table.PrimaryKey("PK_RoomPermissions", x => x.Id);
                     table.ForeignKey(
                         name: "FK_RoomPermissions_RoomUsers_RoomUserId",
+                        column: x => x.RoomUserId,
+                        principalTable: "RoomUsers",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "RoomUserRoomRoles",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    RoomUserId = table.Column<Guid>(type: "uuid", nullable: false),
+                    RoomRoleId = table.Column<Guid>(type: "uuid", nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    UpdatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    TenantId = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_RoomUserRoomRoles", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_RoomUserRoomRoles_RoomRoles_RoomRoleId",
+                        column: x => x.RoomRoleId,
+                        principalTable: "RoomRoles",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "FK_RoomUserRoomRoles_RoomUsers_RoomUserId",
                         column: x => x.RoomUserId,
                         principalTable: "RoomUsers",
                         principalColumn: "Id",
@@ -816,6 +841,17 @@ namespace TreeTopic.Migrations.Application.PostgreSQL
                 column: "CreatedUserId");
 
             migrationBuilder.CreateIndex(
+                name: "IX_RoomUserRoomRoles_RoomRoleId",
+                table: "RoomUserRoomRoles",
+                column: "RoomRoleId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_RoomUserRoomRoles_RoomUserId_RoomRoleId",
+                table: "RoomUserRoomRoles",
+                columns: new[] { "RoomUserId", "RoomRoleId" },
+                unique: true);
+
+            migrationBuilder.CreateIndex(
                 name: "IX_RoomUsers_ApplicationUserId",
                 table: "RoomUsers",
                 column: "ApplicationUserId");
@@ -824,11 +860,6 @@ namespace TreeTopic.Migrations.Application.PostgreSQL
                 name: "IX_RoomUsers_RoomId",
                 table: "RoomUsers",
                 column: "RoomId");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_RoomUsers_RoomRoleId",
-                table: "RoomUsers",
-                column: "RoomRoleId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_ShareItemFiles_FileId",
@@ -1002,6 +1033,9 @@ namespace TreeTopic.Migrations.Application.PostgreSQL
                 name: "RoomRolePermissions");
 
             migrationBuilder.DropTable(
+                name: "RoomUserRoomRoles");
+
+            migrationBuilder.DropTable(
                 name: "ShareItemFiles");
 
             migrationBuilder.DropTable(
@@ -1023,6 +1057,9 @@ namespace TreeTopic.Migrations.Application.PostgreSQL
                 name: "ShareItems");
 
             migrationBuilder.DropTable(
+                name: "RoomRoles");
+
+            migrationBuilder.DropTable(
                 name: "BrainBoards");
 
             migrationBuilder.DropTable(
@@ -1039,9 +1076,6 @@ namespace TreeTopic.Migrations.Application.PostgreSQL
 
             migrationBuilder.DropTable(
                 name: "RoomUsers");
-
-            migrationBuilder.DropTable(
-                name: "RoomRoles");
 
             migrationBuilder.DropTable(
                 name: "Rooms");

@@ -185,7 +185,7 @@ public class TenantManagementService
             _logger.LogInformation("Tenant created: {TenantIdentifier} (ID: {TenantId})",
                 request.Identifier, tenant.Id);
 
-            // セットアップトークンを生成
+            // セットアップトークンを生成（8時間有効）
             var setupToken = SetupToken.GenerateToken();
             var setupTokenRecord = new SetupToken
             {
@@ -193,7 +193,7 @@ public class TenantManagementService
                 TenantId = tenant.Id,
                 TokenHash = SetupToken.HashToken(setupToken),
                 CreatedAt = DateTime.UtcNow,
-                ExpiresAt = DateTime.UtcNow.AddHours(1) // 1時間の有効期限
+                ExpiresAt = DateTime.UtcNow.AddHours(8) // 8時間の有効期限
             };
             _tenantDb.SetupTokens.Add(setupTokenRecord);
             await _tenantDb.SaveChangesAsync();
@@ -396,9 +396,9 @@ public class TenantManagementService
     /// <summary>
     /// テナント情報を削除
     /// </summary>
-    public async Task DeleteTenantAsync(MaskedGuid tenantId)
+    public async Task DeleteTenantAsync(string tenantId)
     {
-        var tenant = await _tenantDb.Tenants.FindAsync(((Guid)tenantId).ToString());
+        var tenant = await _tenantDb.Tenants.FindAsync(tenantId);
         if (tenant == null)
         {
             throw new InvalidOperationException($"Tenant '{tenantId}' not found");

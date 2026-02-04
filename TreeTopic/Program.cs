@@ -152,6 +152,16 @@ public class Program
                             ? AuthenticationConstants.Paths.LoginPath
                             : $"/{tenantId}{AuthenticationConstants.Paths.LoginPath}";
 
+                        // returnUrlを保持 - 現在のパスをreturnUrlとして設定
+                        var currentPath = ctx.Request.Path.Value ?? string.Empty;
+                        var currentQuery = ctx.Request.QueryString.Value ?? string.Empty;
+                        var fullReturnUrl = currentPath + currentQuery;
+
+                        if (!string.IsNullOrEmpty(fullReturnUrl) && fullReturnUrl != "/" && !fullReturnUrl.Contains("/auth/login"))
+                        {
+                            loginPath += $"?returnUrl={Uri.EscapeDataString(fullReturnUrl)}";
+                        }
+
                         ctx.Response.Redirect(loginPath);
                         return Task.CompletedTask;
                     },
@@ -446,6 +456,9 @@ public class Program
 
         builder.Services.AddScoped<SetupTokenValidationService>();
 
+        // Register background service for tenant cleanup
+        builder.Services.AddHostedService<TenantCleanupBackgroundService>();
+
         builder.Services.AddSingleton<TenantIdObfuscationService>();
 
         builder.Services.AddSingleton<EncryptionService>();
@@ -468,6 +481,7 @@ public class Program
 
         builder.Services.AddScoped<IMessageManagementService, MessageManagementService>();
 
+        
         builder.Services.AddScoped<IFileManagementService, FileManagementService>();
 
         builder.Services.AddScoped<IBrainstormManagementService, BrainstormManagementService>();
@@ -621,38 +635,7 @@ public class Program
 
         app.UseRouting();
 
-        if (app.Environment.IsDevelopment())
-        {
-            app.Use(async (context, next) =>
-            {
-                if (context.Request.Path.Value?.EndsWith("/auth/me", StringComparison.OrdinalIgnoreCase) == true)
-                {
-                    var cookieHeader = context.Request.Headers["Cookie"].ToString();
-                    var hasAuthCookie = context.Request.Cookies.ContainsKey(
-                        builder.Configuration["Authentication:CookieName"] ?? "TreeTopic.Cookie");
-                    bool? ticketUnprotectOk = null;
-                    string? ticketAuthType = null;
-                    int? ticketClaimCount = null;
-                    if (hasAuthCookie)
-                    {
-                        var cookieName = builder.Configuration["Authentication:CookieName"] ?? "TreeTopic.Cookie";
-                        var cookieValue = context.Request.Cookies[cookieName];
-                        var optionsMonitor = context.RequestServices.GetRequiredService<IOptionsMonitor<CookieAuthenticationOptions>>();
-                        var cookieOptions = optionsMonitor.Get(CookieAuthenticationDefaults.AuthenticationScheme);
-                        var ticket = cookieOptions.TicketDataFormat.Unprotect(cookieValue);
-                        ticketUnprotectOk = ticket != null;
-                        ticketAuthType = ticket?.Principal?.Identity?.AuthenticationType;
-                        ticketClaimCount = ticket?.Principal?.Claims?.Count();
-                    }
-                    var logger = context.RequestServices.GetRequiredService<ILogger<Program>>();
-                    logger.LogInformation(
-                        "[AuthMe] CookieHeaderLength={Length}, HasAuthCookie={HasAuthCookie}, TicketUnprotectOk={TicketUnprotectOk}, TicketAuthType={TicketAuthType}, TicketClaimCount={TicketClaimCount}",
-                        cookieHeader.Length, hasAuthCookie, ticketUnprotectOk, ticketAuthType, ticketClaimCount);
-                }
-                await next();
-            });
-        }
-
+        
         app.Use(async (context, next) =>
         {
             var baseCookieName = builder.Configuration["Authentication:CookieName"] ?? "TreeTopic.Cookie";
@@ -784,6 +767,7 @@ public class Program
             await context.Response.SendFileAsync(Path.Combine(app.Environment.WebRootPath, "index.html"));
         });
 
+        // Tenant cleanup background task is now started as HostedService
         app.Run();
     }
 }

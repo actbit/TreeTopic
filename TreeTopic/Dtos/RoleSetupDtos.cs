@@ -4,8 +4,9 @@ namespace TreeTopic.Dtos;
 
 public class SetupTokenRequest
 {
-    [Required(ErrorMessage = "SetupToken is required")]
-    public string SetupToken { get; set; } = string.Empty;
+    // SetupToken is provided via Authorization header (Bearer token)
+    // This property is kept for potential future use but not required
+    public string? SetupToken { get; set; }
 }
 
 public class SetupRoleCreationRequest : SetupTokenRequest

@@ -11,6 +11,7 @@
     dbConnectionString: false,
     roleClaimName: false,
     metadataAddress: false,
+    openIdConnectAuthority: false,
     clientId: false,
     clientSecret: false
   });
@@ -24,6 +25,7 @@
 
   // OIDC設定
   let useOidc = $state(false);
+  let openIdConnectAuthority = $state('');
   let roleClaimName = $state('');
   let metadataAddress = $state('');
   let clientId = $state('');
@@ -88,9 +90,9 @@
 
     // OIDC設定が有効な場合のバリデーション
     if (useOidc) {
-      if (!roleClaimName.trim()) {
-        error = 'Role claim name is required for OIDC authentication';
-        errors.roleClaimName = true;
+      if (!openIdConnectAuthority.trim()) {
+        error = 'Authority URL is required for OIDC authentication';
+        errors.openIdConnectAuthority = true;
         return;
       }
       if (!metadataAddress.trim()) {
@@ -129,13 +131,14 @@
 
       // OIDC設定を追加
       if (useOidc) {
+        if (openIdConnectAuthority) request.openIdConnectAuthority = openIdConnectAuthority.trim();
         if (roleClaimName) request.roleClaimName = roleClaimName.trim();
         if (metadataAddress) request.openIdConnectMetadataAddress = metadataAddress.trim();
         if (clientId) request.openIdConnectClientId = clientId.trim();
         if (clientSecret) request.openIdConnectClientSecret = clientSecret.trim();
       }
 
-      const response = await api.post<any>('/api/tenant/register', request);
+      const response = await api.post<any>('/api/tenants/register', request);
       createdTenant = response;
 
       // 成功
@@ -164,6 +167,7 @@
     useCustomConnection = false;
     dbConnectionString = '';
     useOidc = false;
+    openIdConnectAuthority = '';
     roleClaimName = '';
     metadataAddress = '';
     clientId = '';
@@ -171,6 +175,16 @@
     error = null;
     success = false;
     createdTenant = null;
+  }
+
+  function handleSSOLogin() {
+    if (createdTenant?.identifier && createdTenant?.setupToken) {
+      // setupTokenをsessionStorageに保存
+      sessionStorage.setItem(`setupToken_${createdTenant.identifier}`, createdTenant.setupToken);
+      const returnUrl = encodeURIComponent(`/${createdTenant.identifier}/setup`);
+      const loginUrl = `/${createdTenant.identifier}/auth/login?returnUrl=${returnUrl}`;
+      window.location.href = loginUrl;
+    }
   }
 
   function goToTenant() {
@@ -188,43 +202,37 @@
   <div class="workspace-card-wrapper">
     <div class="workspace-card">
         {#if success}
-        <!-- 成功画面 -->
+        <!-- ログイン画面 -->
         <div class="logo-section">
           <h1>TreeTopic</h1>
+          <p>Collaborative discussion platform</p>
         </div>
 
-        <div class="success-message">
-          <div class="success-icon">
-            <svg class="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-            </svg>
-          </div>
-          <h2 class="text-xl font-bold text-text mb-2">Workspace created</h2>
-          <p class="text-text-light mb-6">
-            The workspace <span class="font-medium text-primary">{createdTenant?.name || identifier}</span> has been created successfully.
-          </p>
+        <div class="login-section">
+          <h2>Welcome to {createdTenant?.name || identifier}</h2>
+          <p>Your workspace has been created successfully.</p>
 
           {#if createdTenant?.setupToken}
-            <div class="setup-token">
-              {createdTenant.setupToken}
+            <div class="setup-token-notice">
+              <div class="notice-icon">
+                              </div>
+              <h3>First-time Setup Required</h3>
+              <p>Please sign in to set up your workspace and configure your role.</p>
             </div>
-            <p class="text-xs text-text-light">Please store this token securely.</p>
           {/if}
 
-          <div class="button-group" style="margin-top: 24px;">
-            <button
-              onclick={goToTenant}
-              class="submit-button"
-            >
-              Go to workspace
-            </button>
-            <button
-              onclick={resetForm}
-              class="cancel-button"
-            >
-              Create another
-            </button>
-          </div>
+          <button
+            type="button"
+            onclick={handleSSOLogin}
+            disabled={isLoading}
+            class="sso-button"
+          >
+            {#if isLoading}
+              <span class="loading-spinner"></span>
+            {:else}
+              Sign in with SSO
+            {/if}
+          </button>
         </div>
 
       {:else if error}
@@ -344,16 +352,30 @@
 
           {#if useOidc}
             <label>
-              <span class="label-text">Role claim name *</span>
+              <span class="label-text">Role claim name</span>
               <input
                 type="text"
                 bind:value={roleClaimName}
-                placeholder="e.g. roles, groups"
+                placeholder="e.g. roles, groups (optional)"
                 disabled={isLoading}
                 class:input-error={errors.roleClaimName}
               />
               <p class="input-helper">
-                Set this if your OIDC provider uses a custom role claim
+                Optional: Set this if your OIDC provider uses a custom role claim name.
+              </p>
+            </label>
+
+            <label>
+              <span class="label-text">Authority *</span>
+              <input
+                type="url"
+                bind:value={openIdConnectAuthority}
+                placeholder="https://example.com"
+                disabled={isLoading}
+                class:input-error={errors.openIdConnectAuthority}
+              />
+              <p class="input-helper">
+                The base URL of your OIDC provider
               </p>
             </label>
 

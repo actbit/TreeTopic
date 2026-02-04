@@ -203,6 +203,15 @@ namespace TreeTopic.Migrations.Application.PostgreSQL
                     b.Property<int>("AccessFailedCount")
                         .HasColumnType("integer");
 
+                    b.Property<string>("BanReason")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("BannedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("BannedBy")
+                        .HasColumnType("text");
+
                     b.Property<string>("ConcurrencyStamp")
                         .IsConcurrencyToken()
                         .HasColumnType("text");
@@ -219,6 +228,9 @@ namespace TreeTopic.Migrations.Application.PostgreSQL
 
                     b.Property<string>("IconFileName")
                         .HasColumnType("text");
+
+                    b.Property<bool>("IsBanned")
+                        .HasColumnType("boolean");
 
                     b.Property<bool>("LockoutEnabled")
                         .HasColumnType("boolean");
@@ -723,9 +735,6 @@ namespace TreeTopic.Migrations.Application.PostgreSQL
                     b.Property<Guid>("RoomId")
                         .HasColumnType("uuid");
 
-                    b.Property<Guid?>("RoomRoleId")
-                        .HasColumnType("uuid");
-
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(64)
@@ -746,9 +755,42 @@ namespace TreeTopic.Migrations.Application.PostgreSQL
 
                     b.HasIndex("RoomId");
 
+                    b.ToTable("RoomUsers");
+
+                    b.HasAnnotation("Finbuckle:MultiTenant", true);
+                });
+
+            modelBuilder.Entity("TreeTopic.Models.RoomUserRoomRole", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("RoomRoleId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("RoomUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("TenantId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
                     b.HasIndex("RoomRoleId");
 
-                    b.ToTable("RoomUsers");
+                    b.HasIndex("RoomUserId", "RoomRoleId")
+                        .IsUnique();
+
+                    b.ToTable("RoomUserRoomRoles");
 
                     b.HasAnnotation("Finbuckle:MultiTenant", true);
                 });
@@ -1245,16 +1287,28 @@ namespace TreeTopic.Migrations.Application.PostgreSQL
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("TreeTopic.Models.RoomRole", "RoomRole")
-                        .WithMany("RoomUsers")
-                        .HasForeignKey("RoomRoleId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
                     b.Navigation("ApplicationUser");
 
                     b.Navigation("Room");
+                });
+
+            modelBuilder.Entity("TreeTopic.Models.RoomUserRoomRole", b =>
+                {
+                    b.HasOne("TreeTopic.Models.RoomRole", "RoomRole")
+                        .WithMany("RoomUserRoomRoles")
+                        .HasForeignKey("RoomRoleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("TreeTopic.Models.RoomUser", "RoomUser")
+                        .WithMany("RoomUserRoomRoles")
+                        .HasForeignKey("RoomUserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
 
                     b.Navigation("RoomRole");
+
+                    b.Navigation("RoomUser");
                 });
 
             modelBuilder.Entity("TreeTopic.Models.ShareItem", b =>
@@ -1448,7 +1502,7 @@ namespace TreeTopic.Migrations.Application.PostgreSQL
                 {
                     b.Navigation("Permissions");
 
-                    b.Navigation("RoomUsers");
+                    b.Navigation("RoomUserRoomRoles");
 
                     b.Navigation("TopicRolePermissions");
                 });
@@ -1456,6 +1510,8 @@ namespace TreeTopic.Migrations.Application.PostgreSQL
             modelBuilder.Entity("TreeTopic.Models.RoomUser", b =>
                 {
                     b.Navigation("RoomPermission");
+
+                    b.Navigation("RoomUserRoomRoles");
 
                     b.Navigation("TopicUserPermissions");
                 });

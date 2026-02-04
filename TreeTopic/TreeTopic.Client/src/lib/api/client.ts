@@ -141,12 +141,14 @@ async function handleResponse<T>(response: Response): Promise<T> {
       (typeof window !== 'undefined' ? inferTenantFromPathname(currentPath) : '');
 
     const isAuthMeRequest = requestPath.toLowerCase().endsWith('/auth/me');
+    const isSetupRequest = requestPath.includes('/api/setup/');
     const isOnLoginPage =
       Boolean(tenant) &&
       (currentPath === `/${tenant}/login` || currentPath === `/${tenant}/auth/login`);
 
     if (
       !isOnLoginPage &&
+      !isSetupRequest &&
       (response.status === 401 || (response.status === 404 && isAuthMeRequest))
     ) {
       // Clear all caches on authentication error
@@ -534,5 +536,89 @@ export const api = {
   retryWithBackoff,
   ApiError,
 };
+
+// Setup APIs with token
+export async function getRolesWithSetupToken(tenant: string, setupToken: string) {
+  return api.get(`/${tenant}/api/setup/rolesetup`, {
+    headers: { 'Authorization': `Bearer ${setupToken}` }
+  });
+}
+
+export async function createRoleWithSetupToken(
+  tenant: string,
+  setupToken: string,
+  roleName: string
+) {
+  return api.post(`/${tenant}/api/setup/rolesetup/create`, {
+    name: roleName
+  }, {
+    headers: { 'Authorization': `Bearer ${setupToken}` }
+  });
+}
+
+export async function addPermissionWithSetupToken(
+  tenant: string,
+  setupToken: string,
+  roleName: string,
+  permissionName: string
+) {
+  return api.post(`/${tenant}/api/setup/rolesetup/permissions/add`, {
+    roleName,
+    permissionName
+  }, {
+    headers: { 'Authorization': `Bearer ${setupToken}` }
+  });
+}
+
+export async function getTenantDetail(tenant: string) {
+  return api.get(`/${tenant}/api/tenant/detail`);
+}
+
+export async function getUsersWithSetupToken(tenant: string, setupToken: string) {
+  return api.get(`/${tenant}/api/users`, {
+    headers: { 'Authorization': `Bearer ${setupToken}` }
+  });
+}
+
+export async function assignUserRoleWithSetupToken(
+  tenant: string,
+  userId: string,
+  roleName: string,
+  setupToken: string
+) {
+  return api.post(
+    `/${tenant}/api/users/${userId}/roles`,
+    { roleName },
+    { headers: { 'Authorization': `Bearer ${setupToken}` } }
+  );
+}
+
+export async function removeUserRoleWithSetupToken(
+  tenant: string,
+  userId: string,
+  roleName: string,
+  setupToken: string
+) {
+  const url = apiClientConfig.baseUrl ? `${apiClientConfig.baseUrl}/${tenant}/api/users/${userId}/roles` : `/${tenant}/api/users/${userId}/roles`;
+
+  const response = await fetch(url, {
+    method: 'DELETE',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      'Authorization': `Bearer ${setupToken}`
+    },
+    body: JSON.stringify({ roleName }),
+    credentials: 'include',
+  });
+
+  return handleResponse(response);
+}
+
+export async function invalidateSetupToken(tenant: string, setupToken: string) {
+  return api.post(`/${tenant}/api/setup/token/invalidate`, {}, {
+    headers: { 'Authorization': `Bearer ${setupToken}` }
+  });
+}
 
 export default api;

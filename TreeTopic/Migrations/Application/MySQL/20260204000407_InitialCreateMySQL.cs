@@ -7,7 +7,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace TreeTopic.Migrations.Application.MySQL
 {
     /// <inheritdoc />
-    public partial class InitialCreate : Migration
+    public partial class InitialCreateMySQL : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -47,6 +47,12 @@ namespace TreeTopic.Migrations.Application.MySQL
                     Sub = table.Column<string>(type: "varchar(255)", nullable: true)
                         .Annotation("MySql:CharSet", "utf8mb4"),
                     TenantId = table.Column<string>(type: "varchar(64)", maxLength: 64, nullable: false)
+                        .Annotation("MySql:CharSet", "utf8mb4"),
+                    IsBanned = table.Column<bool>(type: "tinyint(1)", nullable: false),
+                    BannedAt = table.Column<DateTime>(type: "datetime(6)", nullable: true),
+                    BannedBy = table.Column<string>(type: "longtext", nullable: true)
+                        .Annotation("MySql:CharSet", "utf8mb4"),
+                    BanReason = table.Column<string>(type: "longtext", nullable: true)
                         .Annotation("MySql:CharSet", "utf8mb4"),
                     UserName = table.Column<string>(type: "varchar(256)", maxLength: 256, nullable: true)
                         .Annotation("MySql:CharSet", "utf8mb4"),
@@ -341,7 +347,6 @@ namespace TreeTopic.Migrations.Application.MySQL
                     Id = table.Column<byte[]>(type: "BINARY(16)", nullable: false),
                     ApplicationUserId = table.Column<byte[]>(type: "BINARY(16)", nullable: false),
                     RoomId = table.Column<byte[]>(type: "BINARY(16)", nullable: false),
-                    RoomRoleId = table.Column<byte[]>(type: "BINARY(16)", nullable: true),
                     Name = table.Column<string>(type: "longtext", nullable: true)
                         .Annotation("MySql:CharSet", "utf8mb4"),
                     UseMainName = table.Column<bool>(type: "tinyint(1)", nullable: false),
@@ -362,12 +367,6 @@ namespace TreeTopic.Migrations.Application.MySQL
                         principalTable: "AspNetUsers",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Restrict);
-                    table.ForeignKey(
-                        name: "FK_RoomUsers_RoomRoles_RoomRoleId",
-                        column: x => x.RoomRoleId,
-                        principalTable: "RoomRoles",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.SetNull);
                     table.ForeignKey(
                         name: "FK_RoomUsers_Rooms_RoomId",
                         column: x => x.RoomId,
@@ -395,6 +394,36 @@ namespace TreeTopic.Migrations.Application.MySQL
                     table.PrimaryKey("PK_RoomPermissions", x => x.Id);
                     table.ForeignKey(
                         name: "FK_RoomPermissions_RoomUsers_RoomUserId",
+                        column: x => x.RoomUserId,
+                        principalTable: "RoomUsers",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                })
+                .Annotation("MySql:CharSet", "utf8mb4");
+
+            migrationBuilder.CreateTable(
+                name: "RoomUserRoomRoles",
+                columns: table => new
+                {
+                    Id = table.Column<byte[]>(type: "BINARY(16)", nullable: false),
+                    RoomUserId = table.Column<byte[]>(type: "BINARY(16)", nullable: false),
+                    RoomRoleId = table.Column<byte[]>(type: "BINARY(16)", nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "datetime(6)", nullable: false),
+                    UpdatedAt = table.Column<DateTime>(type: "datetime(6)", nullable: false),
+                    TenantId = table.Column<string>(type: "varchar(64)", maxLength: 64, nullable: false)
+                        .Annotation("MySql:CharSet", "utf8mb4")
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_RoomUserRoomRoles", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_RoomUserRoomRoles_RoomRoles_RoomRoleId",
+                        column: x => x.RoomRoleId,
+                        principalTable: "RoomRoles",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "FK_RoomUserRoomRoles_RoomUsers_RoomUserId",
                         column: x => x.RoomUserId,
                         principalTable: "RoomUsers",
                         principalColumn: "Id",
@@ -919,6 +948,17 @@ namespace TreeTopic.Migrations.Application.MySQL
                 column: "CreatedUserId");
 
             migrationBuilder.CreateIndex(
+                name: "IX_RoomUserRoomRoles_RoomRoleId",
+                table: "RoomUserRoomRoles",
+                column: "RoomRoleId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_RoomUserRoomRoles_RoomUserId_RoomRoleId",
+                table: "RoomUserRoomRoles",
+                columns: new[] { "RoomUserId", "RoomRoleId" },
+                unique: true);
+
+            migrationBuilder.CreateIndex(
                 name: "IX_RoomUsers_ApplicationUserId",
                 table: "RoomUsers",
                 column: "ApplicationUserId");
@@ -927,11 +967,6 @@ namespace TreeTopic.Migrations.Application.MySQL
                 name: "IX_RoomUsers_RoomId",
                 table: "RoomUsers",
                 column: "RoomId");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_RoomUsers_RoomRoleId",
-                table: "RoomUsers",
-                column: "RoomRoleId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_ShareItemFiles_FileId",
@@ -1105,6 +1140,9 @@ namespace TreeTopic.Migrations.Application.MySQL
                 name: "RoomRolePermissions");
 
             migrationBuilder.DropTable(
+                name: "RoomUserRoomRoles");
+
+            migrationBuilder.DropTable(
                 name: "ShareItemFiles");
 
             migrationBuilder.DropTable(
@@ -1126,6 +1164,9 @@ namespace TreeTopic.Migrations.Application.MySQL
                 name: "ShareItems");
 
             migrationBuilder.DropTable(
+                name: "RoomRoles");
+
+            migrationBuilder.DropTable(
                 name: "BrainBoards");
 
             migrationBuilder.DropTable(
@@ -1142,9 +1183,6 @@ namespace TreeTopic.Migrations.Application.MySQL
 
             migrationBuilder.DropTable(
                 name: "RoomUsers");
-
-            migrationBuilder.DropTable(
-                name: "RoomRoles");
 
             migrationBuilder.DropTable(
                 name: "Rooms");

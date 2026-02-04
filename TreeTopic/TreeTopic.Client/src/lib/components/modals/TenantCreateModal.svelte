@@ -9,6 +9,9 @@
 
   let isLoading = $state(false);
   let error = $state<string | null>(null);
+  let showSetupToken = $state(false);
+  let setupToken = $state<string | null>(null);
+  let setupTokenCopied = $state(false);
   let errors = $state<Record<string, boolean>>({
     identifier: false,
     name: false,
@@ -28,6 +31,7 @@
 
   // OIDC設定
   let useOidc = $state(false);
+  let openIdConnectAuthority = $state('');
   let roleClaimName = $state('');
   let metadataAddress = $state('');
   let clientId = $state('');
@@ -42,6 +46,7 @@
       useCustomConnection = false;
       dbConnectionString = '';
       useOidc = false;
+      openIdConnectAuthority = '';
       roleClaimName = '';
       metadataAddress = '';
       clientId = '';
@@ -72,8 +77,8 @@
       identifier: false,
       name: false,
       dbConnectionString: false,
-      roleClaimName: false,
       metadataAddress: false,
+      openIdConnectAuthority: false,
       clientId: false,
       clientSecret: false
     };
@@ -109,9 +114,9 @@
 
     // OIDC設定が有効な場合のバリデーション
     if (useOidc) {
-      if (!roleClaimName.trim()) {
-        error = 'Role claim name is required for OIDC authentication';
-        errors.roleClaimName = true;
+      if (!openIdConnectAuthority.trim()) {
+        error = 'Authority URL is required for OIDC authentication';
+        errors.openIdConnectAuthority = true;
         return;
       }
       if (!metadataAddress.trim()) {
@@ -149,6 +154,7 @@
       // OIDC設定を追加
       if (useOidc) {
         if (roleClaimName) request.roleClaimName = roleClaimName.trim();
+        if (openIdConnectAuthority) request.openIdConnectAuthority = openIdConnectAuthority.trim();
         if (metadataAddress) request.openIdConnectMetadataAddress = metadataAddress.trim();
         if (clientId) request.openIdConnectClientId = clientId.trim();
         if (clientSecret) request.openIdConnectClientSecret = clientSecret.trim();
@@ -156,17 +162,12 @@
 
       const response = await api.post<any>('/api/tenant/register', request);
 
-      // 成功した場合、テナント設定ページへ移動またはモーダルを閉じる
-      ui.closeModal(modalId);
-
-      // 成功メッセージを表示（必要であれば）
+      // セットアップトークンを保存して表示
       if (response.setupToken) {
-        // セットアップトークンを保存するなどの処理
-        console.log('Tenant created with setup token:', response.setupToken);
+        setupToken = response.setupToken;
+        sessionStorage.setItem(`setupToken_${identifier}`, response.setupToken);
+        showSetupToken = true;
       }
-
-      // ページをリロードまたはテナントページへ移動
-      window.location.href = `/${identifier}/dashboard`;
     } catch (err: any) {
       error = err.message || 'Failed to create workspace';
     } finally {
@@ -177,17 +178,81 @@
   function handleClose() {
     ui.closeModal(modalId);
   }
+
+  function copyToken() {
+    if (setupToken) {
+      navigator.clipboard.writeText(setupToken).then(() => {
+        setupTokenCopied = true;
+        setTimeout(() => {
+          setupTokenCopied = false;
+        }, 2000);
+      });
+    }
+  }
+
+  function continueToLogin() {
+    ui.closeModal(modalId);
+    window.location.href = `/${identifier}/login`;
+  }
 </script>
 
-<Modal {isOpen} title="Create new workspace" onClose={handleClose} size="large" closeButton={!isLoading}>
-  <form onsubmit={(e) => { e.preventDefault(); handleSubmit(); }} class="modal-form">
-    {#if error}
-      <div class="modal-error">
-        <span>{error}</span>
-      </div>
-    {/if}
+<Modal {isOpen} title={showSetupToken ? "Setup Token Generated" : "Create new workspace"} onClose={handleClose} size="large" closeButton={!isLoading && !showSetupToken}>
+  {#if showSetupToken}
+    <div class="setup-token-container">
+      <div class="setup-token-content">
+        <div class="setup-token-header">
+          <svg class="check-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="20 6 9 17 4 12"></polyline>
+          </svg>
+          <h2>Workspace created successfully!</h2>
+        </div>
 
-    <div class="modal-content">
+        <p class="setup-token-description">
+          Your workspace has been created. Save this setup token securely. You'll need it to configure your workspace roles and users. The token expires in 1 hour.
+        </p>
+
+        <div class="setup-token-box">
+          <code class="token-text">{setupToken}</code>
+          <button
+            type="button"
+            onclick={copyToken}
+            class="copy-button"
+            disabled={isLoading}
+          >
+            {setupTokenCopied ? '✓ Copied' : 'Copy'}
+          </button>
+        </div>
+
+        <div class="setup-token-warning">
+          <svg class="warning-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="12" y1="8" x2="12" y2="12"></line>
+            <line x1="12" y1="16" x2="12.01" y2="16"></line>
+          </svg>
+          <p>Keep this token safe. You'll need it to access the setup page after login.</p>
+        </div>
+      </div>
+
+      <div class="setup-token-footer">
+        <button
+          type="button"
+          onclick={continueToLogin}
+          disabled={isLoading}
+          class="modal-submit-button"
+        >
+          Continue to Login
+        </button>
+      </div>
+    </div>
+  {:else}
+    <form onsubmit={(e) => { e.preventDefault(); handleSubmit(); }} class="modal-form">
+      {#if error}
+        <div class="modal-error">
+          <span>{error}</span>
+        </div>
+      {/if}
+
+      <div class="modal-content">
       <!-- 識別子 -->
       <label>
         <span class="modal-label">Identifier *</span>
@@ -266,20 +331,35 @@
           />
           <span>Use custom OpenID Connect authentication</span>
         </label>
+        <p class="modal-helper">
+          Enable if your organization uses an OIDC provider other than the default.
+          Supports Keycloak, Azure AD, Google, and other OpenID Connect providers.
+        </p>
       </div>
 
       {#if useOidc}
         <label>
-          <span class="modal-label">Role claim name *</span>
+          <span class="modal-label">Role claim name</span>
           <input
             type="text"
             bind:value={roleClaimName}
-            placeholder="e.g. roles, groups"
+            placeholder="e.g. roles, groups (optional)"
             disabled={isLoading}
             class:input-error={errors.roleClaimName}
           />
           <p class="modal-helper">
-            Set this if your OIDC provider uses a custom role claim
+            Optional: Set this if your OIDC provider uses a custom role claim name.
+            <br><br>
+            <strong>When set:</strong> Roles are automatically assigned from your OIDC provider
+            using this claim name during login. Manual role assignment is disabled.
+            <br><br>
+            <strong>When not set:</strong> Roles are managed manually through the setup interface.
+            No automatic role assignment from OIDC claims.
+            <br><br>
+            <strong>Common examples:</strong>
+            <br>- Keycloak: "roles" or "realm_access.roles"
+            <br>- Azure AD: "roles"
+            <br>- Google: "roles" (from custom claims)
           </p>
         </label>
 
@@ -292,6 +372,20 @@
             disabled={isLoading}
             class:input-error={errors.metadataAddress}
           />
+        </label>
+
+        <label>
+          <span class="modal-label">Authority *</span>
+          <input
+            type="url"
+            bind:value={openIdConnectAuthority}
+            placeholder="https://example.com"
+            disabled={isLoading}
+            class:input-error={errors.openIdConnectAuthority}
+          />
+          <p class="modal-helper">
+            The base URL of your OIDC provider
+          </p>
         </label>
 
         <label>
@@ -339,7 +433,8 @@
         Create workspace
       </button>
     </div>
-  </form>
+    </form>
+  {/if}
 </Modal>
 
 <style>
@@ -509,5 +604,124 @@
     to {
       transform: rotate(360deg);
     }
+  }
+
+  .setup-token-container {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    gap: 0;
+  }
+
+  .setup-token-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 40px 32px;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+  }
+
+  .setup-token-header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .check-icon {
+    width: 32px;
+    height: 32px;
+    color: var(--color-success, #10b981);
+    flex-shrink: 0;
+  }
+
+  .setup-token-header h2 {
+    margin: 0;
+    font-size: var(--font-size-lg, 18px);
+    font-weight: 600;
+    color: var(--color-text);
+  }
+
+  .setup-token-description {
+    margin: 0;
+    font-size: var(--font-size-sm, 14px);
+    color: var(--color-text-light);
+    line-height: 1.6;
+  }
+
+  .setup-token-box {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 16px;
+    background-color: var(--color-background-secondary, #f5f5f5);
+    border: 1px solid var(--color-border);
+    border-radius: var(--border-radius-lg, 8px);
+  }
+
+  .token-text {
+    flex: 1;
+    font-family: 'Courier New', monospace;
+    font-size: var(--font-size-xs, 12px);
+    color: var(--color-text);
+    word-break: break-all;
+    margin: 0;
+  }
+
+  .copy-button {
+    padding: 8px 16px;
+    background-color: var(--color-primary);
+    color: var(--color-text-inverse);
+    border: none;
+    border-radius: var(--border-radius-lg);
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.2s ease;
+    flex-shrink: 0;
+  }
+
+  .copy-button:hover:not(:disabled) {
+    background-color: var(--color-primary-hover);
+  }
+
+  .copy-button:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  .setup-token-warning {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 12px 16px;
+    background-color: var(--color-warning-light, #fef3c7);
+    border: 1px solid var(--color-warning-border, #fcd34d);
+    border-radius: var(--border-radius-lg);
+  }
+
+  .warning-icon {
+    width: 20px;
+    height: 20px;
+    color: var(--color-warning, #f59e0b);
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+
+  .setup-token-warning p {
+    margin: 0;
+    font-size: var(--font-size-sm);
+    color: var(--color-warning-text, #92400e);
+    line-height: 1.5;
+  }
+
+  .setup-token-footer {
+    border-top: 1px solid var(--color-border);
+    padding: 12px 16px;
+    background-color: var(--color-background);
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
   }
 </style>

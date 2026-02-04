@@ -7,8 +7,10 @@ export const handle: Handle = async ({ event, resolve }) => {
     return resolve(event);
   }
 
-  // ログインページはスキップ
-  if (event.url.pathname === '/login' || event.url.pathname.match(/^\/[^/]+\/auth\/login/)) {
+  // ログインページとsetupページはスキップ（setupはsetupTokenベース認証）
+  if (event.url.pathname === '/login' ||
+      event.url.pathname.match(/^\/[^/]+\/auth\/login/) ||
+      event.url.pathname.match(/^\/[^/]+\/setup/)) {
     return resolve(event);
   }
 
