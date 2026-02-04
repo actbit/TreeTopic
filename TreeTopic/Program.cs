@@ -446,8 +446,6 @@ public class Program
 
         builder.Services.AddScoped<UserManagementService>();
 
-        builder.Services.AddScoped<PermissionManagementService>();
-
         builder.Services.AddScoped<RoomRoleManager>();
         builder.Services.AddScoped<RoomUserManager>();
         builder.Services.AddScoped<RoomRoleManagementService>();
