@@ -2,6 +2,7 @@
   import { page } from '$app/stores';
   import { api, getTenantDetail, createUser, banUser, unbanUser, assignUserRole, removeUserRole } from '$lib/api/client';
   import { onMount } from 'svelte';
+  import { ui } from '$lib/stores/ui';
 
   let isLoading = $state(false);
   let error = $state<string | null>(null);
@@ -353,9 +354,17 @@
       </div>
     {:else if activeTab === 'roles'}
       <div class="space-y-6">
-        <div>
-          <h2 class="text-2xl font-semibold text-text">ロール管理</h2>
-          <p class="text-sm text-text-light mt-1">テナントレベルのロールとIdentity権限を管理します。</p>
+        <div class="flex justify-between items-center">
+          <div>
+            <h2 class="text-2xl font-semibold text-text">ロール管理</h2>
+            <p class="text-sm text-text-light mt-1">テナントレベルのロールとIdentity権限を管理します。</p>
+          </div>
+          <button
+            onclick={() => ui.openModal('tenant-role-permission', 'Tenant Role Permissions', { tenant })}
+            class="px-4 py-2 bg-primary text-white rounded hover:bg-opacity-90 transition-colors text-sm font-medium"
+          >
+            権限管理
+          </button>
         </div>
 
         {#if isLoading}

@@ -152,13 +152,28 @@
     </div>
 
     <div class="border-t border-border pt-8">
-      <a
-        href="/{$page.params.tenant}/room/{$currentRoom?.id}/settings"
-        class="block w-full text-center px-4 py-3 border border-primary text-primary rounded-lg hover:bg-primary hover:bg-opacity-10 transition-colors font-medium"
-        onclick={() => ui.closeModal(modalId)}
-      >
-        詳細設定（ロール・権限管理）
-      </a>
+      <div class="flex gap-4">
+        <button
+          type="button"
+          class="flex-1 px-4 py-3 border border-primary text-primary rounded-lg hover:bg-primary hover:bg-opacity-10 transition-colors font-medium"
+          onclick={() => ui.openModal('room-role-permission', 'Room Role Permissions', {
+            tenant: $page.params.tenant,
+            roomId: $currentRoom?.id
+          })}
+        >
+          ロール権限管理
+        </button>
+        <button
+          type="button"
+          class="flex-1 px-4 py-3 border border-primary text-primary rounded-lg hover:bg-primary hover:bg-opacity-10 transition-colors font-medium"
+          onclick={() => ui.openModal('room-user-permission', 'Room User Permissions', {
+            tenant: $page.params.tenant,
+            roomId: $currentRoom?.id
+          })}
+        >
+          ユーザー権限管理
+        </button>
+      </div>
     </div>
 
     {#if $currentRoom?.canDelete}

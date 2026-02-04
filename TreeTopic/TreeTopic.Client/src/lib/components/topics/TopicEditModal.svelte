@@ -139,6 +139,22 @@
         Cancel
       </Button>
     </div>
+
+    {#if topic && topic.roomId}
+      <div class="border-t border-gray-200 pt-8 mt-4">
+        <button
+          type="button"
+          class="w-full px-4 py-3 border border-blue-500 text-blue-500 rounded-lg hover:bg-blue-50 hover:bg-opacity-10 transition-colors font-medium"
+          onclick={() => ui.openModal('topic-user-permission', 'Topic User Permissions', {
+            tenant: $page.params.tenant,
+            roomId: topic.roomId,
+            topicId: topicId
+          })}
+        >
+          トピック権限管理
+        </button>
+      </div>
+    {/if}
   </form>
 </Modal>
 
