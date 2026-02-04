@@ -305,6 +305,28 @@
     }
   }
 
+  async function removePermissionFromRole(roleName: string, permissionName: string) {
+    if (!setupToken) return;
+
+    try {
+      isLoading = true;
+      error = null;
+
+      await api.post(`/${tenant}/api/setup/rolesetup/permissions/delete`, {
+        roleName,
+        permissionName
+      }, {
+        headers: { 'Authorization': `Bearer ${setupToken}` }
+      });
+
+      delete selectedPermissions[`${roleName}_${permissionName}`];
+    } catch (err: any) {
+      error = err.message || 'Failed to remove permission';
+    } finally {
+      isLoading = false;
+    }
+  }
+
   let isSetupComplete = $state(false);
   let redirectToDashboard = $state(false);
 
@@ -485,6 +507,8 @@
                                 const target = e.target as HTMLInputElement;
                                 if (target.checked) {
                                   addPermissionToRole(role.name, permission);
+                                } else {
+                                  removePermissionFromRole(role.name, permission);
                                 }
                               }}
                               disabled={isLoading}
@@ -558,29 +582,17 @@
         {/if}
 
         <div class="footer-section">
-          {#if !hasRoleManagePermission}
-            <div class="error-banner">
-              <p>RoleManage権限がありません。設定を完了するにはRoleManage権限が必要です。</p>
-            </div>
-            <button
-              disabled
-              class="complete-button disabled"
-            >
+          <button
+            onclick={completeSetup}
+            disabled={isLoading}
+            class="complete-button"
+          >
+            {#if isLoading}
+              <span class="loading-spinner"></span>
+            {:else}
               Complete Setup
-            </button>
-          {:else}
-            <button
-              onclick={completeSetup}
-              disabled={isLoading}
-              class="complete-button"
-            >
-              {#if isLoading}
-                <span class="loading-spinner"></span>
-              {:else}
-                Complete Setup
-              {/if}
-            </button>
-          {/if}
+            {/if}
+          </button>
         </div>
       </div>
 
