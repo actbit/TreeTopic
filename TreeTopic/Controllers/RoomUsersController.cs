@@ -405,7 +405,55 @@ public class RoomUsersController : ControllerBase
                 target.IconFileName = null;
         }
     }
+
+    /// <summary>
+    /// RoomUserのRoomRoleを設定（既存のロールをすべて置き換え）
+    /// </summary>
+    [HttpPut("{roomUserId}/role")]
+    [RequireAny(RoomPermissions.ManageUsers, TenantPermissions.RoomManage)]
+    public async Task<IActionResult> SetUserRole(
+        [FromRoute] MaskedGuid roomUserId,
+        [FromBody] SetUserRoleRequest request,
+        CancellationToken cancellationToken)
+    {
+        var roomUserGuid = (Guid)roomUserId;
+
+        // RoomUserの存在確認
+        var roomUser = await _roomUserRepository.Query()
+            .Include(ru => ru.ApplicationUser)
+            .FirstOrDefaultAsync(ru => ru.Id == roomUserGuid, cancellationToken);
+        if (roomUser == null)
+        {
+            return NotFound(new { message = "RoomUser not found" });
+        }
+
+        // RoomRoleの存在確認
+        if (!string.IsNullOrEmpty(request.RoleName))
+        {
+            var role = await _roomUserRepository.Query<RoomRole>()
+                .FirstOrDefaultAsync(r => r.Name == request.RoleName, cancellationToken);
+            if (role == null)
+            {
+                return NotFound(new { message = $"RoomRole '{request.RoleName}' not found" });
+            }
+
+            // RoomUserManagerを使ってロールを設定（既存のロールを置き換え）
+            await _roomUserManager.SetRolesAsync(roomUser, new List<Guid> { role.Id }, cancellationToken);
+        }
+        else
+        {
+            // roleNameが空の場合は、全てのロールを削除
+            await _roomUserManager.SetRolesAsync(roomUser, new List<Guid>(), cancellationToken);
+        }
+
+        return Ok(MapToDto(roomUser));
+    }
 }
+
+/// <summary>
+/// RoomUserのロール設定リクエスト
+/// </summary>
+public record SetUserRoleRequest(string? RoleName);
 
 
 
