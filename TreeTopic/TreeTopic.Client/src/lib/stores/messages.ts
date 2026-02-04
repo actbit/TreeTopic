@@ -38,7 +38,6 @@ export interface Message {
   canDelete: boolean;
   reactions?: { emoji: string; userIds: string[] }[];
   readBy?: string[]; // user IDs
-  sortOrder?: number; // for custom ordering
   childTopicId?: string;
   childTopicTitle?: string;
 }
@@ -220,35 +219,6 @@ function createMessagesStore() {
       }));
     },
     /**
-     * Update message sort order
-     */
-    updateMessageOrder: (messageId: string, sortOrder: number) => {
-      update((state) => ({
-        ...state,
-        messages: state.messages.map((m) =>
-          m.id === messageId ? { ...m, sortOrder } : m
-        ),
-      }));
-    },
-    /**
-     * Reorder messages
-     */
-    reorderMessages: (messageOrders: { messageId: string; sortOrder: number }[]) => {
-      update((state) => {
-        const orderMap = new Map(
-          messageOrders.map((m) => [m.messageId, m.sortOrder])
-        );
-
-        return {
-          ...state,
-          messages: state.messages.map((m) => ({
-            ...m,
-            sortOrder: orderMap.get(m.id) ?? m.sortOrder,
-          })),
-        };
-      });
-    },
-    /**
      * Set loading state
      */
     setLoading: (isLoading: boolean) => {
@@ -390,17 +360,6 @@ export const recentMessages = (limit: number = 10) =>
   derived(messageList, ($messages) =>
     $messages.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, limit)
   );
-
-/**
- * Update message order from array of sorted messages
- */
-export function updateMessageOrder(sortedMessages: Message[]) {
-  const orders = sortedMessages.map((m, index) => ({
-    messageId: m.id,
-    sortOrder: index,
-  }));
-  messages.reorderMessages(orders);
-}
 
 /**
  * Helper functions to interact with messages store

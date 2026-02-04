@@ -28,17 +28,23 @@ public class RoomUsersController : ControllerBase
     private readonly IMultiTenantContextAccessor<ApplicationTenantInfo> _tenantAccessor;
     private readonly IconService _iconService;
     private readonly UserManager<ApplicationUser> _userManager;
+    private readonly RoomUserManager _roomUserManager;
+    private readonly ApplicationDbContext _dbContext;
 
     public RoomUsersController(
         IRoomUserRepository roomUserRepository,
         IMultiTenantContextAccessor<ApplicationTenantInfo> tenantAccessor,
         IconService iconService,
-        UserManager<ApplicationUser> userManager)
+        UserManager<ApplicationUser> userManager,
+        RoomUserManager roomUserManager,
+        ApplicationDbContext dbContext)
     {
         _roomUserRepository = roomUserRepository;
         _tenantAccessor = tenantAccessor;
         _iconService = iconService;
         _userManager = userManager;
+        _roomUserManager = roomUserManager;
+        _dbContext = dbContext;
     }
 
     private string? CurrentTenantId => _tenantAccessor.MultiTenantContext?.TenantInfo?.Id;
@@ -430,7 +436,7 @@ public class RoomUsersController : ControllerBase
         // RoomRoleの存在確認
         if (!string.IsNullOrEmpty(request.RoleName))
         {
-            var role = await _roomUserRepository.Query<RoomRole>()
+            var role = await _dbContext.RoomRoles
                 .FirstOrDefaultAsync(r => r.Name == request.RoleName, cancellationToken);
             if (role == null)
             {

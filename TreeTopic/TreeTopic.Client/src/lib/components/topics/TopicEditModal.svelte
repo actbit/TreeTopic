@@ -7,6 +7,7 @@
   import { topicList, updateTopic } from '$lib/stores/topics';
   import { isRequired, minLength } from '$lib/utils/validation';
   import { api } from '$lib/api/client';
+  import { page } from '$app/stores';
 
   const modalId = 'topic-edit';
 

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { ui } from '$lib/stores/ui';
 
-  type ViewMode = 'default' | 'timeline' | 'user' | 'document' | 'image' | 'search' | 'topic';
+  type ViewMode = 'default' | 'user' | 'document' | 'image' | 'topic' | 'search';
 
   const viewModes: Array<{
     id: ViewMode;
@@ -9,7 +9,6 @@
     description: string;
   }> = [
     { id: 'default', label: 'Messages', description: 'Standard message list' },
-    { id: 'timeline', label: 'Timeline', description: 'Chronological view' },
     { id: 'user', label: 'By User', description: 'Grouped by user' },
     { id: 'document', label: 'By Document', description: 'By attached files' },
     { id: 'image', label: 'Images', description: 'Image gallery' },
