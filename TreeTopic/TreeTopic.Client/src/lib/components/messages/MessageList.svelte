@@ -60,9 +60,10 @@
     didScrollToAnchor = false;
     if (!targetAnchorId) return;
     if ($messagesLoading) return;
-    setTimeout(() => {
+    const timer = setTimeout(() => {
       tryScrollToTarget('auto');
     }, 0);
+    return () => clearTimeout(timer);
   });
 </script>
 

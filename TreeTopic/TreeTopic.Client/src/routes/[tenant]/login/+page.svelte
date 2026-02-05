@@ -5,7 +5,7 @@
 
   let { data }: { data: PageData } = $props();
 
-  const { tenant } = data;
+  let tenant = $derived(data.tenant);
 
   let hasSetupToken = $state(false);
   let setupTokenValue = $state<string | null>(null);

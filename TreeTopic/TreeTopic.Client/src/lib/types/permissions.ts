@@ -20,7 +20,6 @@ export interface AvailablePermissions {
  */
 export interface RolePermissionsResponse {
   roleName: string;
-  roleId: string;
   permissions: string[];
 }
 
@@ -39,3 +38,70 @@ export interface Role {
   name: string;
   description?: string;
 }
+
+/**
+ * RoomRole権限情報DTO
+ */
+export interface RoomRolePermissionDto {
+  id: string;
+  roomRoleId: string;
+  roleName: string;
+  permissionName: string;
+}
+
+/**
+ * Topicユーザー権限情報DTO
+ */
+export interface TopicUserPermissionDto {
+  id: string;
+  topicId: string;
+  roomUserId: string;
+  userName: string | null;
+  displayName: string | null;
+  name: string;
+}
+
+/**
+ * Topicロール権限情報DTO
+ */
+export interface TopicRolePermissionDto {
+  id: string;
+  topicId: string;
+  roomRoleId: string;
+  roleName: string | null;
+  roleDescription: string | null;
+  name: string;
+}
+
+/**
+ * Topicユーザー権限割り当てリクエスト
+ */
+export interface AddTopicPermissionToUserRequest {
+  roomUserId: string;
+  permissionName: string;
+}
+
+/**
+ * Topicロール権限割り当てリクエスト
+ */
+export interface AddTopicRolePermissionRequest {
+  roleName: string;
+  permissionName: string;
+}
+
+/**
+ * ユーザー権限レスポンス（基本）
+ */
+export interface UserPermissionsResponse {
+  permissions: string[];
+}
+
+/**
+ * ルーム権限レスポンス
+ */
+export interface RoomPermissionsResponse extends UserPermissionsResponse {}
+
+/**
+ * トピック権限レスポンス
+ */
+export interface TopicPermissionsResponse extends UserPermissionsResponse {}

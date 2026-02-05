@@ -1,11 +1,13 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using MaskedUUID.AspNetCore.Types;
 using TreeTopic.Common;
 using TreeTopic.Dtos;
 using TreeTopic.Services;
 using TreeTopic.Filters;
 using TreeTopic.Permissions;
+using TreeTopic.Models;
 using System.Security.Claims;
 
 namespace TreeTopic.Controllers;
@@ -15,11 +17,17 @@ namespace TreeTopic.Controllers;
 public class TopicController : ControllerBase
 {
     private readonly ITopicManagementService _topicManagementService;
+    private readonly ApplicationDbContext _db;
+    private readonly TopicPermissionManager _topicPermissionManager;
 
     public TopicController(
-        ITopicManagementService topicManagementService)
+        ITopicManagementService topicManagementService,
+        ApplicationDbContext db,
+        TopicPermissionManager topicPermissionManager)
     {
         _topicManagementService = topicManagementService;
+        _db = db;
+        _topicPermissionManager = topicPermissionManager;
     }
 
     private Guid? CurrentUserId
@@ -76,6 +84,81 @@ public class TopicController : ControllerBase
     {
         var result = await _topicManagementService.GetTopicByIdAsync((Guid)topicId, CurrentUserId, cancellationToken);
         return result.ToApiResult();
+    }
+
+    /// <summary>
+    /// 現在のユーザーのトピック権限一覧を取得
+    /// </summary>
+    [HttpGet("{topicId}/my/permissions")]
+    public async Task<IActionResult> GetMyPermissions(
+        [FromRoute] MaskedGuid topicId,
+        CancellationToken cancellationToken)
+    {
+        var topicGuid = (Guid)topicId;
+        var userId = CurrentUserId;
+        if (!userId.HasValue)
+        {
+            return Unauthorized();
+        }
+
+        // トピックのルームIDを取得
+        var topic = await _db.Topics
+            .AsNoTracking()
+            .FirstOrDefaultAsync(t => t.Id == topicGuid, cancellationToken);
+
+        if (topic == null)
+        {
+            return NotFound(new { message = "Topic not found" });
+        }
+
+        // RoomUserを取得
+        var roomUser = await _db.RoomUsers
+            .Include(ru => ru.RoomUserRoomRoles)
+                .ThenInclude(rur => rur.RoomRole)
+                    .ThenInclude(rr => rr!.Permissions)
+            .Include(ru => ru.RoomPermission)
+            .FirstOrDefaultAsync(ru => ru.RoomId == topic.RoomId && ru.ApplicationUserId == userId.Value, cancellationToken);
+
+        if (roomUser == null)
+        {
+            return Ok(new TopicPermissionsResponse
+            {
+                Permissions = new List<string>()
+            });
+        }
+
+        var permissions = new List<string>();
+
+        // RoomRoleの権限を収集
+        foreach (var userRole in roomUser.RoomUserRoomRoles)
+        {
+            if (userRole.RoomRole?.Permissions != null)
+            {
+                foreach (var permission in userRole.RoomRole.Permissions)
+                {
+                    permissions.Add(permission.PermissionName);
+                }
+            }
+        }
+
+        // 直接付与されたRoom権限を追加
+        if (roomUser.RoomPermission != null && roomUser.RoomPermission.Count > 0)
+        {
+            foreach (var perm in roomUser.RoomPermission)
+            {
+                permissions.Add(perm.Name);
+            }
+        }
+
+        // Topicレベルでの直接権限を追加
+        var topicPermissions = await _topicPermissionManager.GetUserPermissionsAsync(
+            topicGuid, roomUser.Id, cancellationToken);
+        permissions.AddRange(topicPermissions.Select(p => p.Name));
+
+        return Ok(new TopicPermissionsResponse
+        {
+            Permissions = permissions.Distinct().ToList()
+        });
     }
 
     [HttpPost]
@@ -192,4 +275,3 @@ public class TopicController : ControllerBase
         return result.ToApiResult();
     }
 }
-

@@ -9,6 +9,9 @@ public class PushSubscriptionDto
 
     [JsonPropertyName("keys")]
     public PushSubscriptionKeys Keys { get; set; } = new();
+
+    public bool Updated { get; set; }
+    public bool? Existed { get; set; }
 }
 
 public class PushSubscriptionKeys

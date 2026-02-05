@@ -3,7 +3,7 @@
   import Button from '../common/Button.svelte';
   import Input from '../common/Input.svelte';
   import ErrorMessage from '../common/ErrorMessage.svelte';
-  import { ui, activeModals } from '$lib/stores/ui';
+  import { ui, activeModals, modals } from '$lib/stores/ui';
   import { topicList, updateTopic } from '$lib/stores/topics';
   import { isRequired, minLength } from '$lib/utils/validation';
   import { api } from '$lib/api/client';
@@ -146,7 +146,7 @@
         <button
           type="button"
           class="w-full px-4 py-3 border border-blue-500 text-blue-500 rounded-lg hover:bg-blue-50 hover:bg-opacity-10 transition-colors font-medium"
-          onclick={() => ui.openModal('topic-user-permission', 'Topic User Permissions', {
+          onclick={() => modals.open('topic-user-permission', 'Topic User Permissions', {
             tenant: $page.params.tenant,
             roomId: topic.roomId,
             topicId: topicId

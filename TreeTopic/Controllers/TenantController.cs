@@ -1,317 +1,68 @@
-using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
-using MaskedUUID.AspNetCore.Types;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using TreeTopic.Dtos;
-using TreeTopic.Services;
-using TreeTopic.Filters;
-using TreeTopic.Permissions;
-using Finbuckle.MultiTenant;
 using TreeTopic.Models;
-using Finbuckle.MultiTenant.Abstractions;
+using TreeTopic.Permissions;
 
 namespace TreeTopic.Controllers;
 
 /// <summary>
-/// テナント管理
+/// テナント管理コントローラ
 /// </summary>
 [ApiController]
 [Route("{tenant}/api/[controller]")]
+[Authorize]
 public class TenantController : ControllerBase
 {
-    private readonly TenantManagementService _tenantService;
-    private readonly IMultiTenantContextAccessor<ApplicationTenantInfo> _tenantAccessor;
-    private readonly ILogger<TenantController> _logger;
+    private readonly ApplicationDbContext _db;
+    private readonly UserManager<ApplicationUser> _userManager;
 
     public TenantController(
-        TenantManagementService tenantService,
-        IMultiTenantContextAccessor<ApplicationTenantInfo> tenantAccessor,
-        ILogger<TenantController> logger)
+        ApplicationDbContext db,
+        UserManager<ApplicationUser> userManager)
     {
-        _tenantService = tenantService;
-        _tenantAccessor = tenantAccessor;
-        _logger = logger;
+        _db = db;
+        _userManager = userManager;
     }
 
     /// <summary>
-    /// 新しいテナントを登録（認可不要）
+    /// 現在のユーザーのテナント権限一覧を取得
     /// </summary>
-    [HttpPost("/api/tenants/register")]
-    [AllowAnonymous]
-    [ProducesResponseType(StatusCodes.Status201Created)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status409Conflict)]
-    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
-    public async Task<ActionResult<RegisterTenantResponse>> RegisterTenant([FromBody] CreateTenantRequest request)
+    [HttpGet("my/permissions")]
+    public async Task<IActionResult> GetMyPermissions(CancellationToken cancellationToken)
     {
-        try
+        var user = await _userManager.GetUserAsync(User);
+        if (user == null)
         {
-            var response = await _tenantService.CreateTenantAsync(request);
-            return StatusCode(StatusCodes.Status201Created,
-                new RegisterTenantResponse
-                {
-                    Identifier = response.Tenant.Identifier,
-                    SetupToken = response.SetupToken
-                });
+            return Unauthorized();
         }
-        catch (ArgumentException ex)
-        {
-            _logger.LogWarning(ex, "Invalid tenant registration request");
-            return BadRequest(new { message = ex.Message });
-        }
-        catch (InvalidOperationException ex)
-        {
-            _logger.LogWarning(ex, "Tenant already exists");
-            return Conflict(new { message = ex.Message });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error registering tenant");
-            return StatusCode(StatusCodes.Status500InternalServerError,
-                new { message = "Failed to register tenant" });
-        }
-    }
 
-    /// <summary>
-    /// すべてのテナントを公開情報として取得（認可不要）
-    /// </summary>
-    [HttpGet("/api/tenants/public")]
-    [AllowAnonymous]
-    [ProducesResponseType(StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
-    public async Task<ActionResult<List<PublicTenantInfo>>> GetPublicTenants()
-    {
-        try
+        // ユーザーのロールを取得
+        var roles = await _userManager.GetRolesAsync(user);
+
+        // 各ロールの権限を収集
+        var permissions = new List<string>();
+        foreach (var roleName in roles)
         {
-            var tenants = await _tenantService.GetAllTenantsAsync();
-            var response = tenants.Select(t => new PublicTenantInfo
+            var role = await _db.Roles
+                .AsNoTracking()
+                .FirstOrDefaultAsync(r => r.Name == roleName, cancellationToken);
+            if (role != null)
             {
-                Identifier = t.Identifier,
-                Name = t.Name
-            }).ToList();
-
-            return Ok(response);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error getting public tenants");
-            return StatusCode(StatusCodes.Status500InternalServerError);
-        }
-    }
-
-    /// <summary>
-    /// テナント公開情報を取得（認可不要）
-    /// </summary>
-    [HttpGet("/api/tenants/public/{identifier}")]
-    [AllowAnonymous]
-    [ProducesResponseType(StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
-    public async Task<ActionResult<PublicTenantInfo>> GetPublicTenant(string identifier)
-    {
-        try
-        {
-            var tenant = await _tenantService.GetTenantByIdentifierAsync(identifier);
-            if (tenant == null)
-            {
-                return NotFound(new { message = $"Tenant '{identifier}' not found" });
+                var rolePermissions = await _db.Permissions
+                    .AsNoTracking()
+                    .Where(p => p.RoleId == role.Id)
+                    .Select(p => p.Name)
+                    .ToListAsync(cancellationToken);
+                permissions.AddRange(rolePermissions);
             }
+        }
 
-            return Ok(new PublicTenantInfo
-            {
-                Identifier = tenant.Identifier,
-                Name = tenant.Name
-            });
-        }
-        catch (Exception ex)
+        return Ok(new
         {
-            _logger.LogError(ex, "Error getting public tenant: {Identifier}", identifier);
-            return StatusCode(StatusCodes.Status500InternalServerError);
-        }
+            permissions = permissions.Distinct().ToList()
+        });
     }
-
-    /// <summary>
-    /// テナント情報を取得
-    /// </summary>
-    [HttpGet("{identifier}")]
-    [Authorize]
-    [RequireAny(TenantPermissions.TenantRead)]
-    [ProducesResponseType(StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    public async Task<ActionResult<TenantResponse>> GetTenant(string identifier)
-    {
-        try
-        {
-            var tenant = await _tenantService.GetTenantByIdentifierAsync(identifier);
-            if (tenant == null)
-            {
-                return NotFound(new { message = $"Tenant '{identifier}' not found" });
-            }
-
-            return Ok(new TenantResponse
-            {
-                Id = tenant.Id,
-                Identifier = tenant.Identifier,
-                Name = tenant.Name,
-                DbProvider = tenant.Detail?.DbProvider,
-                CreatedAt = DateTime.UtcNow
-            });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error getting tenant: {Identifier}", identifier);
-            return StatusCode(StatusCodes.Status500InternalServerError);
-        }
-    }
-
-    /// <summary>
-    /// すべてのテナントを取得
-    /// </summary>
-    [HttpGet]
-    [Authorize]
-    [RequireAny(TenantPermissions.TenantRead)]
-    [ProducesResponseType(StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    public async Task<ActionResult<List<TenantResponse>>> GetAllTenants()
-    {
-        try
-        {
-            var tenants = await _tenantService.GetAllTenantsAsync();
-            var responses = tenants.Select(t => new TenantResponse
-            {
-                Id = t.Id,
-                Identifier = t.Identifier,
-                Name = t.Name,
-                DbProvider = t.Detail?.DbProvider,
-                CreatedAt = DateTime.UtcNow
-            }).ToList();
-
-            return Ok(responses);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error getting tenants");
-            return StatusCode(StatusCodes.Status500InternalServerError);
-        }
-    }
-
-    /// <summary>
-    /// テナント詳細情報を取得（setupToken認可もサポート）
-    /// </summary>
-    [HttpGet("detail")]
-    [ProducesResponseType(StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
-    public async Task<ActionResult<TenantDetailDto>> GetTenantDetail([FromRoute] string tenant)
-    {
-        try
-        {
-            var tenantInfo = await _tenantService.GetTenantByIdentifierAsync(tenant);
-            if (tenantInfo == null)
-            {
-                return NotFound(new { message = $"Tenant '{tenant}' not found" });
-            }
-
-            return Ok(new TenantDetailDto
-            {
-                Identifier = tenantInfo.Identifier,
-                Name = tenantInfo.Name,
-                RoleClaimName = tenantInfo.Detail?.RoleClaimName,
-                CanAssignRolesToUsers = tenantInfo.Detail?.CanAssignRolesToUsers() ?? true,
-                CanCreateUsers = tenantInfo.Detail?.CanCreateUsers() ?? true
-            });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error getting tenant detail: {Identifier}", tenant);
-            return StatusCode(StatusCodes.Status500InternalServerError);
-        }
-    }
-
-    /// <summary>
-    /// テナントを削除
-    /// </summary>
-    [HttpDelete]
-    [Authorize]
-    [RequireAny(TenantPermissions.TenantManage)]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
-    public async Task<IActionResult> DeleteTenant()
-    {
-        try
-        {
-            var tenant = HttpContext.GetMultiTenantContext<ApplicationTenantInfo>()?.TenantInfo;
-            if (tenant == null)
-            {
-                return NotFound(new { message = "Tenant not found" });
-            }
-
-            await _tenantService.DeleteTenantAsync(tenant.Id);
-            return NoContent();
-        }
-        catch (InvalidOperationException ex)
-        {
-            _logger.LogWarning(ex, "Tenant not found");
-            return NotFound(new { message = ex.Message });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error deleting tenant");
-            return StatusCode(StatusCodes.Status500InternalServerError);
-        }
-    }
-}
-
-/// <summary>
-/// テナント登録レスポンス
-/// </summary>
-public class RegisterTenantResponse
-{
-    /// <summary>
-    /// テナント識別子
-    /// </summary>
-    public string? Identifier { get; set; }
-
-    /// <summary>
-    /// 初期設定用トークン（1時間有効）
-    /// </summary>
-    public string? SetupToken { get; set; }
-}
-
-/// <summary>
-/// テナント情報レスポンス
-/// </summary>
-public class TenantResponse
-{
-    public string? Id { get; set; }
-    public string? Identifier { get; set; }
-    public string? Name { get; set; }
-    public string? DbProvider { get; set; }
-    public DateTime CreatedAt { get; set; }
-}
-
-/// <summary>
-/// テナント公開情報（認可不要）
-/// </summary>
-public class PublicTenantInfo
-{
-    public string? Identifier { get; set; }
-    public string? Name { get; set; }
-}
-
-/// <summary>
-/// テナント詳細情報DTO
-/// </summary>
-public class TenantDetailDto
-{
-    public string? Identifier { get; set; }
-    public string? Name { get; set; }
-    public string? RoleClaimName { get; set; }
-    public bool CanAssignRolesToUsers { get; set; }
-    public bool CanCreateUsers { get; set; }
 }

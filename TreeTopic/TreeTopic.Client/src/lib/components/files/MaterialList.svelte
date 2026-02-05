@@ -1,15 +1,41 @@
 <script lang="ts">
-  import { fileList } from '$lib/stores/files';
+  import { fileList, deleteFile as deleteFileApi } from '$lib/stores/files';
   import { currentRoom } from '$lib/stores/rooms';
   import { formatFileSize } from '$lib/utils/validation';
   import { formatDate } from '$lib/utils/date';
   import { ui } from '$lib/stores/ui';
+  import { api } from '$lib/api/client';
 
   interface Props {
     compact?: boolean;
   }
 
   let { compact = false }: Props = $props();
+
+  let deletingFiles = new Set<string>();
+
+  async function handleDeleteFile(fileId: string, fileName: string) {
+    if (!confirm(`Are you sure you want to delete "${fileName}"?`)) {
+      return;
+    }
+
+    const tenant = api.getCurrentTenant();
+    if (!tenant) {
+      alert('Unable to determine tenant');
+      return;
+    }
+
+    deletingFiles.add(fileId);
+
+    try {
+      await deleteFileApi(fileId, tenant);
+    } catch (error) {
+      console.error('Failed to delete file:', error);
+      alert('Failed to delete file. Please try again.');
+    } finally {
+      deletingFiles.delete(fileId);
+    }
+  }
 
   let filteredFiles = $derived.by(() => {
     if (!$currentRoom) return [];
@@ -152,6 +178,15 @@
                 >
                   Download
                 </button>
+                <button
+                  type="button"
+                  onclick={() => handleDeleteFile(file.id, file.fileName)}
+                  disabled={deletingFiles.has(file.id)}
+                  class="px-3 py-2 text-sm text-danger hover:text-danger-hover rounded hover:bg-danger-light transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                  title="Delete"
+                >
+                  {deletingFiles.has(file.id) ? 'Deleting...' : 'Delete'}
+                </button>
               </div>
             </div>
           {/each}
@@ -208,6 +243,18 @@
                   >
                     Download
                   </button>
+                  <button
+                    type="button"
+                    onclick={(e) => {
+                      e.preventDefault();
+                      handleDeleteFile(file.id, file.fileName);
+                    }}
+                    disabled={deletingFiles.has(file.id)}
+                    class="px-3 py-1 bg-danger text-white rounded hover:bg-danger-hover transition-colors text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Delete"
+                  >
+                    {deletingFiles.has(file.id) ? '...' : 'Delete'}
+                  </button>
                 </div>
               </div>
             {/each}
@@ -250,6 +297,15 @@
                   >
                     Download
                   </button>
+                  <button
+                    type="button"
+                    onclick={() => handleDeleteFile(file.id, file.fileName)}
+                    disabled={deletingFiles.has(file.id)}
+                    class="px-3 py-2 text-sm text-danger hover:text-danger-hover rounded hover:bg-danger-light transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Delete"
+                  >
+                    {deletingFiles.has(file.id) ? 'Deleting...' : 'Delete'}
+                  </button>
                 </div>
               </div>
             {/each}
@@ -289,6 +345,15 @@
                   title="Download"
                 >
                   Download
+                </button>
+                <button
+                  type="button"
+                  onclick={() => handleDeleteFile(file.id, file.fileName)}
+                  disabled={deletingFiles.has(file.id)}
+                  class="px-3 py-2 text-sm text-danger hover:text-danger-hover rounded hover:bg-danger-light transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                  title="Delete"
+                >
+                  {deletingFiles.has(file.id) ? 'Deleting...' : 'Delete'}
                 </button>
               </div>
             </div>

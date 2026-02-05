@@ -449,8 +449,11 @@ public class Program
         builder.Services.AddScoped<RoomRoleManager>();
         builder.Services.AddScoped<RoomUserManager>();
         builder.Services.AddScoped<RoomRoleManagementService>();
+        builder.Services.AddScoped<IRoomPermissionsService, RoomPermissionsService>();
 
         builder.Services.AddScoped<TopicPermissionManager>();
+
+        builder.Services.AddScoped<ITopicPermissionsService, TopicPermissionsService>();
 
         builder.Services.AddScoped<IRoomManagementService, RoomManagementService>();
 
@@ -469,6 +472,7 @@ public class Program
 
         builder.Services.AddScoped<IVapidService, VapidService>();
         builder.Services.AddScoped<IPushService, PushService>();
+        builder.Services.AddScoped<IPushSubscriptionService, PushSubscriptionService>();
 
         builder.Services.AddMemoryCache();
 

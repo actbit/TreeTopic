@@ -2,6 +2,7 @@ using MaskedUUID.AspNetCore.Types;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using TreeTopic.Common;
 using TreeTopic.Filters;
 using TreeTopic.Models;
 using TreeTopic.Permissions;
@@ -15,17 +16,13 @@ namespace TreeTopic.Controllers;
 [ApiController]
 [Route("{tenant}/api/roomroles/{roleName}/permissions")]
 [Authorize]
-public class RoomPermissionsController : ControllerBase
+public class RoomPermissionsController : BaseController
 {
-    private readonly ApplicationDbContext _db;
-    private readonly ILogger<RoomPermissionsController> _logger;
+    private readonly IRoomPermissionsService _service;
 
-    public RoomPermissionsController(
-        ApplicationDbContext db,
-        ILogger<RoomPermissionsController> logger)
+    public RoomPermissionsController(IRoomPermissionsService service)
     {
-        _db = db;
-        _logger = logger;
+        _service = service;
     }
 
     /// <summary>
@@ -53,22 +50,12 @@ public class RoomPermissionsController : ControllerBase
         [FromRoute] string roleName,
         CancellationToken cancellationToken)
     {
-        // ロールの存在確認
-        var role = await _db.RoomRoles
-            .AsNoTracking()
-            .FirstOrDefaultAsync(r => r.Name == roleName, cancellationToken);
-        if (role == null)
+        var result = await _service.GetRolePermissionsAsync(roleName, cancellationToken);
+        if (result.IsSuccess)
         {
-            return NotFound(new { message = "RoomRole not found" });
+            return Ok(new { roleName, permissions = result.Data });
         }
-
-        var permissions = await _db.RoomRolePermissions
-            .AsNoTracking()
-            .Where(p => p.RoomRoleId == role.Id)
-            .Select(p => p.PermissionName)
-            .ToListAsync(cancellationToken);
-
-        return Ok(new { roleName, roleId = role.Id, permissions });
+        return NotFound(new { message = result.Error?.Message });
     }
 
     /// <summary>
@@ -81,35 +68,15 @@ public class RoomPermissionsController : ControllerBase
         [FromBody] AddRoomPermissionRequest request,
         CancellationToken cancellationToken)
     {
-        // ロールの存在確認
-        var role = await _db.RoomRoles
-            .FirstOrDefaultAsync(r => r.Name == roleName, cancellationToken);
-        if (role == null)
+        var result = await _service.AddPermissionToRoleAsync(roleName, request.PermissionName, cancellationToken);
+        if (result.IsSuccess)
         {
-            return NotFound(new { message = "RoomRole not found" });
+            var permission = result.Data;
+            return Ok(new { permissionId = permission.Id, name = permission.PermissionName });
         }
-
-        // 既に割り当てられているか確認
-        var existing = await _db.RoomRolePermissions
-            .AnyAsync(p => p.RoomRoleId == role.Id && p.PermissionName == request.PermissionName, cancellationToken);
-
-        if (existing)
-        {
-            return Ok(new { message = "Permission already assigned" });
-        }
-
-        var permission = new RoomRolePermission
-        {
-            RoomRoleId = role.Id,
-            PermissionName = request.PermissionName
-        };
-
-        _db.RoomRolePermissions.Add(permission);
-        await _db.SaveChangesAsync(cancellationToken);
-
-        _logger.LogInformation("Permission {Permission} added to RoomRole {RoleName}", request.PermissionName, roleName);
-
-        return Ok(new { permissionId = permission.Id, name = permission.PermissionName });
+        return result.Error?.Message.Contains("already") == true
+            ? Ok(new { message = "Permission already assigned" })
+            : NotFound(new { message = result.Error?.Message });
     }
 
     /// <summary>
@@ -122,28 +89,31 @@ public class RoomPermissionsController : ControllerBase
         [FromRoute] string permissionName,
         CancellationToken cancellationToken)
     {
-        // ロールの存在確認
-        var role = await _db.RoomRoles
-            .FirstOrDefaultAsync(r => r.Name == roleName, cancellationToken);
-        if (role == null)
+        var result = await _service.RemovePermissionFromRoleAsync(roleName, permissionName, cancellationToken);
+        if (result.IsSuccess)
         {
-            return NotFound(new { message = "RoomRole not found" });
+            return NoContent();
         }
+        return result.Error?.Message.Contains("not found") == true
+            ? NotFound()
+            : StatusCode(500, new { message = result.Error?.Message });
+    }
 
-        var permission = await _db.RoomRolePermissions
-            .FirstOrDefaultAsync(p => p.RoomRoleId == role.Id && p.PermissionName == permissionName, cancellationToken);
-
-        if (permission == null)
+    /// <summary>
+    /// RoomRoleの全権限をクリア
+    /// </summary>
+    [HttpDelete("clear")]
+    [RequireAny(RoomPermissions.ManageRoles, TenantPermissions.RoomManage)]
+    public async Task<IActionResult> ClearRolePermissions(
+        [FromRoute] string roleName,
+        CancellationToken cancellationToken)
+    {
+        var result = await _service.ClearRolePermissionsAsync(roleName, cancellationToken);
+        if (result.IsSuccess)
         {
-            return NotFound();
+            return NoContent();
         }
-
-        _db.RoomRolePermissions.Remove(permission);
-        await _db.SaveChangesAsync(cancellationToken);
-
-        _logger.LogInformation("Permission {Permission} removed from RoomRole {RoleName}", permissionName, roleName);
-
-        return NoContent();
+        return NotFound(new { message = result.Error?.Message });
     }
 }
 

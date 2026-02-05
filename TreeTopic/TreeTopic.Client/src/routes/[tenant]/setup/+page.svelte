@@ -55,47 +55,53 @@
   let newUserEmail = $state('');
   let showUserCreation = $state(false);
 
-  onMount(async () => {
-    // Check for setup token in sessionStorage
-    setupToken = sessionStorage.getItem(`setupToken_${tenant}`);
+  onMount(() => {
+    let interval: number;
 
-    if (!setupToken) {
-      // No setup token, redirect to main page
-      await goto(`/${tenant}/`);
-      return;
-    }
+    (async () => {
+      // Check for setup token in sessionStorage
+      setupToken = sessionStorage.getItem(`setupToken_${tenant}`);
 
-    // Load initial data
-    await loadRoles();
-    await loadAvailablePermissions();
-    await loadTenantDetail();
-    await loadCurrentUser();
-
-    // Set token expiry based on creation time (8 hours from creation)
-    const tokenCreatedAt = sessionStorage.getItem(`setupTokenCreatedAt_${tenant}`);
-    if (tokenCreatedAt) {
-      tokenExpiryTime = new Date(parseInt(tokenCreatedAt) + 480 * 60 * 1000);
-    } else {
-      // Fallback: if no creation time stored, assume now and save it
-      const now = Date.now();
-      sessionStorage.setItem(`setupTokenCreatedAt_${tenant}`, now.toString());
-      tokenExpiryTime = new Date(now + 480 * 60 * 1000);
-    }
-
-    // Update time remaining every second
-    setInterval(() => {
-      if (tokenExpiryTime) {
-        const diff = tokenExpiryTime.getTime() - Date.now();
-        if (diff > 0) {
-          const hours = Math.floor(diff / (1000 * 60 * 60));
-          const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-          const seconds = Math.floor((diff % (1000 * 60)) / 1000);
-          timeRemaining = `${hours}h ${minutes}m ${seconds}s`;
-        } else {
-          timeRemaining = 'Expired';
-        }
+      if (!setupToken) {
+        // No setup token, redirect to main page
+        await goto(`/${tenant}/`);
+        return;
       }
-    }, 1000);
+
+      // Load initial data
+      await loadRoles();
+      await loadAvailablePermissions();
+      await loadTenantDetail();
+      await loadCurrentUser();
+
+      // Set token expiry based on creation time (8 hours from creation)
+      const tokenCreatedAt = sessionStorage.getItem(`setupTokenCreatedAt_${tenant}`);
+      if (tokenCreatedAt) {
+        tokenExpiryTime = new Date(parseInt(tokenCreatedAt) + 480 * 60 * 1000);
+      } else {
+        // Fallback: if no creation time stored, assume now and save it
+        const now = Date.now();
+        sessionStorage.setItem(`setupTokenCreatedAt_${tenant}`, now.toString());
+        tokenExpiryTime = new Date(now + 480 * 60 * 1000);
+      }
+
+      // Update time remaining every second
+      interval = window.setInterval(() => {
+        if (tokenExpiryTime) {
+          const diff = tokenExpiryTime.getTime() - Date.now();
+          if (diff > 0) {
+            const hours = Math.floor(diff / (1000 * 60 * 60));
+            const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+            const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+            timeRemaining = `${hours}h ${minutes}m ${seconds}s`;
+          } else {
+            timeRemaining = 'Expired';
+          }
+        }
+      }, 1000);
+    })();
+
+    return () => clearInterval(interval);
   });
 
 

@@ -17,17 +17,13 @@ namespace TreeTopic.Controllers;
 [ApiController]
 [Route("{tenant}/api/topics/{topicId}/permissions")]
 [Authorize]
-public class TopicPermissionsController : ControllerBase
+public class TopicPermissionsController : BaseController
 {
-    private readonly ApplicationDbContext _db;
-    private readonly ILogger<TopicPermissionsController> _logger;
+    private readonly ITopicPermissionsService _service;
 
-    public TopicPermissionsController(
-        ApplicationDbContext db,
-        ILogger<TopicPermissionsController> logger)
+    public TopicPermissionsController(ITopicPermissionsService service)
     {
-        _db = db;
-        _logger = logger;
+        _service = service;
     }
 
     /// <summary>
@@ -56,25 +52,12 @@ public class TopicPermissionsController : ControllerBase
         CancellationToken cancellationToken)
     {
         var topicGuid = (Guid)topicId;
-
-        var permissions = await _db.TopicUserPermissions
-            .AsNoTracking()
-            .Include(p => p.RoomUser)
-                .ThenInclude(ru => ru.ApplicationUser)
-            .Include(p => p.Topic)
-            .Where(p => p.TopicId == topicGuid)
-            .Select(p => new
-            {
-                p.Id,
-                p.TopicId,
-                p.RoomUserId,
-                UserName = p.RoomUser.ApplicationUser != null ? p.RoomUser.ApplicationUser.UserName : "",
-                DisplayName = p.RoomUser != null ? RoomUserNameHelper.ResolveDisplayName(p.RoomUser) : "",
-                p.Name
-            })
-            .ToListAsync(cancellationToken);
-
-        return Ok(permissions);
+        var result = await _service.GetTopicUserPermissionsAsync(topicGuid, cancellationToken);
+        if (result.IsSuccess)
+        {
+            return Ok(result.Data);
+        }
+        return NotFound(new { message = result.Error?.Message });
     }
 
     /// <summary>
@@ -90,13 +73,12 @@ public class TopicPermissionsController : ControllerBase
         var topicGuid = (Guid)topicId;
         var roomUserGuid = (Guid)roomUserId;
 
-        var permissions = await _db.TopicUserPermissions
-            .AsNoTracking()
-            .Where(p => p.TopicId == topicGuid && p.RoomUserId == roomUserGuid)
-            .Select(p => p.Name)
-            .ToListAsync(cancellationToken);
-
-        return Ok(new { topicId = topicGuid, roomUserId = roomUserGuid, permissions });
+        var result = await _service.GetUserTopicPermissionsAsync(topicGuid, roomUserGuid, cancellationToken);
+        if (result.IsSuccess)
+        {
+            return Ok(new { topicId = topicGuid, roomUserId = roomUserGuid, permissions = result.Data });
+        }
+        return NotFound(new { message = result.Error?.Message });
     }
 
     /// <summary>
@@ -110,48 +92,15 @@ public class TopicPermissionsController : ControllerBase
         CancellationToken cancellationToken)
     {
         var topicGuid = (Guid)topicId;
-
-        // TopicとRoomUserの存在確認
-        var topic = await _db.Topics.FindAsync(new[] { topicGuid }, cancellationToken);
-        if (topic == null)
+        var result = await _service.AddPermissionToUserAsync(topicGuid, request.RoomUserId, request.PermissionName, cancellationToken);
+        if (result.IsSuccess)
         {
-            return NotFound(new { message = "Topic not found" });
+            var permission = result.Data;
+            return Ok(new { permissionId = permission.Id, name = permission.Name });
         }
-
-        var roomUser = await _db.RoomUsers.FindAsync(new[] { request.RoomUserId }, cancellationToken);
-        if (roomUser == null)
-        {
-            return NotFound(new { message = "RoomUser not found" });
-        }
-
-        // RoomUserがトピックのルームに所属しているか検証
-        if (roomUser.RoomId != topic.RoomId)
-        {
-            return BadRequest(new { message = "RoomUser does not belong to topic's room" });
-        }
-
-        // 既に割り当てられているか確認
-        var existing = await _db.TopicUserPermissions
-            .AnyAsync(p => p.TopicId == topicGuid && p.RoomUserId == request.RoomUserId && p.Name == request.PermissionName, cancellationToken);
-
-        if (existing)
-        {
-            return Ok(new { message = "Permission already assigned" });
-        }
-
-        var permission = new TopicUserPermission
-        {
-            TopicId = topicGuid,
-            RoomUserId = request.RoomUserId,
-            Name = request.PermissionName
-        };
-
-        _db.TopicUserPermissions.Add(permission);
-        await _db.SaveChangesAsync(cancellationToken);
-
-        _logger.LogInformation("Permission {Permission} added to User {RoomUserId} for Topic {TopicId}", request.PermissionName, request.RoomUserId, topicGuid);
-
-        return Ok(new { permissionId = permission.Id, name = permission.Name });
+        return result.Error?.Message.Contains("already") == true
+            ? Ok(new { message = "Permission already assigned" })
+            : NotFound(new { message = result.Error?.Message });
     }
 
     /// <summary>
@@ -167,21 +116,14 @@ public class TopicPermissionsController : ControllerBase
     {
         var topicGuid = (Guid)topicId;
         var roomUserGuid = (Guid)roomUserId;
-
-        var permission = await _db.TopicUserPermissions
-            .FirstOrDefaultAsync(p => p.TopicId == topicGuid && p.RoomUserId == roomUserGuid && p.Name == permissionName, cancellationToken);
-
-        if (permission == null)
+        var result = await _service.RemovePermissionFromUserAsync(topicGuid, roomUserGuid, permissionName, cancellationToken);
+        if (result.IsSuccess)
         {
-            return NotFound();
+            return NoContent();
         }
-
-        _db.TopicUserPermissions.Remove(permission);
-        await _db.SaveChangesAsync(cancellationToken);
-
-        _logger.LogInformation("Permission {Permission} removed from User {RoomUserId} for Topic {TopicId}", permissionName, roomUserGuid, topicGuid);
-
-        return NoContent();
+        return result.Error?.Message.Contains("not found") == true
+            ? NotFound()
+            : StatusCode(500, new { message = result.Error?.Message });
     }
 
     /// <summary>
@@ -194,24 +136,12 @@ public class TopicPermissionsController : ControllerBase
         CancellationToken cancellationToken)
     {
         var topicGuid = (Guid)topicId;
-
-        var permissions = await _db.TopicRolePermissions
-            .AsNoTracking()
-            .Include(p => p.RoomRole)
-            .Include(p => p.Topic)
-            .Where(p => p.TopicId == topicGuid)
-            .Select(p => new
-            {
-                p.Id,
-                p.TopicId,
-                p.RoomRoleId,
-                RoleName = p.RoomRole != null ? p.RoomRole.Name : "",
-                RoleDescription = p.RoomRole != null ? p.RoomRole.Description : "",
-                p.Name
-            })
-            .ToListAsync(cancellationToken);
-
-        return Ok(permissions);
+        var result = await _service.GetTopicRolePermissionsAsync(topicGuid, cancellationToken);
+        if (result.IsSuccess)
+        {
+            return Ok(result.Data);
+        }
+        return NotFound(new { message = result.Error?.Message });
     }
 
     /// <summary>
@@ -225,43 +155,15 @@ public class TopicPermissionsController : ControllerBase
         CancellationToken cancellationToken)
     {
         var topicGuid = (Guid)topicId;
-
-        // TopicとRoomRoleの存在確認
-        var topic = await _db.Topics.FindAsync(new[] { topicGuid }, cancellationToken);
-        if (topic == null)
+        var result = await _service.AddTopicRolePermissionAsync(topicGuid, request.RoleName, request.PermissionName, cancellationToken);
+        if (result.IsSuccess)
         {
-            return NotFound(new { message = "Topic not found" });
+            var permission = result.Data;
+            return Ok(new { permissionId = permission.Id, name = permission.Name });
         }
-
-        var roomRole = await _db.RoomRoles
-            .FirstOrDefaultAsync(r => r.Name == request.RoleName, cancellationToken);
-        if (roomRole == null)
-        {
-            return NotFound(new { message = "RoomRole not found" });
-        }
-
-        // 既に割り当てられているか確認
-        var existing = await _db.TopicRolePermissions
-            .AnyAsync(p => p.TopicId == topicGuid && p.RoomRoleId == roomRole.Id && p.Name == request.PermissionName, cancellationToken);
-
-        if (existing)
-        {
-            return Ok(new { message = "Permission already assigned to RoomRole" });
-        }
-
-        var permission = new TopicRolePermission
-        {
-            TopicId = topicGuid,
-            RoomRoleId = roomRole.Id,
-            Name = request.PermissionName
-        };
-
-        _db.TopicRolePermissions.Add(permission);
-        await _db.SaveChangesAsync(cancellationToken);
-
-        _logger.LogInformation("Permission {Permission} added to RoomRole {RoleName} for Topic {TopicId}", request.PermissionName, request.RoleName, topicGuid);
-
-        return Ok(new { permissionId = permission.Id, name = permission.Name });
+        return result.Error?.Message.Contains("already") == true
+            ? Ok(new { message = "Permission already assigned to RoomRole" })
+            : NotFound(new { message = result.Error?.Message });
     }
 
     /// <summary>
@@ -276,29 +178,52 @@ public class TopicPermissionsController : ControllerBase
         CancellationToken cancellationToken)
     {
         var topicGuid = (Guid)topicId;
-
-        // RoomRoleの存在確認
-        var roomRole = await _db.RoomRoles
-            .FirstOrDefaultAsync(r => r.Name == roleName, cancellationToken);
-        if (roomRole == null)
+        var result = await _service.RemoveTopicRolePermissionAsync(topicGuid, roleName, permissionName, cancellationToken);
+        if (result.IsSuccess)
         {
-            return NotFound(new { message = "RoomRole not found" });
+            return NoContent();
         }
+        return result.Error?.Message.Contains("not found") == true
+            ? NotFound()
+            : StatusCode(500, new { message = result.Error?.Message });
+    }
 
-        var permission = await _db.TopicRolePermissions
-            .FirstOrDefaultAsync(p => p.TopicId == topicGuid && p.RoomRoleId == roomRole.Id && p.Name == permissionName, cancellationToken);
-
-        if (permission == null)
+    /// <summary>
+    /// ユーザーのTopic権限をクリア
+    /// </summary>
+    [HttpDelete("users/{roomUserId}")]
+    [RequireAny(TopicPermissions.Manage, TenantPermissions.TopicManage)]
+    public async Task<IActionResult> ClearUserPermissions(
+        [FromRoute] MaskedGuid topicId,
+        [FromRoute] MaskedGuid roomUserId,
+        CancellationToken cancellationToken)
+    {
+        var topicGuid = (Guid)topicId;
+        var roomUserGuid = (Guid)roomUserId;
+        var result = await _service.ClearUserPermissionsAsync(topicGuid, roomUserGuid, cancellationToken);
+        if (result.IsSuccess)
         {
-            return NotFound();
+            return NoContent();
         }
+        return NotFound(new { message = result.Error?.Message });
+    }
 
-        _db.TopicRolePermissions.Remove(permission);
-        await _db.SaveChangesAsync(cancellationToken);
-
-        _logger.LogInformation("Permission {Permission} removed from RoomRole {RoleName} for Topic {TopicId}", permissionName, roleName, topicGuid);
-
-        return NoContent();
+    /// <summary>
+    /// Topicの全RoomRole権限をクリア
+    /// </summary>
+    [HttpDelete("role-permissions")]
+    [RequireAny(TopicPermissions.Manage, TenantPermissions.TopicManage)]
+    public async Task<IActionResult> ClearRolePermissions(
+        [FromRoute] MaskedGuid topicId,
+        CancellationToken cancellationToken)
+    {
+        var topicGuid = (Guid)topicId;
+        var result = await _service.ClearRolePermissionsAsync(topicGuid, cancellationToken);
+        if (result.IsSuccess)
+        {
+            return NoContent();
+        }
+        return NotFound(new { message = result.Error?.Message });
     }
 }
 

@@ -1,8 +1,11 @@
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using MaskedUUID.AspNetCore.Types;
 using TreeTopic.Common;
 using TreeTopic.Dtos;
+using TreeTopic.Models;
 using TreeTopic.Services;
 using TreeTopic.Filters;
 using TreeTopic.Permissions;
@@ -16,11 +19,17 @@ namespace TreeTopic.Controllers;
 public class RoomController : ControllerBase
 {
     private readonly IRoomManagementService _roomManagementService;
+    private readonly ApplicationDbContext _db;
+    private readonly UserManager<ApplicationUser> _userManager;
 
     public RoomController(
-        IRoomManagementService roomManagementService)
+        IRoomManagementService roomManagementService,
+        ApplicationDbContext db,
+        UserManager<ApplicationUser> userManager)
     {
         _roomManagementService = roomManagementService;
+        _db = db;
+        _userManager = userManager;
     }
 
     private Guid CurrentUserId => Guid.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? Guid.Empty.ToString());
@@ -39,6 +48,62 @@ public class RoomController : ControllerBase
     {
         var result = await _roomManagementService.GetRoomByIdAsync((Guid)roomId, cancellationToken);
         return result.ToApiResult();
+    }
+
+    /// <summary>
+    /// 現在のユーザーのルーム権限一覧を取得
+    /// </summary>
+    [HttpGet("{roomId}/my/permissions")]
+    public async Task<IActionResult> GetMyPermissions(
+        [FromRoute] MaskedGuid roomId,
+        CancellationToken cancellationToken)
+    {
+        var roomGuid = (Guid)roomId;
+        var userId = CurrentUserId;
+
+        // RoomUserを取得
+        var roomUser = await _db.RoomUsers
+            .Include(ru => ru.RoomUserRoomRoles)
+                .ThenInclude(rur => rur.RoomRole)
+                    .ThenInclude(rr => rr!.Permissions)
+            .Include(ru => ru.RoomPermission)
+            .FirstOrDefaultAsync(ru => ru.RoomId == roomGuid && ru.ApplicationUserId == userId, cancellationToken);
+
+        if (roomUser == null)
+        {
+            return Ok(new RoomPermissionsResponse
+            {
+                Permissions = new List<string>()
+            });
+        }
+
+        var permissions = new List<string>();
+
+        // RoomRoleの権限を収集
+        foreach (var userRole in roomUser.RoomUserRoomRoles)
+        {
+            if (userRole.RoomRole?.Permissions != null)
+            {
+                foreach (var permission in userRole.RoomRole.Permissions)
+                {
+                    permissions.Add(permission.PermissionName);
+                }
+            }
+        }
+
+        // 直接付与された権限を追加
+        if (roomUser.RoomPermission != null && roomUser.RoomPermission.Count > 0)
+        {
+            foreach (var perm in roomUser.RoomPermission)
+            {
+                permissions.Add(perm.Name);
+            }
+        }
+
+        return Ok(new RoomPermissionsResponse
+        {
+            Permissions = permissions.Distinct().ToList()
+        });
     }
 
     [HttpPost]
@@ -70,9 +135,4 @@ public class RoomController : ControllerBase
         var result = await _roomManagementService.DeleteRoomAsync((Guid)roomId, cancellationToken);
         return result.ToApiResult();
     }
-
 }
-
-
-
-

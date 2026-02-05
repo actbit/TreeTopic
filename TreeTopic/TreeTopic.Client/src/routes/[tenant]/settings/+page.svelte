@@ -2,7 +2,7 @@
   import { page } from '$app/stores';
   import { api, getTenantDetail, createUser, banUser, unbanUser, assignUserRole, removeUserRole } from '$lib/api/client';
   import { onMount } from 'svelte';
-  import { ui } from '$lib/stores/ui';
+  import { ui, modals } from '$lib/stores/ui';
 
   let isLoading = $state(false);
   let error = $state<string | null>(null);
@@ -360,7 +360,7 @@
             <p class="text-sm text-text-light mt-1">テナントレベルのロールとIdentity権限を管理します。</p>
           </div>
           <button
-            onclick={() => ui.openModal('tenant-role-permission', 'Tenant Role Permissions', { tenant })}
+            onclick={() => modals.open('tenant-role-permission', 'Tenant Role Permissions', { tenant })}
             class="px-4 py-2 bg-primary text-white rounded hover:bg-opacity-90 transition-colors text-sm font-medium"
           >
             権限管理

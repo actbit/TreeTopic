@@ -19,6 +19,7 @@
   let showAddUser = $state(false);
   let selectedUserId = $state('');
   let selectedPermission = $state('');
+  let deletingUserId = $state<string | null>(null);
 
   $effect(() => {
     if (isOpen && tenant && roomId) {
@@ -112,6 +113,24 @@
       userPermissions[userId] = [];
     } catch (err: any) {
       error = err.message || 'Failed to remove permissions';
+    }
+  }
+
+  async function removeUserFromRoom(userId: string, userName: string) {
+    if (!confirm(`Are you sure you want to remove "${userName}" from this room?`)) return;
+
+    deletingUserId = userId;
+
+    try {
+      await api.delete(`/${tenant}/api/roomusers/${userId}`);
+      // Remove user from the list
+      roomUsers = roomUsers.filter((u) => u.id !== userId);
+      // Remove user's permissions
+      delete userPermissions[userId];
+    } catch (err: any) {
+      error = err.message || 'Failed to remove user from room';
+    } finally {
+      deletingUserId = null;
     }
   }
 
@@ -237,14 +256,23 @@
                     <p class="font-medium text-text">{getDisplayName(user)}</p>
                     <p class="text-sm text-text-light">@{user.userName}</p>
                   </div>
-                  {#if perms.length > 0}
+                  <div class="flex items-center gap-3">
+                    {#if perms.length > 0}
+                      <button
+                        onclick={() => removeAllUserPermissions(user.id)}
+                        class="text-text-light hover:text-danger transition-colors text-sm"
+                      >
+                        Clear Permissions
+                      </button>
+                    {/if}
                     <button
-                      onclick={() => removeAllUserPermissions(user.id)}
-                      class="text-danger hover:text-red-700 transition-colors text-sm"
+                      onclick={() => removeUserFromRoom(user.id, getDisplayName(user))}
+                      disabled={deletingUserId === user.id}
+                      class="text-danger hover:text-red-700 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      Remove All
+                      {deletingUserId === user.id ? 'Removing...' : 'Remove from Room'}
                     </button>
-                  {/if}
+                  </div>
                 </div>
 
                 <div class="space-y-2">

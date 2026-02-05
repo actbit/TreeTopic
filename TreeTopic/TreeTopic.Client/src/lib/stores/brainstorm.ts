@@ -1,4 +1,4 @@
-import { writable, derived } from 'svelte/store';
+import { writable, derived, get } from 'svelte/store';
 
 export interface BrainIdeaVote {
   id: string;
@@ -273,11 +273,8 @@ export const brainstorm = createBrainstormStore();
  */
 export function addIdea(idea: BrainIdea) {
   if (brainstorm && typeof brainstorm === 'object' && 'subscribe' in brainstorm) {
-    // Use store subscription to get current state and find board
-    let currentBoardId: string | null = null;
-    brainstorm.subscribe((state) => {
-      currentBoardId = state.currentBoard?.id ?? null;
-    })();
+    const state = get(brainstorm);
+    const currentBoardId = state.currentBoard?.id ?? null;
 
     if (currentBoardId) {
       brainstorm.addIdea(currentBoardId, idea);
@@ -287,10 +284,8 @@ export function addIdea(idea: BrainIdea) {
 
 export function deleteIdea(ideaId: string) {
   if (brainstorm && typeof brainstorm === 'object' && 'subscribe' in brainstorm) {
-    let currentBoardId: string | null = null;
-    brainstorm.subscribe((state) => {
-      currentBoardId = state.currentBoard?.id ?? null;
-    })();
+    const state = get(brainstorm);
+    const currentBoardId = state.currentBoard?.id ?? null;
 
     if (currentBoardId) {
       brainstorm.deleteIdea(currentBoardId, ideaId);
@@ -300,10 +295,8 @@ export function deleteIdea(ideaId: string) {
 
 export function updateIdeaPosition(ideaId: string, positionLeft: number, positionTop: number) {
   if (brainstorm && typeof brainstorm === 'object' && 'subscribe' in brainstorm) {
-    let currentBoardId: string | null = null;
-    brainstorm.subscribe((state) => {
-      currentBoardId = state.currentBoard?.id ?? null;
-    })();
+    const state = get(brainstorm);
+    const currentBoardId = state.currentBoard?.id ?? null;
 
     if (currentBoardId) {
       brainstorm.moveIdea(currentBoardId, ideaId, positionLeft, positionTop);

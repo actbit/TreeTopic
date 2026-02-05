@@ -3,7 +3,7 @@
   import Button from '../common/Button.svelte';
   import Input from '../common/Input.svelte';
   import ErrorMessage from '../common/ErrorMessage.svelte';
-  import { ui, activeModals } from '$lib/stores/ui';
+  import { ui, activeModals, modals } from '$lib/stores/ui';
   import { currentRoom, updateRoom, deleteRoom as deleteRoomStore } from '$lib/stores/rooms';
   import { isRequired } from '$lib/utils/validation';
   import { api } from '$lib/api/client';
@@ -156,7 +156,7 @@
         <button
           type="button"
           class="flex-1 px-4 py-3 border border-primary text-primary rounded-lg hover:bg-primary hover:bg-opacity-10 transition-colors font-medium"
-          onclick={() => ui.openModal('room-role-permission', 'Room Role Permissions', {
+          onclick={() => modals.open('room-role-permission', 'Room Role Permissions', {
             tenant: $page.params.tenant,
             roomId: $currentRoom?.id
           })}
@@ -166,7 +166,7 @@
         <button
           type="button"
           class="flex-1 px-4 py-3 border border-primary text-primary rounded-lg hover:bg-primary hover:bg-opacity-10 transition-colors font-medium"
-          onclick={() => ui.openModal('room-user-permission', 'Room User Permissions', {
+          onclick={() => modals.open('room-user-permission', 'Room User Permissions', {
             tenant: $page.params.tenant,
             roomId: $currentRoom?.id
           })}
