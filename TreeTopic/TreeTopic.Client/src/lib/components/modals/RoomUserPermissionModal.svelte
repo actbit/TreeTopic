@@ -5,14 +5,26 @@
   import { ui, activeModals } from '$lib/stores/ui';
   import { page } from '$app/stores';
 
+  // Type definitions
+  interface RoomUser {
+    id: string;
+    userName?: string;
+    displayName?: string;
+  }
+
+  interface Permission {
+    name: string;
+    label?: string;
+  }
+
   const modalId = 'room-user-permission';
   let modal = $derived.by(() => $activeModals.find((m) => m.id === modalId) ?? null);
   let isOpen = $derived.by(() => modal !== null);
-  let tenant = $derived.by(() => modal?.data?.tenant ?? $page.params.tenant ?? '');
-  let roomId = $derived.by(() => modal?.data?.roomId ?? '');
+  let tenant = $derived.by(() => (modal?.data?.tenant ?? $page.params.tenant ?? '') as string);
+  let roomId = $derived.by(() => (modal?.data?.roomId ?? '') as string);
 
-  let availablePermissions = $state<any[]>([]);
-  let roomUsers = $state<any[]>([]);
+  let availablePermissions = $state<Permission[]>([]);
+  let roomUsers = $state<RoomUser[]>([]);
   let userPermissions = $state<Record<string, string[]>>({});
   let isLoading = $state(true);
   let error = $state<string | null>(null);
@@ -36,7 +48,7 @@
       availablePermissions = availablePermsData.room || [];
 
       // Fetch room users
-      const usersData = await api.get<any>(`/${tenant}/api/RoomUsers/room/${roomId}`);
+      const usersData = await api.get<any>(`/${tenant}/api/roomusers/room/${roomId}`);
       roomUsers = usersData;
 
       // Fetch permissions for each user
@@ -56,8 +68,8 @@
       });
 
       error = null;
-    } catch (err: any) {
-      error = err.message || 'Failed to load data';
+    } catch (err) {
+      error = err instanceof Error ? err.message : 'Failed to load data';
     } finally {
       isLoading = false;
     }
@@ -77,8 +89,8 @@
         await api.post(`/${tenant}/api/roomusers/${userId}/permissions`, { permissionName });
         userPermissions[userId] = [...currentPerms, permissionName];
       }
-    } catch (err: any) {
-      error = err.message || 'Failed to update permissions';
+    } catch (err) {
+      error = err instanceof Error ? err.message : 'Failed to update permissions';
     }
   }
 
@@ -100,8 +112,8 @@
       selectedUserId = '';
       selectedPermission = '';
       error = null;
-    } catch (err: any) {
-      error = err.message || 'Failed to add permission';
+    } catch (err) {
+      error = err instanceof Error ? err.message : 'Failed to add permission';
     }
   }
 
@@ -111,8 +123,8 @@
     try {
       await api.delete(`/${tenant}/api/roomusers/${userId}/permissions`);
       userPermissions[userId] = [];
-    } catch (err: any) {
-      error = err.message || 'Failed to remove permissions';
+    } catch (err) {
+      error = err instanceof Error ? err.message : 'Failed to remove permissions';
     }
   }
 
@@ -127,14 +139,14 @@
       roomUsers = roomUsers.filter((u) => u.id !== userId);
       // Remove user's permissions
       delete userPermissions[userId];
-    } catch (err: any) {
-      error = err.message || 'Failed to remove user from room';
+    } catch (err) {
+      error = err instanceof Error ? err.message : 'Failed to remove user from room';
     } finally {
       deletingUserId = null;
     }
   }
 
-  function getDisplayName(user: any): string {
+  function getDisplayName(user: RoomUser): string {
     return user.displayName || user.userName || 'Unknown';
   }
 

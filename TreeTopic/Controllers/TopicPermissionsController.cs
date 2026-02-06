@@ -96,7 +96,7 @@ public class TopicPermissionsController : BaseController
         if (result.IsSuccess)
         {
             var permission = result.Data;
-            return Ok(new { permissionId = permission.Id, name = permission.Name });
+            return Ok(new { permissionId = new MaskedGuid(permission.Id), name = permission.Name });
         }
         return result.Error?.Message.Contains("already") == true
             ? Ok(new { message = "Permission already assigned" })
@@ -159,7 +159,7 @@ public class TopicPermissionsController : BaseController
         if (result.IsSuccess)
         {
             var permission = result.Data;
-            return Ok(new { permissionId = permission.Id, name = permission.Name });
+            return Ok(new { permissionId = new MaskedGuid(permission.Id), name = permission.Name });
         }
         return result.Error?.Message.Contains("already") == true
             ? Ok(new { message = "Permission already assigned to RoomRole" })

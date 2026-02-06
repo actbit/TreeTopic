@@ -3,6 +3,22 @@
   import { api } from '$lib/api/client';
   import { ui, activeModals } from '$lib/stores/ui';
 
+  interface RegisterTenantRequest {
+    identifier: string;
+    name: string;
+    dbProvider: string;
+    dbConnectionString?: string;
+    roleClaimName?: string;
+    openIdConnectAuthority?: string;
+    openIdConnectMetadataAddress?: string;
+    openIdConnectClientId?: string;
+    openIdConnectClientSecret?: string;
+  }
+
+  interface RegisterTenantResponse {
+    setupToken?: string;
+  }
+
   const modalId = 'tenant-create';
   let modal = $derived.by(() => $activeModals.find((m) => m.id === modalId) ?? null);
   let isOpen = $derived.by(() => modal !== null);
@@ -140,7 +156,7 @@
       isLoading = true;
       error = null;
 
-      const request: any = {
+      const request: RegisterTenantRequest = {
         identifier: identifier.trim(),
         name: name.trim(),
         dbProvider: dbProvider
@@ -160,7 +176,7 @@
         if (clientSecret) request.openIdConnectClientSecret = clientSecret.trim();
       }
 
-      const response = await api.post<any>('/api/tenant/register', request);
+      const response = await api.post<RegisterTenantResponse>('/api/tenants/register', request);
 
       // セットアップトークンを保存して表示
       if (response.setupToken) {
@@ -168,8 +184,8 @@
         sessionStorage.setItem(`setupToken_${identifier}`, response.setupToken);
         showSetupToken = true;
       }
-    } catch (err: any) {
-      error = err.message || 'Failed to create workspace';
+    } catch (err) {
+      error = err instanceof Error ? err.message : 'Failed to create workspace';
     } finally {
       isLoading = false;
     }

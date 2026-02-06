@@ -158,7 +158,7 @@ public class SetupTokenValidationService
 
                 // テナント情報を削除
                 await _tenantDb.Tenants
-                    .Where(t => expiredTenantIds.Contains(t.Id))
+                    .Where(t => t.Id != null && expiredTenantIds.Contains(t.Id!))
                     .ExecuteDeleteAsync();
 
                 _logger.LogInformation("Cleaned up {Count} tenants with expired setup tokens (1-2 days old)", expiredTenantIds.Count);

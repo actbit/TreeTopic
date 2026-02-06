@@ -21,25 +21,36 @@ public class PermissionsController : ControllerBase
     [RequireAny(TenantPermissions.PermissionRead)]
     public IActionResult GetAvailablePermissions([FromServices] PermissionScanService permissionScanService)
     {
-        var permissionsByCategory = permissionScanService.GetPermissionsByCategory();
+        if (permissionScanService == null)
+        {
+            return StatusCode(500, new { error = "Permission scan service is not available" });
+        }
+
+        var permissionsByCategory = permissionScanService.GetPermissionsByCategory() ?? new Dictionary<string, List<PermissionRequirement>>();
 
         var permissions = new
         {
-            tenant = permissionsByCategory["tenant"].Select(p => new
-            {
-                name = p.Name,
-                scope = p.Scope.ToString()
-            }),
-            topic = permissionsByCategory["topic"].Select(p => new
-            {
-                name = p.Name,
-                scope = p.Scope.ToString()
-            }),
-            room = permissionsByCategory["room"].Select(p => new
-            {
-                name = p.Name,
-                scope = p.Scope.ToString()
-            })
+            tenant = permissionsByCategory.TryGetValue("tenant", out var tenantPerms)
+                ? (object)tenantPerms.Select(p => new
+                {
+                    name = p.Name,
+                    scope = p.Scope.ToString()
+                })
+                : Array.Empty<object>(),
+            topic = permissionsByCategory.TryGetValue("topic", out var topicPerms)
+                ? (object)topicPerms.Select(p => new
+                {
+                    name = p.Name,
+                    scope = p.Scope.ToString()
+                })
+                : Array.Empty<object>(),
+            room = permissionsByCategory.TryGetValue("room", out var roomPerms)
+                ? (object)roomPerms.Select(p => new
+                {
+                    name = p.Name,
+                    scope = p.Scope.ToString()
+                })
+                : Array.Empty<object>()
         };
 
         return Ok(permissions);

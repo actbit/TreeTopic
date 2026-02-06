@@ -177,7 +177,7 @@ public class TopicManagementService : BaseService, ITopicManagementService
             await _topicRepository.SaveChangesAsync(cancellationToken);
 
             var dto = await MapToTopicDetailDtoAsync(topic, null, cancellationToken);
-            await BroadcastTopicCreatedAsync(dto);
+            await BroadcastTopicCreatedAsync(topic.Id, dto, cancellationToken);
 
             // 親トピックのhasChildrenを更新してブロードキャスト
             if (parentId.HasValue)
@@ -256,7 +256,7 @@ public class TopicManagementService : BaseService, ITopicManagementService
             await _topicRepository.SaveChangesAsync(cancellationToken);
 
             var dto = await MapToTopicDetailDtoAsync(topic, null, cancellationToken);
-            await BroadcastTopicUpdatedAsync(dto);
+            await BroadcastTopicUpdatedAsync(topic.Id, dto, cancellationToken);
 
             // 親が変更された場合、古い親と新しい親のhasChildrenを更新してブロードキャスト
             if (oldParentId != topic.ParentId)
@@ -268,7 +268,7 @@ public class TopicManagementService : BaseService, ITopicManagementService
                     if (oldParent != null)
                     {
                         var oldParentDto = await MapToTopicDetailDtoAsync(oldParent, null, cancellationToken);
-                        await BroadcastTopicUpdatedAsync(oldParentDto);
+                        await BroadcastTopicUpdatedAsync(oldParent.Id, oldParentDto, cancellationToken);
                     }
                 }
 
@@ -279,7 +279,7 @@ public class TopicManagementService : BaseService, ITopicManagementService
                     if (newParent != null)
                     {
                         var newParentDto = await MapToTopicDetailDtoAsync(newParent, null, cancellationToken);
-                        await BroadcastTopicUpdatedAsync(newParentDto);
+                        await BroadcastTopicUpdatedAsync(newParent.Id, newParentDto, cancellationToken);
                     }
                 }
             }
@@ -327,7 +327,7 @@ public class TopicManagementService : BaseService, ITopicManagementService
                 if (oldParent != null)
                 {
                     var oldParentDto = await MapToTopicDetailDtoAsync(oldParent, null, cancellationToken);
-                    await BroadcastTopicUpdatedAsync(oldParentDto);
+                    await BroadcastTopicUpdatedAsync(oldParent.Id, oldParentDto, cancellationToken);
                 }
             }
 
@@ -335,43 +335,40 @@ public class TopicManagementService : BaseService, ITopicManagementService
         }, nameof(DeleteTopicAsync));
     }
 
-    private TopicRealtimeDto MapToRealtime(TopicDetailDto dto)
+    private async Task<TopicRealtimeDto> MapToRealtimeAsync(Guid topicId, TopicDetailDto dto, CancellationToken cancellationToken)
     {
-        var id = (Guid)dto.Id;
-        var roomId = (Guid)dto.RoomId;
-        var parentId = dto.ParentId.HasValue ? (Guid)dto.ParentId.Value : Guid.Empty;
-
-        var sourceMessageEncoded = dto.SourceMessageId.HasValue && (Guid)dto.SourceMessageId.Value != Guid.Empty
-            ? _maskedUuidService.EncodeSynchronous((Guid)dto.SourceMessageId.Value)
-            : null;
+        // Get MessageCount
+        var messageCount = await _dbContext.Messages
+            .CountAsync(m => m.TopicId == topicId, cancellationToken);
 
         return new TopicRealtimeDto(
-            id == Guid.Empty ? string.Empty : _maskedUuidService.EncodeSynchronous(id),
-            roomId == Guid.Empty ? string.Empty : _maskedUuidService.EncodeSynchronous(roomId),
-            dto.ParentId.HasValue && parentId != Guid.Empty ? _maskedUuidService.EncodeSynchronous(parentId) : null,
+            dto.Id,
+            dto.RoomId,
+            dto.ParentId,
             dto.Title,
             dto.Description,
             dto.HasChildren,
-            sourceMessageEncoded,
+            dto.SourceMessageId,
             dto.UnreadCount,
+            messageCount,
             dto.CreatedAt,
             dto.UpdatedAt);
     }
 
-    private Task BroadcastTopicCreatedAsync(TopicDetailDto dto)
+    private async Task BroadcastTopicCreatedAsync(Guid topicId, TopicDetailDto dto, CancellationToken cancellationToken)
     {
         var groupName = RoomTopicHubGroups.Room(_maskedUuidService.EncodeSynchronous((Guid)dto.RoomId));
-        var payload = MapToRealtime(dto);
+        var payload = await MapToRealtimeAsync(topicId, dto, cancellationToken);
         Logger.LogInformation("[RoomTopicHub] Broadcast TopicCreated topic={TopicId} room={RoomId} group={Group}", dto.Id, dto.RoomId, groupName);
-        return _roomTopicHub.Clients.Group(groupName).TopicCreated(payload);
+        await _roomTopicHub.Clients.Group(groupName).TopicCreated(payload);
     }
 
-    private Task BroadcastTopicUpdatedAsync(TopicDetailDto dto)
+    private async Task BroadcastTopicUpdatedAsync(Guid topicId, TopicDetailDto dto, CancellationToken cancellationToken)
     {
         var groupName = RoomTopicHubGroups.Room(_maskedUuidService.EncodeSynchronous((Guid)dto.RoomId));
-        var payload = MapToRealtime(dto);
+        var payload = await MapToRealtimeAsync(topicId, dto, cancellationToken);
         Logger.LogInformation("[RoomTopicHub] Broadcast TopicUpdated topic={TopicId} room={RoomId} group={Group}", dto.Id, dto.RoomId, groupName);
-        return _roomTopicHub.Clients.Group(groupName).TopicUpdated(payload);
+        await _roomTopicHub.Clients.Group(groupName).TopicUpdated(payload);
     }
 
     private Task BroadcastTopicDeletedAsync(Topic topic)
@@ -380,9 +377,9 @@ public class TopicManagementService : BaseService, ITopicManagementService
         var topicId = topic.Id;
         var groupName = RoomTopicHubGroups.Room(_maskedUuidService.EncodeSynchronous(roomId));
         var payload = new TopicDeletedEvent(
-            _maskedUuidService.EncodeSynchronous(topicId),
-            _maskedUuidService.EncodeSynchronous(roomId),
-            topic.ParentId.HasValue ? _maskedUuidService.EncodeSynchronous(topic.ParentId.Value) : null);
+            topicId,
+            roomId,
+            topic.ParentId);
         Logger.LogInformation("[RoomTopicHub] Broadcast TopicDeleted topic={TopicId} room={RoomId} group={Group}", topicId, roomId, groupName);
         return _roomTopicHub.Clients.Group(groupName).TopicDeleted(payload);
     }
@@ -396,7 +393,7 @@ public class TopicManagementService : BaseService, ITopicManagementService
         if (topic == null) return;
 
         var dto = await MapToTopicDetailDtoAsync(topic, null, CancellationToken.None);
-        await BroadcastTopicUpdatedAsync(dto);
+        await BroadcastTopicUpdatedAsync(topicId, dto, CancellationToken.None);
     }
 
     /// <summary>
@@ -499,8 +496,8 @@ public class TopicManagementService : BaseService, ITopicManagementService
 
             // 1. hasChildrenを一括チェック
             var childTopicParentIds = await _topicRepository.Query()
-                .Where(t => topicIds.Contains(t.ParentId.Value))
-                .Select(t => t.ParentId.Value)
+                .Where(t => t.ParentId.HasValue && topicIds.Contains(t.ParentId.Value))
+                .Select(t => t.ParentId!.Value)
                 .Distinct()
                 .ToListAsync(cancellationToken);
 

@@ -83,7 +83,7 @@ export function filter<T>(items: T[], predicate: (item: T) => boolean): T[] {
 export function filterByField<T>(
   items: T[],
   field: keyof T,
-  value: any
+  value: unknown
 ): T[] {
   return items.filter((item) => item[field] === value);
 }
@@ -93,7 +93,7 @@ export function filterByField<T>(
  */
 export function filterByMultiple<T>(
   items: T[],
-  conditions: Array<{ field: keyof T; value: any }>
+  conditions: Array<{ field: keyof T; value: unknown }>
 ): T[] {
   return items.filter((item) =>
     conditions.every((condition) => item[condition.field] === condition.value)
@@ -124,8 +124,8 @@ export function search<T>(
 export function groupBy<T>(
   items: T[],
   field: keyof T
-): Map<any, T[]> {
-  const groups = new Map<any, T[]>();
+): Map<unknown, T[]> {
+  const groups = new Map<unknown, T[]>();
 
   items.forEach((item) => {
     const key = item[field];
@@ -149,7 +149,7 @@ export function unique<T>(
     return [...new Set(items)];
   }
 
-  const seen = new Set<any>();
+  const seen = new Set<unknown>();
   return items.filter((item) => {
     const value = item[field];
     if (seen.has(value)) return false;
@@ -243,8 +243,8 @@ export function findLast<T>(
 /**
  * Flatten nested array
  */
-export function flatten<T>(items: any[]): T[] {
-  return items.reduce((flat, item) => {
-    return flat.concat(Array.isArray(item) ? flatten(item) : item);
+export function flatten<T>(items: unknown[]): T[] {
+  return items.reduce((flat: T[], item) => {
+    return flat.concat(Array.isArray(item) ? flatten<T>(item) : [item as T]);
   }, []);
 }

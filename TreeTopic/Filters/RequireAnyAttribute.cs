@@ -31,6 +31,11 @@ public class RequireAnyAttribute : Attribute, IAsyncActionFilter
     public string RoomIdKey { get; set; } = "roomId";
 
     /// <summary>
+    /// ルームユーザーIDのアクションパラメーター名（RoomPermissionチェックのRoomId解決用）
+    /// </summary>
+    public string RoomUserIdKey { get; set; } = "roomUserId";
+
+    /// <summary>
     /// IDをルートパラメーターからも取得するか
     /// </summary>
     public bool FallbackToRoute { get; set; } = true;
@@ -39,6 +44,11 @@ public class RequireAnyAttribute : Attribute, IAsyncActionFilter
     /// ルートパラメーターからRoomIdが取得できない場合、TopicからRoomIdを取得するか
     /// </summary>
     public bool ResolveRoomIdFromTopic { get; set; } = true;
+
+    /// <summary>
+    /// ルートパラメーターからRoomIdが取得できない場合、RoomUserからRoomIdを取得するか
+    /// </summary>
+    public bool ResolveRoomIdFromRoomUser { get; set; } = true;
 
     /// <summary>
     /// 文字列配列からPermissionRequirementを構築するコンストラクター
@@ -95,12 +105,22 @@ public class RequireAnyAttribute : Attribute, IAsyncActionFilter
             return;
         }
 
-        // ユーザーのロールを取得
-        var roles = await userManager.GetRolesAsync(appUser);
+        // ユーザーのロールを取得（Identity管理ロール + claimsロールをマージ）
+        var identityRoles = await userManager.GetRolesAsync(appUser);
+        var claimRoles = user.FindAll(ClaimTypes.Role).Select(c => c.Value);
+        var roles = new HashSet<string>(identityRoles, StringComparer.OrdinalIgnoreCase);
+        foreach (var claimRole in claimRoles)
+        {
+            if (!string.IsNullOrWhiteSpace(claimRole))
+            {
+                roles.Add(claimRole);
+            }
+        }
 
         // RoomId/TopicIdを事前に取得（必要な場合のみ）
         var roomId = GetRoomId(context, maskedUuidService);
         var topicId = GetTopicId(context, maskedUuidService);
+        var roomUserId = GetRoomUserId(context, maskedUuidService);
 
         // RoomIdがない場合、Topicから解決
         if (!roomId.HasValue && topicId.HasValue && ResolveRoomIdFromTopic)
@@ -112,6 +132,16 @@ public class RequireAnyAttribute : Attribute, IAsyncActionFilter
             {
                 roomId = topic.RoomId;
             }
+        }
+
+        // RoomIdがない場合、RoomUserから解決
+        if (!roomId.HasValue && roomUserId.HasValue && ResolveRoomIdFromRoomUser)
+        {
+            roomId = await dbContext.RoomUsers
+                .AsNoTracking()
+                .Where(ru => ru.Id == roomUserId.Value)
+                .Select(ru => (Guid?)ru.RoomId)
+                .FirstOrDefaultAsync(httpContext.RequestAborted);
         }
 
         RoomUser? roomUser = null;
@@ -148,7 +178,7 @@ public class RequireAnyAttribute : Attribute, IAsyncActionFilter
 
     private static async Task<bool> CheckPermissionAsync(
         PermissionRequirement requirement,
-        IList<string> roles,
+        ISet<string> roles,
         RoomUser? roomUser,
         Guid? roomId,
         Guid? topicId,
@@ -182,7 +212,7 @@ public class RequireAnyAttribute : Attribute, IAsyncActionFilter
 
     private static async Task<bool> CheckRolePermissionAsync(
         string permissionName,
-        IList<string> roles,
+        ISet<string> roles,
         ApplicationDbContext dbContext,
         CancellationToken cancellationToken)
     {
@@ -251,6 +281,37 @@ public class RequireAnyAttribute : Attribute, IAsyncActionFilter
             if (routeTopicIdObj?.ToString() is string routeTopicIdStr && !string.IsNullOrWhiteSpace(routeTopicIdStr))
             {
                 try { return maskedUuidService.DecodeSynchronous(routeTopicIdStr); }
+                catch { /* decode failed */ }
+            }
+        }
+
+        return null;
+    }
+
+    private Guid? GetRoomUserId(ActionExecutingContext context, IMaskedUUIDService maskedUuidService)
+    {
+        // アクションパラメータから取得
+        if (context.ActionArguments.TryGetValue(RoomUserIdKey, out var roomUserIdObj))
+        {
+            if (roomUserIdObj is Guid guid) return guid;
+            if (roomUserIdObj is MaskedGuid maskedGuid) return maskedGuid;
+            if (Guid.TryParse(roomUserIdObj?.ToString(), out var parsedRoomUserId)) return parsedRoomUserId;
+            if (roomUserIdObj?.ToString() is string roomUserIdStr && !string.IsNullOrWhiteSpace(roomUserIdStr))
+            {
+                try { return maskedUuidService.DecodeSynchronous(roomUserIdStr); }
+                catch { /* decode failed */ }
+            }
+        }
+
+        // ルートパラメータから取得
+        if (FallbackToRoute &&
+            context.RouteData.Values.TryGetValue(RoomUserIdKey, out var routeRoomUserIdObj))
+        {
+            if (routeRoomUserIdObj is Guid routeGuid) return routeGuid;
+            if (Guid.TryParse(routeRoomUserIdObj?.ToString(), out var routeRoomUserId)) return routeRoomUserId;
+            if (routeRoomUserIdObj?.ToString() is string routeRoomUserIdStr && !string.IsNullOrWhiteSpace(routeRoomUserIdStr))
+            {
+                try { return maskedUuidService.DecodeSynchronous(routeRoomUserIdStr); }
                 catch { /* decode failed */ }
             }
         }

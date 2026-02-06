@@ -27,6 +27,7 @@ using System.IO;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.Extensions.FileProviders;
 using TreeTopic.Hubs;
+using TreeTopic.Common.Helpers;
 namespace TreeTopic;
 
 public class Program
@@ -298,6 +299,7 @@ public class Program
                     if (!Uri.TryCreate(tenantDetail.OpenIdConnectAuthority, UriKind.Absolute, out var authorityUri) ||
                         (authorityUri.Scheme != Uri.UriSchemeHttps && !builder.Environment.IsDevelopment()))
                     {
+                        return; // Skip this tenant configuration
                     }
 
                     options.Authority = tenantDetail.OpenIdConnectAuthority;
@@ -306,17 +308,20 @@ public class Program
                     if (string.IsNullOrEmpty(tenantDetail.OpenIdConnectAuthorizationEndpoint) ||
                         string.IsNullOrEmpty(tenantDetail.OpenIdConnectTokenEndpoint))
                     {
+                        // Use default endpoints from authority
                     }
                     else
                     {
                         if (!Uri.TryCreate(tenantDetail.OpenIdConnectAuthorizationEndpoint, UriKind.Absolute, out var authEndpoint) ||
                             (authEndpoint.Scheme != Uri.UriSchemeHttps && !builder.Environment.IsDevelopment()))
                         {
+                            // Use default from authority
                         }
 
                         if (!Uri.TryCreate(tenantDetail.OpenIdConnectTokenEndpoint, UriKind.Absolute, out var tokenEndpoint) ||
                             (tokenEndpoint.Scheme != Uri.UriSchemeHttps && !builder.Environment.IsDevelopment()))
                         {
+                            // Use default from authority
                         }
                     }
 
@@ -325,6 +330,7 @@ public class Program
                         if (!Uri.TryCreate(tenantDetail.OpenIdConnectJwksUri, UriKind.Absolute, out var jwksUri) ||
                             (jwksUri.Scheme != Uri.UriSchemeHttps && !builder.Environment.IsDevelopment()))
                         {
+                            // Skip JWKS configuration but continue with other settings
                         }
                     }
 
@@ -376,7 +382,7 @@ public class Program
                                 options.ClientSecret = decryptedSecret;
                             }
                         }
-                        catch (Exception ex)
+                        catch (Exception)
                         {
                         }
                     }
@@ -452,6 +458,7 @@ public class Program
         builder.Services.AddScoped<IRoomPermissionsService, RoomPermissionsService>();
 
         builder.Services.AddScoped<TopicPermissionManager>();
+        builder.Services.AddScoped<IRealtimeAccessService, RealtimeAccessService>();
 
         builder.Services.AddScoped<ITopicPermissionsService, TopicPermissionsService>();
 
@@ -459,6 +466,7 @@ public class Program
 
         builder.Services.AddScoped<ITopicManagementService, TopicManagementService>();
 
+        builder.Services.AddSingleton<IRegexSearchPatternConverter, RegexSearchPatternConverter>();
         builder.Services.AddScoped<IMessageManagementService, MessageManagementService>();
 
         
@@ -516,40 +524,41 @@ public class Program
         {
             options.AddPolicy("development", policy =>
             {
-                var developmentOrigins = builder.Configuration
-                    .GetSection("Cors:DevelopmentOrigins")
-                    .Get<string[]>() ?? new[] { "http://localhost:5173", "http://localhost:3000", "http://localhost" };
+                var configuredOrigins = CorsOriginHelper.ResolveCorsOrigins(builder.Configuration, "Cors:DevelopmentOrigins");
+
+                if (configuredOrigins.Length == 0)
+                {
+                    // 開発環境で Origins が未設定の場合は起動エラーとする
+                    throw new InvalidOperationException(
+                        "CORS:DevelopmentOrigins is not configured. " +
+                        "Please set allowed origins in appsettings.json or configure Urls.");
+                }
 
                 policy
-                    .WithOrigins(developmentOrigins)
-                    .AllowAnyMethod()
+                    .WithOrigins(configuredOrigins)
+                    .WithMethods("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH")
                     .AllowAnyHeader()
-                    .AllowCredentials()
-                    .SetIsOriginAllowed(origin => true);
+                    .AllowCredentials();
             });
 
             options.AddPolicy("production", policy =>
             {
-                var allowedOrigins = builder.Configuration
-                    .GetSection("Cors:AllowedOrigins")
-                    .Get<string[]>() ?? Array.Empty<string>();
+                var configuredOrigins = CorsOriginHelper.ResolveCorsOrigins(builder.Configuration, "Cors:AllowedOrigins");
 
-                if (allowedOrigins.Length > 0)
+                if (configuredOrigins.Length == 0)
                 {
-                    policy
-                        .WithOrigins(allowedOrigins)
-                        .WithMethods("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH")
-                        .WithHeaders("Content-Type", "Authorization")
-                        .AllowCredentials()
-                        .SetIsOriginAllowedToAllowWildcardSubdomains();
+                    // 本番環境で Origins が未設定の場合は起動エラーとする
+                    throw new InvalidOperationException(
+                        "CORS:AllowedOrigins is not configured. " +
+                        "Please set allowed origins in appsettings.json or configure Urls.");
                 }
-                else
-                {
-                    policy
-                        .WithOrigins()
-                        .AllowAnyMethod()
-                        .AllowAnyHeader();
-                }
+
+                policy
+                    .WithOrigins(configuredOrigins)
+                    .WithMethods("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH")
+                    .WithHeaders("Content-Type", "Authorization")
+                    .AllowCredentials()
+                    .SetIsOriginAllowedToAllowWildcardSubdomains();
             });
         });
 
@@ -632,14 +641,11 @@ public class Program
         app.MapHub<RoomTopicHub>("/{tenant}/hubs/rooms").RequireAuthorization();
         app.MapHub<RoomUserSyncHub>("/{tenant}/hubs/roomusersync").RequireAuthorization();
 
-        app.UseDefaultFiles();
+        // uploads ディレクトリを確保（FileController で使用）
         var uploadsRoot = Path.Combine(app.Environment.ContentRootPath, "uploads");
         Directory.CreateDirectory(uploadsRoot);
-        app.UseStaticFiles(new StaticFileOptions
-        {
-            FileProvider = new PhysicalFileProvider(uploadsRoot),
-            RequestPath = "/uploads"
-        });
+
+        app.UseDefaultFiles();
         app.UseStaticFiles();
 
         app.MapFallback(async context =>
@@ -658,4 +664,3 @@ public class Program
         app.Run();
     }
 }
-

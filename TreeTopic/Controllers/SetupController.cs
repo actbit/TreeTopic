@@ -37,11 +37,10 @@ public class SetupController : ControllerBase
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<IActionResult> InvalidateToken()
     {
-        var tenant = HttpContext.Request.RouteValues["tenant"]?.ToString();
-
-        if (string.IsNullOrWhiteSpace(tenant))
+        var tenantId = HttpContext.Items["ValidatedTenantId"]?.ToString();
+        if (string.IsNullOrWhiteSpace(tenantId))
         {
-            return BadRequest(new { message = "Tenant is required" });
+            return Unauthorized(new { message = "Invalid or expired setup token" });
         }
 
         // AuthorizationヘッダーからSetupトークンを取得
@@ -54,7 +53,7 @@ public class SetupController : ControllerBase
         var setupToken = authHeader.Substring("Bearer ".Length).Trim();
 
         var success = await _tokenValidator.InvalidateSetupTokenAsync(
-            tenant,
+            tenantId,
             setupToken);
 
         if (!success)
@@ -99,7 +98,7 @@ public class SetupController : ControllerBase
     /// </summary>
     [HttpPost("users/{userId}/roles")]
     public async Task<ActionResult<UserSummaryDto>> AddRoleToUser(
-        MaskedGuid userId,
+        [FromRoute] MaskedGuid userId,
         [FromBody] RoleAssignmentRequest request)
     {
         var result = await _userManagementService.AddRoleToUserAsync((Guid)userId, request);
@@ -126,7 +125,7 @@ public class SetupController : ControllerBase
     /// </summary>
     [HttpDelete("users/{userId}/roles")]
     public async Task<ActionResult<UserSummaryDto>> RemoveRoleFromUser(
-        MaskedGuid userId,
+        [FromRoute] MaskedGuid userId,
         [FromBody] RoleAssignmentRequest request)
     {
         var result = await _userManagementService.RemoveRoleFromUserAsync(userId, request);

@@ -2,6 +2,7 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using MaskedUUID.AspNetCore.Types;
 using TreeTopic.Dtos;
 using TreeTopic.Models;
 using Finbuckle.MultiTenant;
@@ -95,7 +96,9 @@ public class DefaultUserController : ControllerBase
         }
 
         _logger.LogInformation("User created through setup: {Email}", user.Email);
-        return CreatedAtAction(nameof(CreateUser), new { tenant, user.Id, user.Email }, new { user.Id, user.Email });
+        // MaskedGuid に変換して返す
+        var maskedId = new MaskedGuid(user.Id);
+        return CreatedAtAction(nameof(CreateUser), new { tenant, user.Id, user.Email }, new { user = new { id = maskedId, email = user.Email } });
     }
 
 }

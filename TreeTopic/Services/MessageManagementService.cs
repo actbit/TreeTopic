@@ -5,8 +5,12 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.DependencyInjection;
+using System.Data;
+using System.Data.Common;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Security.Claims;
 using System.Threading;
 using TreeTopic;
@@ -25,6 +29,7 @@ public interface IMessageManagementService
     Task<Result<List<MessageDto>>> GetMessagesByTopicAsync(Guid topicId, Guid userId, CancellationToken cancellationToken = default);
     Task<Result<List<MessageDto>>> GetMessagesAfterAsync(Guid topicId, Guid anchorMessageId, Guid userId, int take = 50, CancellationToken cancellationToken = default);
     Task<Result<List<MessageDto>>> GetMessagesBeforeAsync(Guid topicId, Guid anchorMessageId, Guid userId, int take = 50, CancellationToken cancellationToken = default);
+    Task<Result<List<MessageDto>>> SearchMessagesByTopicAsync(Guid topicId, string query, MessageSearchMode mode = MessageSearchMode.Contains, bool caseSensitive = false, int take = 100, CancellationToken cancellationToken = default);
     Task<Result<MessageDto>> GetMessageByIdAsync(Guid messageId, CancellationToken cancellationToken = default);
     Task<Result<MessageDto>> CreateMessageAsync(CreateMessageRequest request, Guid userId, CancellationToken cancellationToken = default);
     Task<Result<MessageDto>> UpdateMessageAsync(Guid messageId, UpdateMessageRequest request, Guid userId, CancellationToken cancellationToken = default);
@@ -48,6 +53,7 @@ public class MessageManagementService : BaseService, IMessageManagementService
     private readonly IHubContext<RoomUserSyncHub, IRoomUserSyncHubClient> _roomUserSyncHub;
     private readonly IMaskedUUIDService _maskedUuidService;
     private readonly IPushService _pushService;
+    private readonly IRegexSearchPatternConverter _regexSearchPatternConverter;
     private readonly ApplicationDbContext _dbContext;
     private readonly IServiceScopeFactory _serviceScopeFactory;
 
@@ -65,6 +71,7 @@ public class MessageManagementService : BaseService, IMessageManagementService
         IHubContext<RoomUserSyncHub, IRoomUserSyncHubClient> roomUserSyncHub,
         IMaskedUUIDService maskedUuidService,
         IPushService pushService,
+        IRegexSearchPatternConverter regexSearchPatternConverter,
         ApplicationDbContext dbContext,
         IServiceScopeFactory serviceScopeFactory,
         ILogger<MessageManagementService> logger) : base(logger)
@@ -82,6 +89,7 @@ public class MessageManagementService : BaseService, IMessageManagementService
         _roomUserSyncHub = roomUserSyncHub;
         _maskedUuidService = maskedUuidService;
         _pushService = pushService;
+        _regexSearchPatternConverter = regexSearchPatternConverter;
         _dbContext = dbContext;
         _serviceScopeFactory = serviceScopeFactory;
     }
@@ -163,9 +171,7 @@ public class MessageManagementService : BaseService, IMessageManagementService
             return Task.CompletedTask;
 
         Logger.LogInformation("[MessageHub] Broadcast MessageDeleted message={MessageId} topic={TopicId} group={Group}", messageId, topicId, groupName);
-        var payload = new MessageDeletedEvent(
-            _maskedUuidService.EncodeSynchronous(messageId),
-            _maskedUuidService.EncodeSynchronous(topicId));
+        var payload = new MessageDeletedEvent(messageId, topicId);
         return _messageHub.Clients.Group(groupName).MessageDeleted(payload);
     }
 
@@ -197,8 +203,8 @@ public class MessageManagementService : BaseService, IMessageManagementService
             _maskedUuidService.EncodeSynchronous(userId));
 
         var payload = new TopicUnreadUpdateEvent(
-            _maskedUuidService.EncodeSynchronous(topic.RoomId),
-            _maskedUuidService.EncodeSynchronous(topicId),
+            topic.RoomId,
+            topicId,
             unreadCount,
             lastReadAt);
 
@@ -225,90 +231,74 @@ public class MessageManagementService : BaseService, IMessageManagementService
         };
     }
 
-    private TopicRealtimeDto MapTopicRealtime(TopicDetailDto dto)
+    private async Task<TopicRealtimeDto> MapTopicRealtimeAsync(TopicDetailDto dto, CancellationToken cancellationToken = default)
     {
-        var id = (Guid)dto.Id;
-        var roomId = (Guid)dto.RoomId;
-        var parentId = dto.ParentId.HasValue ? (Guid)dto.ParentId.Value : Guid.Empty;
-        var sourceMessageId = dto.SourceMessageId.HasValue ? (Guid)dto.SourceMessageId.Value : Guid.Empty;
+        var topicId = (Guid)dto.Id;
 
-        var maskedParent = dto.ParentId.HasValue && parentId != Guid.Empty
-            ? _maskedUuidService.EncodeSynchronous(parentId)
-            : null;
-        var maskedSource = dto.SourceMessageId.HasValue && sourceMessageId != Guid.Empty
-            ? _maskedUuidService.EncodeSynchronous(sourceMessageId)
-            : null;
+        // Get MessageCount
+        var messageCount = await _dbContext.Messages
+            .CountAsync(m => m.TopicId == topicId, cancellationToken);
 
         return new TopicRealtimeDto(
-            id == Guid.Empty ? string.Empty : _maskedUuidService.EncodeSynchronous(id),
-            roomId == Guid.Empty ? string.Empty : _maskedUuidService.EncodeSynchronous(roomId),
-            maskedParent,
+            dto.Id,
+            dto.RoomId,
+            dto.ParentId,
             dto.Title,
             dto.Description,
             dto.HasChildren,
-            maskedSource,
+            dto.SourceMessageId,
             dto.UnreadCount,
+            messageCount,
             dto.CreatedAt,
             dto.UpdatedAt);
     }
 
-    private Task BroadcastTopicCreatedAsync(TopicDetailDto dto)
+    private async Task BroadcastTopicCreatedAsync(TopicDetailDto dto, CancellationToken cancellationToken = default)
     {
         var roomId = (Guid)dto.RoomId;
         var groupName = RoomTopicHubGroups.Room(_maskedUuidService.EncodeSynchronous(roomId));
         Logger.LogInformation("[RoomTopicHub] Broadcast TopicCreated topic={TopicId} room={RoomId} group={Group}", dto.Id, dto.RoomId, groupName);
-        var payload = MapTopicRealtime(dto);
-        return _roomTopicHub.Clients.Group(groupName).TopicCreated(payload);
+        var payload = await MapTopicRealtimeAsync(dto, cancellationToken);
+        await _roomTopicHub.Clients.Group(groupName).TopicCreated(payload);
     }
 
-    private Task BroadcastTopicUpdatedAsync(TopicDetailDto dto)
+    private async Task BroadcastTopicUpdatedAsync(TopicDetailDto dto, CancellationToken cancellationToken = default)
     {
         var roomId = (Guid)dto.RoomId;
         var groupName = RoomTopicHubGroups.Room(_maskedUuidService.EncodeSynchronous(roomId));
         Logger.LogInformation("[RoomTopicHub] Broadcast TopicUpdated topic={TopicId} room={RoomId} group={Group}", dto.Id, dto.RoomId, groupName);
-        var payload = MapTopicRealtime(dto);
-        return _roomTopicHub.Clients.Group(groupName).TopicUpdated(payload);
+        var payload = await MapTopicRealtimeAsync(dto, cancellationToken);
+        await _roomTopicHub.Clients.Group(groupName).TopicUpdated(payload);
     }
 
     private MessageRealtimeDto MapToRealtimeDto(MessageDto dto)
     {
-        var id = (Guid)dto.Id;
-        var topicId = (Guid)dto.TopicId;
-        var roomUserId = (Guid)dto.RoomUserId;
-        var replyId = dto.ReplyId.HasValue ? (Guid)dto.ReplyId.Value : Guid.Empty;
-        var childTopicId = dto.ChildTopicId.HasValue ? (Guid)dto.ChildTopicId.Value : Guid.Empty;
-
         return new MessageRealtimeDto
         {
-            Id = id == Guid.Empty ? string.Empty : _maskedUuidService.EncodeSynchronous(id),
-            TopicId = topicId == Guid.Empty ? string.Empty : _maskedUuidService.EncodeSynchronous(topicId),
-            RoomUserId = roomUserId == Guid.Empty ? string.Empty : _maskedUuidService.EncodeSynchronous(roomUserId),
+            Id = dto.Id,
+            TopicId = dto.TopicId,
+            RoomUserId = dto.RoomUserId,
             UserName = dto.UserName,
             UserAvatar = dto.UserAvatar,
             Header = dto.Header,
             Body = dto.Body,
-            ReplyId = replyId != Guid.Empty
-                ? _maskedUuidService.EncodeSynchronous(replyId)
-                : null,
-            ChildTopicId = childTopicId != Guid.Empty
-                ? _maskedUuidService.EncodeSynchronous(childTopicId)
-                : null,
+            ReplyId = dto.ReplyId,
+            ChildTopicId = dto.ChildTopicId,
             ChildTopicTitle = dto.ChildTopicTitle,
             Files = dto.Files?.Select(f => new FileRealtimeDto
             {
-                Id = ((Guid)f.Id) == Guid.Empty ? string.Empty : _maskedUuidService.EncodeSynchronous((Guid)f.Id),
-                SourceFileId = f.SourceFileId.HasValue && (Guid)f.SourceFileId.Value != Guid.Empty
-                    ? _maskedUuidService.EncodeSynchronous((Guid)f.SourceFileId.Value)
-                    : null,
-                MessageId = f.MessageId.HasValue && (Guid)f.MessageId.Value != Guid.Empty
-                    ? _maskedUuidService.EncodeSynchronous((Guid)f.MessageId.Value)
-                    : null,
+                Id = f.Id,
+                SourceFileId = f.SourceFileId,
+                MessageId = f.MessageId,
                 FileName = f.FileName,
                 SaveFileName = f.SaveFileName,
                 FileType = f.FileType,
                 Size = f.Size,
                 Url = f.Url,
                 IsLatest = f.IsLatest,
+                UploadedBy = null,
+                UploadedByName = null,
+                Versions = null,
                 CreatedAt = f.CreatedAt,
                 UpdatedAt = f.UpdatedAt
             }).ToList(),
@@ -367,6 +357,86 @@ public class MessageManagementService : BaseService, IMessageManagementService
 
             return Result<List<MessageDto>>.Success(dtos);
         }, nameof(GetMessagesByTopicAsync));
+    }
+
+    public async Task<Result<List<MessageDto>>> SearchMessagesByTopicAsync(
+        Guid topicId,
+        string query,
+        MessageSearchMode mode = MessageSearchMode.Contains,
+        bool caseSensitive = false,
+        int take = 100,
+        CancellationToken cancellationToken = default)
+    {
+        return await ExecuteAsync(async () =>
+        {
+            if (string.IsNullOrWhiteSpace(query))
+            {
+                return Result<List<MessageDto>>.BadRequest("Search query is required.");
+            }
+
+            take = Math.Clamp(take, 1, 200);
+            var normalizedQuery = query.Trim();
+            List<Message> messages;
+
+            if (mode == MessageSearchMode.Regex)
+            {
+                var ids = await SearchMessageIdsByRegexAsync(topicId, normalizedQuery, caseSensitive, take, cancellationToken);
+                if (ids.Count == 0)
+                {
+                    return Result<List<MessageDto>>.Success(new List<MessageDto>());
+                }
+
+                var messagesById = await _messageRepository.Query()
+                    .Where(m => ids.Contains(m.Id))
+                    .Include(m => m.RoomUser)
+                    .ThenInclude(ru => ru.ApplicationUser)
+                    .Include(m => m.Files)
+                    .ToListAsync(cancellationToken);
+
+                var orderMap = ids
+                    .Select((id, index) => new { id, index })
+                    .ToDictionary(x => x.id, x => x.index);
+                messages = messagesById
+                    .OrderBy(m => orderMap.TryGetValue(m.Id, out var idx) ? idx : int.MaxValue)
+                    .ToList();
+            }
+            else
+            {
+                var messageQuery = _messageRepository.Query()
+                    .Where(m => m.TopicId == topicId);
+
+                if (caseSensitive)
+                {
+                    messageQuery = messageQuery.Where(m =>
+                        (m.Header != null && m.Header.Contains(normalizedQuery)) ||
+                        m.Body.Contains(normalizedQuery));
+                }
+                else
+                {
+                    var lowered = normalizedQuery.ToLower();
+                    messageQuery = messageQuery.Where(m =>
+                        ((m.Header ?? string.Empty).ToLower().Contains(lowered)) ||
+                        m.Body.ToLower().Contains(lowered));
+                }
+
+                messages = await messageQuery
+                    .OrderByDescending(m => m.CreatedAt)
+                    .ThenByDescending(m => m.Id)
+                    .Include(m => m.RoomUser)
+                    .ThenInclude(ru => ru.ApplicationUser)
+                    .Include(m => m.Files)
+                    .Take(take)
+                    .ToListAsync(cancellationToken);
+            }
+
+            var dtos = new List<MessageDto>(messages.Count);
+            foreach (var message in messages)
+            {
+                dtos.Add(await MapToDtoAsync(message, cancellationToken));
+            }
+
+            return Result<List<MessageDto>>.Success(dtos);
+        }, nameof(SearchMessagesByTopicAsync));
     }
 
     public async Task<Result<List<MessageDto>>> GetMessagesAfterAsync(
@@ -501,6 +571,163 @@ public class MessageManagementService : BaseService, IMessageManagementService
         }, nameof(GetMessageByIdAsync));
     }
 
+    private async Task<List<Guid>> SearchMessageIdsByRegexAsync(
+        Guid topicId,
+        string pattern,
+        bool caseSensitive,
+        int take,
+        CancellationToken cancellationToken)
+    {
+        var providerName = _dbContext.Database.ProviderName ?? string.Empty;
+        var regexSpec = _regexSearchPatternConverter.Convert(pattern, caseSensitive, providerName);
+        var provider = providerName.ToLowerInvariant();
+
+        if (provider.Contains("npgsql") || provider.Contains("postgres"))
+        {
+            return await QueryRegexIdsSqlAsync(
+                topicId,
+                take,
+                regexSpec.Pattern,
+                regexSpec.PostgresOperator,
+                null,
+                """
+                SELECT "Id"
+                FROM "Messages"
+                WHERE "TopicId" = @topicId
+                  AND (
+                    COALESCE("Header", '') {0} @pattern
+                    OR COALESCE("Body", '') {0} @pattern
+                  )
+                ORDER BY "CreatedAt" DESC, "Id" DESC
+                LIMIT @take
+                """,
+                cancellationToken);
+        }
+
+        if (provider.Contains("mysql"))
+        {
+            return await QueryRegexIdsSqlAsync(
+                topicId,
+                take,
+                regexSpec.Pattern,
+                null,
+                regexSpec.MySqlMatchType,
+                """
+                SELECT `Id`
+                FROM `Messages`
+                WHERE `TopicId` = @topicId
+                  AND (
+                    REGEXP_LIKE(COALESCE(`Header`, ''), @pattern, @matchType)
+                    OR REGEXP_LIKE(COALESCE(`Body`, ''), @pattern, @matchType)
+                  )
+                ORDER BY `CreatedAt` DESC, `Id` DESC
+                LIMIT @take
+                """,
+                cancellationToken);
+        }
+
+        // Provider fallback: search in memory after topic filtering.
+        var regex = new Regex(
+            regexSpec.Pattern,
+            regexSpec.CaseSensitive ? RegexOptions.None : RegexOptions.IgnoreCase,
+            TimeSpan.FromMilliseconds(250));
+
+        var candidates = await _messageRepository.Query()
+            .Where(m => m.TopicId == topicId)
+            .OrderByDescending(m => m.CreatedAt)
+            .ThenByDescending(m => m.Id)
+            .Select(m => new { m.Id, m.Header, m.Body })
+            .Take(Math.Max(take * 10, 500))
+            .ToListAsync(cancellationToken);
+
+        return candidates
+            .Where(m => regex.IsMatch(m.Header ?? string.Empty) || regex.IsMatch(m.Body))
+            .Take(take)
+            .Select(m => m.Id)
+            .ToList();
+    }
+
+    private async Task<List<Guid>> QueryRegexIdsSqlAsync(
+        Guid topicId,
+        int take,
+        string pattern,
+        string? pgOperator,
+        string? mySqlMatchType,
+        string sqlTemplate,
+        CancellationToken cancellationToken)
+    {
+        var ids = new List<Guid>();
+        var sql = string.IsNullOrEmpty(pgOperator) ? sqlTemplate : string.Format(sqlTemplate, pgOperator);
+
+        var connection = _dbContext.Database.GetDbConnection();
+        var openedByMethod = false;
+
+        if (connection.State != ConnectionState.Open)
+        {
+            await connection.OpenAsync(cancellationToken);
+            openedByMethod = true;
+        }
+
+        try
+        {
+            await using var command = connection.CreateCommand();
+            command.CommandText = sql;
+            command.CommandType = CommandType.Text;
+
+            var currentTransaction = _dbContext.Database.CurrentTransaction;
+            if (currentTransaction != null)
+            {
+                command.Transaction = currentTransaction.GetDbTransaction();
+            }
+
+            AddParameter(command, "@topicId", topicId, DbType.Guid);
+            AddParameter(command, "@pattern", pattern, DbType.String);
+            AddParameter(command, "@take", take, DbType.Int32);
+
+            if (!string.IsNullOrEmpty(mySqlMatchType))
+            {
+                AddParameter(command, "@matchType", mySqlMatchType, DbType.String);
+            }
+
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                if (reader.IsDBNull(0))
+                {
+                    continue;
+                }
+
+                var raw = reader.GetValue(0);
+                if (raw is Guid guid)
+                {
+                    ids.Add(guid);
+                }
+                else if (Guid.TryParse(raw.ToString(), out var parsed))
+                {
+                    ids.Add(parsed);
+                }
+            }
+        }
+        finally
+        {
+            if (openedByMethod)
+            {
+                await connection.CloseAsync();
+            }
+        }
+
+        return ids;
+    }
+
+    private static void AddParameter(DbCommand command, string name, object value, DbType dbType)
+    {
+        var parameter = command.CreateParameter();
+        parameter.ParameterName = name;
+        parameter.DbType = dbType;
+        parameter.Value = value;
+        command.Parameters.Add(parameter);
+    }
+
     public async Task<Result<MessageDto>> CreateMessageAsync(
         CreateMessageRequest request,
         Guid userId,
@@ -595,7 +822,7 @@ public class MessageManagementService : BaseService, IMessageManagementService
                 }
 
                 createdTopicDto = MapTopicDto(childTopic);
-                await BroadcastTopicCreatedAsync(createdTopicDto);
+                await BroadcastTopicCreatedAsync(createdTopicDto, cancellationToken);
 
                 var selectedMessageIds = childRequest.SelectedMessageIds?
                     .Select(id => (Guid)id)
@@ -879,7 +1106,7 @@ public class MessageManagementService : BaseService, IMessageManagementService
                 foreach (var childTopic in childTopics)
                 {
                     var topicDto = MapTopicDto(childTopic);
-                    await BroadcastTopicUpdatedAsync(topicDto);
+                    await BroadcastTopicUpdatedAsync(topicDto, cancellationToken);
                 }
             }
             else
@@ -966,7 +1193,7 @@ public class MessageManagementService : BaseService, IMessageManagementService
                 foreach (var childTopic in childTopics)
                 {
                     var topicDto = MapTopicDto(childTopic);
-                    await BroadcastTopicUpdatedAsync(topicDto);
+                    await BroadcastTopicUpdatedAsync(topicDto, cancellationToken);
                 }
             }
             else
@@ -1087,7 +1314,7 @@ public class MessageManagementService : BaseService, IMessageManagementService
             RoomUserId = message.RoomUserId,
             UserName = RoomUserNameHelper.ResolveDisplayName(message.RoomUser),
             UserAvatar = _iconService.GetRoomUserIconUrl(message.RoomUser),
-            Header = message.Header,
+            Header = message.Header ?? string.Empty,
             Body = message.Body,
             ReplyId = message.ReplyId != Guid.Empty ? message.ReplyId : null,
             ChildTopicId = childTopic?.Id,
@@ -1180,7 +1407,12 @@ public class MessageManagementService : BaseService, IMessageManagementService
                             Title = $"{RoomUserNameHelper.ResolveDisplayName(senderRoomUser)}: {messageDto.Header?.Truncate(50) ?? "New message"}",
                             Body = messageDto.Body?.Truncate(200) ?? "",
                             Icon = "/pwa-192x192.png",
-                            Data = System.Text.Json.JsonSerializer.Serialize(new { tenant = tenantId })
+                            Data = System.Text.Json.JsonSerializer.Serialize(new
+                            {
+                                tenant = tenantId,
+                                topicId = message.TopicId,
+                                roomId = topic.RoomId
+                            })
                         };
 
                         var subscriptionDto = new PushSubscriptionDto
@@ -1247,8 +1479,8 @@ public class MessageManagementService : BaseService, IMessageManagementService
                             maskedUuidService.EncodeSynchronous(ru.ApplicationUserId));
 
                         var payload = new TopicUnreadUpdateEvent(
-                            maskedUuidService.EncodeSynchronous(topic.RoomId),
-                            maskedUuidService.EncodeSynchronous(message.TopicId),
+                            topic.RoomId,
+                            message.TopicId,
                             unreadCount,
                             lastReadAt);
 

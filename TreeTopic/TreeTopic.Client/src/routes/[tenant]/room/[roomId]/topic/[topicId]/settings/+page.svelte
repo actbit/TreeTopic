@@ -9,8 +9,8 @@
   let activeTab = $state('permissions');
   let isLoading = $state(false);
   let error = $state<string | null>(null);
-  let topic = $state<any>(null);
-  let room = $state<any>(null);
+  let topic = $state<{ title?: string; description?: string | null; createdAt?: string | Date; parentId?: string | null } | null>(null);
+  let room = $state<{ name?: string } | null>(null);
 
   const tenant = $page.params.tenant || '';
   const roomId = $page.params.roomId || '';
@@ -30,13 +30,13 @@
       isLoading = true;
 
       // トピック情報を取得
-      const topicData = await api.get<any>(`/${tenant}/api/Topics/${topicId}`);
+      const topicData = await api.get<{ title?: string; description?: string | null; createdAt?: string | Date; parentId?: string | null }>(`/${tenant}/api/Topics/${topicId}`);
       topic = topicData;
 
       // ルーム情報を取得
       if (roomId) {
         try {
-          const roomData = await api.get<any>(`/${tenant}/api/Room/${roomId}`);
+          const roomData = await api.get<{ name?: string }>(`/${tenant}/api/room/${roomId}`);
           room = roomData;
         } catch {
           // ルーム情報が取得できなくても無視
@@ -44,8 +44,8 @@
       }
 
       error = null;
-    } catch (err: any) {
-      error = err.message || 'データの読み込みに失敗しました';
+    } catch (err) {
+      error = err instanceof Error ? err.message : 'データの読み込みに失敗しました';
     } finally {
       isLoading = false;
     }
@@ -129,7 +129,7 @@
                 <div class="grid grid-cols-2 gap-4 text-sm">
                   <div>
                     <span class="text-text-light">作成日:</span>
-                    <span class="text-text ml-2">{new Date(topic.createdAt).toLocaleDateString('ja-JP')}</span>
+                    <span class="text-text ml-2">{topic.createdAt ? new Date(topic.createdAt as string).toLocaleDateString('ja-JP') : ''}</span>
                   </div>
                   {#if topic.parentId}
                     <div>

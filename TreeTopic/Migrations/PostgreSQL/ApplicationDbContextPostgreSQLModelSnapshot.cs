@@ -590,6 +590,14 @@ namespace TreeTopic.Migrations.PostgreSQL
                     b.Property<Guid>("CreatedUserId")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("Description")
+                        .HasColumnType("text");
+
+                    b.Property<int>("JoinPolicy")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("text");
@@ -607,6 +615,76 @@ namespace TreeTopic.Migrations.PostgreSQL
                     b.HasIndex("CreatedUserId");
 
                     b.ToTable("Rooms");
+
+                    b.HasAnnotation("Finbuckle:MultiTenant", true);
+                });
+
+            modelBuilder.Entity("TreeTopic.Models.RoomJoinRolePermission", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("RoleId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("RoomId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("TenantId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RoleId");
+
+                    b.HasIndex("RoomId", "RoleId")
+                        .IsUnique();
+
+                    b.ToTable("RoomJoinRolePermissions");
+
+                    b.HasAnnotation("Finbuckle:MultiTenant", true);
+                });
+
+            modelBuilder.Entity("TreeTopic.Models.RoomJoinUserPermission", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ApplicationUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("RoomId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("TenantId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ApplicationUserId");
+
+                    b.HasIndex("RoomId", "ApplicationUserId")
+                        .IsUnique();
+
+                    b.ToTable("RoomJoinUserPermissions");
 
                     b.HasAnnotation("Finbuckle:MultiTenant", true);
                 });
@@ -1248,6 +1326,44 @@ namespace TreeTopic.Migrations.PostgreSQL
                     b.Navigation("CreatedUser");
                 });
 
+            modelBuilder.Entity("TreeTopic.Models.RoomJoinRolePermission", b =>
+                {
+                    b.HasOne("TreeTopic.Models.ApplicationRole", "Role")
+                        .WithMany()
+                        .HasForeignKey("RoleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("TreeTopic.Models.Room", "Room")
+                        .WithMany("JoinRolePermissions")
+                        .HasForeignKey("RoomId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Role");
+
+                    b.Navigation("Room");
+                });
+
+            modelBuilder.Entity("TreeTopic.Models.RoomJoinUserPermission", b =>
+                {
+                    b.HasOne("TreeTopic.Models.ApplicationUser", "ApplicationUser")
+                        .WithMany()
+                        .HasForeignKey("ApplicationUserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("TreeTopic.Models.Room", "Room")
+                        .WithMany("JoinUserPermissions")
+                        .HasForeignKey("RoomId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ApplicationUser");
+
+                    b.Navigation("Room");
+                });
+
             modelBuilder.Entity("TreeTopic.Models.RoomPermission", b =>
                 {
                     b.HasOne("TreeTopic.Models.RoomUser", "RoomUser")
@@ -1490,6 +1606,10 @@ namespace TreeTopic.Migrations.PostgreSQL
 
             modelBuilder.Entity("TreeTopic.Models.Room", b =>
                 {
+                    b.Navigation("JoinRolePermissions");
+
+                    b.Navigation("JoinUserPermissions");
+
                     b.Navigation("RoomUsers");
 
                     b.Navigation("Topics");

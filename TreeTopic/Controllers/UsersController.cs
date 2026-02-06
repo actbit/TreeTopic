@@ -108,7 +108,7 @@ public class UsersController : ControllerBase
             .Include(t => t.Detail)
             .FirstOrDefaultAsync(t => t.Identifier == tenant);
 
-        if (tenantInfo?.Detail != null && !tenantInfo.Detail.CanAssignRolesToUsers())
+        if (tenantInfo?.Detail?.CanAssignRolesToUsers() != true)
         {
             return BadRequest(new
             {
@@ -142,7 +142,7 @@ public class UsersController : ControllerBase
             .Include(t => t.Detail)
             .FirstOrDefaultAsync(t => t.Identifier == tenant);
 
-        if (tenantInfo?.Detail != null && !tenantInfo.Detail.CanAssignRolesToUsers())
+        if (tenantInfo?.Detail?.CanAssignRolesToUsers() != true)
         {
             return BadRequest(new
             {
@@ -238,7 +238,7 @@ public class UsersController : ControllerBase
             .Include(t => t.Detail)
             .FirstOrDefaultAsync(t => t.Identifier == tenant);
 
-        if (!tenantInfo?.Detail.CanCreateUsers() ?? false)
+        if (!tenantInfo?.Detail?.CanCreateUsers() ?? false)
         {
             var hasOidcRoleSync = tenantInfo?.Detail.HasOidcRoleSync() ?? false;
             var message = hasOidcRoleSync

@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using MaskedUUID.AspNetCore.Types;
+using TreeTopic.Common;
 using TreeTopic.Dtos;
 using TreeTopic.Models;
 using TreeTopic.Models.OpenIdConnect;
@@ -190,7 +191,7 @@ public class TenantManagementService
             var setupTokenRecord = new SetupToken
             {
                 Id = Guid.CreateVersion7(),
-                TenantId = tenant.Id,
+                TenantId = tenant.Id!,
                 TokenHash = SetupToken.HashToken(setupToken),
                 CreatedAt = DateTime.UtcNow,
                 ExpiresAt = DateTime.UtcNow.AddHours(8) // 8時間の有効期限
@@ -374,23 +375,68 @@ public class TenantManagementService
     }
 
     /// <summary>
-    /// すべてのテナント情報を取得
+    /// テナント情報を公開用に取得（機密情報を含まない）
     /// </summary>
-    public async Task<List<ApplicationTenantInfo>> GetAllTenantsAsync()
+    public async Task<List<PublicTenantDto>> GetPublicTenantsAsync(CancellationToken cancellationToken = default)
     {
         return await _tenantDb.Tenants
-            .Include(t => t.Detail)
-            .ToListAsync();
+            .Select(t => new PublicTenantDto
+            {
+                Identifier = t.Identifier,
+                Name = t.Name
+            })
+            .ToListAsync(cancellationToken);
     }
 
     /// <summary>
-    /// テナント情報を Identifier で取得
+    /// テナント情報を公開用に Identifier で取得（機密情報を含まない）
     /// </summary>
-    public async Task<ApplicationTenantInfo?> GetTenantByIdentifierAsync(string identifier)
+    public async Task<PublicTenantDto?> GetPublicTenantAsync(string identifier, CancellationToken cancellationToken = default)
     {
         return await _tenantDb.Tenants
-            .Include(t => t.Detail)
-            .FirstOrDefaultAsync(t => t.Identifier == identifier);
+            .Where(t => t.Identifier == identifier)
+            .Select(t => new PublicTenantDto
+            {
+                Identifier = t.Identifier,
+                Name = t.Name
+            })
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// テナントを登録（新規作成）
+    /// </summary>
+    public async Task<Result<RegisterTenantResponse>> RegisterTenantAsync(RegisterTenantRequest request, CancellationToken cancellationToken = default)
+    {
+        // CreateTenantRequest に変換して CreateTenantAsync を呼び出す
+        var createRequest = new CreateTenantRequest
+        {
+            Identifier = request.Identifier,
+            Name = request.Name,
+            ConnectionString = request.DbConnectionString,
+            DbProvider = request.DbProvider,
+            RoleClaimName = request.RoleClaimName,
+            OpenIdConnectMetadataAddress = request.OpenIdConnectMetadataAddress,
+            OpenIdConnectAuthority = request.OpenIdConnectAuthority,
+            OpenIdConnectClientId = request.OpenIdConnectClientId,
+            OpenIdConnectClientSecret = request.OpenIdConnectClientSecret
+        };
+
+        try
+        {
+            var response = await CreateTenantAsync(createRequest);
+            var registerResponse = new RegisterTenantResponse
+            {
+                Identifier = response.Tenant.Identifier,
+                Name = response.Tenant.Name,
+                SetupToken = response.SetupToken
+            };
+            return Result<RegisterTenantResponse>.Success(registerResponse, 201);
+        }
+        catch (Exception ex)
+        {
+            return Result<RegisterTenantResponse>.Failure(new Error(ErrorType.Internal, ex.Message), 500);
+        }
     }
 
     /// <summary>

@@ -73,12 +73,12 @@ function createAuthStore() {
         if (cached) {
           set({
             user: {
-              id: cached.userId,
-              userName: cached.userName,
-              email: cached.email,
-              displayName: cached.displayName ?? cached.userName,
-              iconUrl: cached.iconUrl,
-              roles: cached.roles || [],
+              id: cached.userId as string,
+              userName: cached.userName as string,
+              email: cached.email as string,
+              displayName: (cached.displayName as string | undefined) ?? (cached.userName as string),
+              iconUrl: cached.iconUrl as string | undefined,
+              roles: cached.roles as string[] || [],
             },
             isAuthenticated: true,
             isLoading: false,
@@ -89,7 +89,7 @@ function createAuthStore() {
 
         const userData = await api.get<AuthMeResponse>(`/${tenant}/auth/me`);
         // Cache the user data
-        setCachedAuth(tenant, userData);
+        setCachedAuth(tenant, userData as unknown as Record<string, unknown>);
 
         set({
           user: {
@@ -107,7 +107,7 @@ function createAuthStore() {
       } catch (error) {
         const message =
           error instanceof api.ApiError
-            ? error.data?.message ?? error.message ?? 'Failed to fetch user info'
+            ? (error.data as { message?: string } | undefined)?.message ?? error.message ?? 'Failed to fetch user info'
             : 'Failed to fetch user info';
 
         set({
@@ -133,15 +133,25 @@ function createAuthStore() {
     },
     /**
      * Logout and clear local state
+     * POST リクエストでログアウトを実行
      */
-    logout: () => {
-      clearAuthCache();
-      set({
-        user: null,
-        isAuthenticated: false,
-        isLoading: false,
-        error: null,
-      });
+    logout: async (tenant: string) => {
+      try {
+        // POST リクエストでログアウト
+        await api.post(`/${tenant}/auth/logout`, {});
+      } catch (error) {
+        // エラーが発生してもローカル状態はクリア
+        console.error('Logout error:', error);
+      } finally {
+        // 常にローカル状態をクリア
+        clearAuthCache();
+        set({
+          user: null,
+          isAuthenticated: false,
+          isLoading: false,
+          error: null,
+        });
+      }
     },
     /**
      * Clear local state only (for session expiration)

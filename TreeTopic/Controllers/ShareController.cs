@@ -33,8 +33,18 @@ public class ShareController : ControllerBase
         _maskedUuidService = maskedUuidService;
     }
 
-    private Guid CurrentUserId =>
-        Guid.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? Guid.Empty.ToString());
+    private Guid CurrentUserId
+    {
+        get
+        {
+            var userIdValue = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (!Guid.TryParse(userIdValue, out var userId))
+            {
+                throw new UnauthorizedAccessException("User is not authenticated or has invalid user ID.");
+            }
+            return userId;
+        }
+    }
 
     private string CurrentUserName =>
         User.FindFirst(ClaimTypes.Name)?.Value
@@ -441,8 +451,8 @@ public class ShareController : ControllerBase
         {
             ShareItemId = targetShare.Id,
             FileId = fileEntity.Id,
-            ShareItem = null,
-            File = null,
+            ShareItem = null!,
+            File = null!,
             IsCurrent = true
         };
         _db.ShareItemFiles.Add(linkEntity);

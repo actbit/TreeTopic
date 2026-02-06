@@ -1,6 +1,7 @@
 import { writable, derived } from 'svelte/store';
 import type { TopicTreeNode } from '$lib/types/ui';
 import { isCacheValid, getCacheAge } from '$lib/utils/store';
+import { api, getCurrentTenant } from '$lib/api/client';
 
 /**
  * Topic permission levels
@@ -32,9 +33,8 @@ export interface Topic {
   messageCount: number;
   unreadCount: number;
   userPermission: PermissionLevel;
-  permissions?: TopicPermission[];
-  isArchived: boolean;
-  tags?: string[];
+  permissions?: string[];  // Permission names as strings
+  topicPermissions?: TopicPermission[];  // Detailed topic permissions
   sourceMessageId?: string | null;
   hasChildren: boolean;
 }
@@ -54,29 +54,6 @@ export interface TopicsState {
 }
 
 const TOPICS_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
-
-/**
- * Topic information
- */
-export interface Topic {
-  id: string;
-  roomId: string;
-  title: string;
-  description?: string;
-  parentId: string | null;
-  childIds: string[];
-  createdAt: Date;
-  updatedAt: Date;
-  creatorId: string;
-  messageCount: number;
-  unreadCount: number;
-  userPermission: PermissionLevel;
-  permissions?: TopicPermission[];
-  isArchived: boolean;
-  tags?: string[];
-  sourceMessageId?: string | null;
-  hasChildren: boolean;
-}
 
 /**
  * Create topics store
@@ -357,7 +334,7 @@ function createTopicsStore() {
     /**
      * Update topic permissions
      */
-    updateTopicPermissions: (topicId: string, permissions: TopicPermission[]) => {
+    updateTopicPermissions: (topicId: string, permissions: string[]) => {
       update((state) => ({
         ...state,
         topics: state.topics.map((t) =>
@@ -397,16 +374,17 @@ function createTopicsStore() {
      */
     refreshHasChildren: async (topicId: string) => {
       try {
-        const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/topics/${topicId}/hasChildren`);
-        if (response.ok) {
-          const { hasChildren } = await response.json();
-          update((state) => ({
-            ...state,
-            topics: state.topics.map((t) =>
-              t.id === topicId ? { ...t, hasChildren } : t
-            ),
-          }));
-        }
+        const tenant = getCurrentTenant();
+        const updated = await api.get<Record<string, unknown>>(`/${tenant}/api/topic/${topicId}`);
+        const hasChildren = updated?.hasChildren ?? updated?.HasChildren ?? undefined;
+        if (typeof hasChildren !== 'boolean') return;
+
+        update((state) => ({
+          ...state,
+          topics: state.topics.map((t) =>
+            t.id === topicId ? { ...t, hasChildren } : t
+          ),
+        }));
       } catch (error) {
         console.error('Failed to refresh hasChildren:', error);
       }

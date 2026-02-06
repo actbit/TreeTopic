@@ -4,7 +4,7 @@
   let isLoading = $state(false);
   let error = $state<string | null>(null);
   let success = $state(false);
-  let createdTenant = $state<any>(null);
+  let createdTenant = $state<{ identifier: string; name: string; setupToken?: string } | null>(null);
   let errors = $state<Record<string, boolean>>({
     identifier: false,
     name: false,
@@ -118,7 +118,17 @@
       success = false;
       createdTenant = null;
 
-      const request: any = {
+      const request: {
+        identifier: string;
+        name: string;
+        dbProvider: string;
+        dbConnectionString?: string;
+        openIdConnectAuthority?: string;
+        roleClaimName?: string;
+        openIdConnectMetadataAddress?: string;
+        openIdConnectClientId?: string;
+        openIdConnectClientSecret?: string;
+      } = {
         identifier: identifier.trim(),
         name: name.trim(),
         dbProvider: dbProvider
@@ -138,7 +148,7 @@
         if (clientSecret) request.openIdConnectClientSecret = clientSecret.trim();
       }
 
-      const response = await api.post<any>('/api/tenants/register', request);
+      const response = await api.post<{ identifier: string; name: string; setupToken?: string }>('/api/tenants/register', request);
       createdTenant = response;
 
       // 成功
@@ -153,8 +163,8 @@
       metadataAddress = '';
       clientId = '';
       clientSecret = '';
-    } catch (err: any) {
-      error = err.message || 'Failed to create workspace';
+    } catch (err) {
+      error = err instanceof Error ? err.message : 'Failed to create workspace';
     } finally {
       isLoading = false;
     }
@@ -178,12 +188,20 @@
   }
 
   function handleSSOLogin() {
+    console.log('[handleSSOLogin] createdTenant:', createdTenant);
     if (createdTenant?.identifier && createdTenant?.setupToken) {
       // setupTokenをsessionStorageに保存
       sessionStorage.setItem(`setupToken_${createdTenant.identifier}`, createdTenant.setupToken);
       const returnUrl = encodeURIComponent(`/${createdTenant.identifier}/setup`);
       const loginUrl = `/${createdTenant.identifier}/auth/login?returnUrl=${returnUrl}`;
+      console.log('[handleSSOLogin] Redirecting to:', loginUrl);
       window.location.href = loginUrl;
+    } else {
+      console.error('[handleSSOLogin] Missing identifier or setupToken', {
+        identifier: createdTenant?.identifier,
+        setupToken: createdTenant?.setupToken
+      });
+      alert('認証情報が不足しています。管理者にお問い合わせください。');
     }
   }
 

@@ -32,8 +32,18 @@ public class FileController : ControllerBase
         _roomUserRepository = roomUserRepository;
     }
 
-    private Guid CurrentUserId =>
-        Guid.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? Guid.Empty.ToString());
+    private Guid CurrentUserId
+    {
+        get
+        {
+            var userIdValue = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (!Guid.TryParse(userIdValue, out var userId))
+            {
+                throw new UnauthorizedAccessException("User is not authenticated or has invalid user ID.");
+            }
+            return userId;
+        }
+    }
 
     private string CurrentUserName =>
         User.FindFirst(ClaimTypes.Name)?.Value
@@ -145,7 +155,8 @@ public class FileController : ControllerBase
                     ? ct
                     : "application/octet-stream";
 
-                var url = $"/uploads/{tenant}/{roomId}/{storedName}".Replace("\\", "/");
+                // 認可付きダウンロードエンドポイントを使用
+                var url = $"/{tenant}/api/file/download/{roomId}/{storedName}".Replace("\\", "/");
 
                 return new RoomMaterialDto(
                     Id: id,
@@ -201,7 +212,8 @@ public class FileController : ControllerBase
                 ? ct
                 : "application/octet-stream");
 
-        var url = $"/uploads/{tenant}/{roomId}/{savedFileName}".Replace("\\", "/");
+        // 認可付きダウンロードエンドポイントを使用
+        var url = $"/{tenant}/api/file/download/{roomId}/{savedFileName}".Replace("\\", "/");
 
         var roomUserName = await GetRoomUserDisplayNameAsync((Guid)roomId, cancellationToken);
         var dto = new RoomMaterialDto(
@@ -252,5 +264,41 @@ public class FileController : ControllerBase
     {
         var result = await _fileManagementService.DeleteFileAsync(fileId, cancellationToken);
         return result.ToApiResult();
+    }
+
+    /// <summary>
+    /// 認可付きファイルダウンロードエンドポイント
+    /// /uploads 静的配信の代わりに使用
+    /// </summary>
+    [HttpGet("download/{roomId}/{fileName}")]
+    [RequireAny(RoomPermissions.Join, TenantPermissions.RoomRead)]
+    public async Task<IActionResult> DownloadFile(
+        [FromRoute] MaskedGuid roomId,
+        [FromRoute] string fileName,
+        CancellationToken cancellationToken)
+    {
+        var tenant = RouteData.Values["tenant"]?.ToString() ?? "default";
+        var webRoot = _environment.ContentRootPath;
+        var filePath = Path.Combine(webRoot, "uploads", tenant, roomId.ToString(), fileName);
+
+        if (!System.IO.File.Exists(filePath))
+        {
+            return NotFound(new { message = "File not found." });
+        }
+
+        // Content-Type を決定
+        string contentType;
+        if (_contentTypeProvider.TryGetContentType(fileName, out var providerContentType))
+        {
+            contentType = providerContentType;
+        }
+        else
+        {
+            contentType = "application/octet-stream";
+        }
+
+        // ファイルをストリームで返す
+        var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+        return File(fileStream, contentType);
     }
 }

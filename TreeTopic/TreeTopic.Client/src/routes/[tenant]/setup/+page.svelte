@@ -22,6 +22,7 @@
 
   interface User {
     id: string;
+    userId?: string;
     userName: string;
     email?: string;
     roles?: string[];
@@ -150,12 +151,12 @@
       }
 
       // 動的に権限を取得（Setup用エンドポイント）
-      const response = await api.get<any>(`/${tenant}/api/setup/permissions/available`, {
+      const response = await api.get<{ tenant?: { name: string }[] }>(`/${tenant}/api/setup/permissions/available`, {
         headers: { 'Authorization': `Bearer ${setupToken}` }
       });
 
       // tenant権限のみを取得（元の形式: tenant.user.read）
-      availablePermissions = (response.tenant || []).map((p: any) => p.name);
+      availablePermissions = (response.tenant || []).map((p) => p.name);
     } catch (err) {
       console.error('Error loading permissions:', err);
       availablePermissions = [];
@@ -176,7 +177,10 @@
   async function loadCurrentUser() {
     try {
       const response = await getCurrentUser(tenant!) as User;
-      currentUser = response;
+      currentUser = {
+        ...response,
+        id: response.id || response.userId || ''
+      };
     } catch (err) {
       console.error('Error loading current user:', err);
       currentUser = null;
@@ -199,8 +203,8 @@
 
       // Reload users to get the newly created user
       await loadCurrentUser();
-    } catch (err: any) {
-      error = err.message || 'Failed to create user';
+    } catch (err) {
+      error = err instanceof Error ? err.message : 'Failed to create user';
     } finally {
       isLoading = false;
     }
@@ -209,6 +213,10 @@
   async function assignRoleToUser() {
     if (!currentUser || !selectedRoleForUser || !setupToken) {
       error = 'Please select a role';
+      return;
+    }
+    if (!currentUser.id) {
+      error = 'Current user ID is missing';
       return;
     }
 
@@ -223,15 +231,15 @@
 
       // Clear selection
       selectedRoleForUser = '';
-    } catch (err: any) {
-      error = err.message || 'Failed to assign role';
+    } catch (err) {
+      error = err instanceof Error ? err.message : 'Failed to assign role';
     } finally {
       isLoading = false;
     }
   }
 
   async function removeRoleFromUser(roleName: string) {
-    if (!currentUser || !setupToken) return;
+    if (!currentUser || !setupToken || !currentUser.id) return;
 
     try {
       isLoading = true;
@@ -241,8 +249,8 @@
 
       // Update current user with the response
       currentUser = updatedUser as User;
-    } catch (err: any) {
-      error = err.message || 'Failed to remove role';
+    } catch (err) {
+      error = err instanceof Error ? err.message : 'Failed to remove role';
     } finally {
       isLoading = false;
     }
@@ -263,8 +271,8 @@
       // Assuming response structure matches RoleDto { Id: string, Name: string }
       roles = [...roles, response as Role];
       newRoleName = '';
-    } catch (err: any) {
-      error = err.message || 'Failed to create role';
+    } catch (err) {
+      error = err instanceof Error ? err.message : 'Failed to create role';
     } finally {
       isLoading = false;
     }
@@ -282,8 +290,8 @@
       });
 
       roles = roles.filter(r => r.name !== roleName);
-    } catch (err: any) {
-      error = err.message || 'Failed to delete role';
+    } catch (err) {
+      error = err instanceof Error ? err.message : 'Failed to delete role';
     } finally {
       isLoading = false;
     }
@@ -304,8 +312,8 @@
       });
 
       selectedPermissions[`${roleName}_${permissionName}`] = true;
-    } catch (err: any) {
-      error = err.message || 'Failed to add permission';
+    } catch (err) {
+      error = err instanceof Error ? err.message : 'Failed to add permission';
     } finally {
       isLoading = false;
     }
@@ -326,8 +334,8 @@
       });
 
       delete selectedPermissions[`${roleName}_${permissionName}`];
-    } catch (err: any) {
-      error = err.message || 'Failed to remove permission';
+    } catch (err) {
+      error = err instanceof Error ? err.message : 'Failed to remove permission';
     } finally {
       isLoading = false;
     }
@@ -354,8 +362,8 @@
       setTimeout(() => {
         redirectToDashboard = true;
       }, 1500);
-    } catch (err: any) {
-      error = err.message || 'Failed to complete setup';
+    } catch (err) {
+      error = err instanceof Error ? err.message : 'Failed to complete setup';
       isLoading = false;
     }
   }

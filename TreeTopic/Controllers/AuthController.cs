@@ -97,25 +97,51 @@ public class AuthController : ControllerBase
     }
 
     /// <summary>
-    /// ログアウト
+    /// ログアウト（GET用レガシーエンドポイント - 非推奨）
     /// </summary>
     [HttpGet("logout")]
     [Authorize]
-    public IActionResult Logout()
+    public IActionResult LogoutGet([FromQuery] string? returnUrl)
+    {
+        return PerformLogout(returnUrl);
+    }
+
+    /// <summary>
+    /// ログアウト（POST推奨）
+    /// </summary>
+    [HttpPost("logout")]
+    [Authorize]
+    public IActionResult LogoutPost([FromBody] LogoutRequest? request)
+    {
+        return PerformLogout(request?.returnUrl);
+    }
+
+    private IActionResult PerformLogout(string? returnUrl)
     {
         _logger.LogInformation("Logout initiated");
+
+        // returnUrl をバリデーション
+        var currentTenant = HttpContext.GetRouteValue("tenant")?.ToString();
+        if (!string.IsNullOrEmpty(returnUrl) && !IsValidReturnUrl(returnUrl, currentTenant))
+        {
+            _logger.LogWarning("Invalid returnUrl detected on logout: {ReturnUrl}", returnUrl);
+            returnUrl = null;
+        }
+
+        // リダイレクト先
+        var redirectUri = returnUrl ?? "/";
+        _logger.LogInformation("Logout redirecting to: {RedirectUri}", redirectUri);
 
         // Only logout from application session (Cookies)
         // Don't logout from Keycloak to preserve session for other applications
         return SignOut(
             new AuthenticationProperties
             {
-                RedirectUri = "/"
+                RedirectUri = redirectUri
             },
             "Cookies"
         );
     }
-
     /// <summary>
     /// 現在のユーザー情報を取得
     /// </summary>
@@ -234,6 +260,10 @@ public class AuthController : ControllerBase
     }
 }
 
-
-
-
+/// <summary>
+/// ログアウトリクエスト
+/// </summary>
+public class LogoutRequest
+{
+    public string? returnUrl { get; set; }
+}

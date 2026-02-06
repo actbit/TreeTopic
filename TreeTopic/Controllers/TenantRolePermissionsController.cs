@@ -69,7 +69,7 @@ public class TenantRolePermissionsController : ControllerBase
             .Select(p => p.Name)
             .ToListAsync(cancellationToken);
 
-        return Ok(new { roleName, roleId = role.Id, permissions });
+        return Ok(new { roleName, roleId = new MaskedGuid(role.Id), permissions });
     }
 
     /// <summary>
@@ -110,7 +110,7 @@ public class TenantRolePermissionsController : ControllerBase
 
         _logger.LogInformation("Permission {Permission} added to Role {RoleName}", request.PermissionName, roleName);
 
-        return Ok(new { permissionId = permission.Id, name = permission.Name });
+        return Ok(new { permissionId = new MaskedGuid(permission.Id), name = permission.Name });
     }
 
     /// <summary>

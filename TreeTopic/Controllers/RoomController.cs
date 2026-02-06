@@ -32,7 +32,18 @@ public class RoomController : ControllerBase
         _userManager = userManager;
     }
 
-    private Guid CurrentUserId => Guid.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? Guid.Empty.ToString());
+    private Guid CurrentUserId
+    {
+        get
+        {
+            var userIdValue = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (!Guid.TryParse(userIdValue, out var userId))
+            {
+                throw new UnauthorizedAccessException("User is not authenticated or has invalid user ID.");
+            }
+            return userId;
+        }
+    }
 
     [HttpGet]
     [RequireAny(RoomPermissions.Read, TenantPermissions.RoomRead)]

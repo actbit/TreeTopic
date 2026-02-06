@@ -38,6 +38,21 @@ public class PushController : BaseController
     [HttpPost("subscribe")]
     public async Task<IActionResult> Subscribe([FromBody] PushSubscriptionDto subscriptionDto)
     {
+        if (subscriptionDto == null || subscriptionDto.Keys == null)
+        {
+            return BadRequest(new { error = "Invalid subscription data" });
+        }
+
+        if (string.IsNullOrWhiteSpace(subscriptionDto.Endpoint))
+        {
+            return BadRequest(new { error = "Endpoint is required" });
+        }
+
+        if (string.IsNullOrWhiteSpace(subscriptionDto.Keys.P256dh) || string.IsNullOrWhiteSpace(subscriptionDto.Keys.Auth))
+        {
+            return BadRequest(new { error = "Keys are required" });
+        }
+
         var result = await _service.SubscribeAsync(subscriptionDto);
         if (result.IsSuccess)
         {

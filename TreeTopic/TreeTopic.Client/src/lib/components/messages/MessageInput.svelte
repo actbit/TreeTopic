@@ -7,6 +7,7 @@
     topicList,
     updateTopic,
     type Topic,
+    type PermissionLevel,
   } from '$lib/stores/topics';
   import { currentRoom } from '$lib/stores/rooms';
   import {
@@ -21,6 +22,7 @@
   import { isRequired, minLength } from '$lib/utils/validation';
   import { getMessageAnchorId } from '$lib/utils/messageAnchor';
   import { api } from '$lib/api/client';
+  import type { RawMessage, RawMaterial, RawTopic } from '$lib/types/signalr';
 
   let subject = $state('');
   let content = $state('');
@@ -53,7 +55,7 @@
     ChildTopicId?: string;
   } & Record<string, unknown>;
 
-  function normalizeMessage(raw: any) {
+  function normalizeMessage(raw: RawMessage) {
     const id = raw?.id ?? raw?.Id ?? '';
 
     // IDが空文字列の場合はエラーとして扱う（デバッグ用）
@@ -76,7 +78,7 @@
     const rawFiles = raw?.files ?? raw?.Files ?? [];
     const attachments =
       Array.isArray(rawFiles)
-        ? rawFiles.map((f: any) => {
+        ? rawFiles.map((f: RawMaterial) => {
             const fid = f?.id ?? f?.Id ?? '';
             const fileName = f?.fileName ?? f?.FileName ?? '';
             const mimeType = f?.fileType ?? f?.FileType ?? 'application/octet-stream';
@@ -122,8 +124,8 @@
       reactions: [],
       readBy: [],
       sortOrder: raw?.sortOrder ?? raw?.SortOrder ?? undefined,
-      childTopicId: raw?.childTopicId ?? raw?.ChildTopicId ?? null,
-      childTopicTitle: raw?.childTopicTitle ?? raw?.ChildTopicTitle ?? null,
+      childTopicId: raw?.childTopicId ?? raw?.ChildTopicId ?? undefined,
+      childTopicTitle: raw?.childTopicTitle ?? raw?.ChildTopicTitle ?? undefined,
     };
   }
 
@@ -278,7 +280,7 @@
         for (const file of selectedFiles) {
           form.append('files', file);
         }
-        response = await api.post<MessageApiResponse>(`/${tenant}/api/Message/upload`, form);
+        response = await api.post<MessageApiResponse>(`/${tenant}/api/message/upload`, form);
       } else {
         // ファイルがない場合はJSONで送信
         interface MessagePayload {
@@ -351,7 +353,7 @@
     }
   }
 
-  function normalizeTopicResponse(raw: any): Topic {
+  function normalizeTopicResponse(raw: RawTopic): Topic {
     const id = raw?.id ?? raw?.Id ?? '';
     const roomId = raw?.roomId ?? raw?.RoomId ?? '';
     const parentId = raw?.parentId ?? raw?.ParentId ?? null;
@@ -371,10 +373,8 @@
       creatorId: raw?.creatorId ?? raw?.CreatorId ?? '',
       messageCount: raw?.messageCount ?? raw?.MessageCount ?? 0,
       unreadCount: raw?.unreadCount ?? raw?.UnreadCount ?? 0,
-      userPermission: raw?.userPermission ?? raw?.UserPermission ?? 'admin',
+      userPermission: (raw?.userPermission ?? raw?.UserPermission ?? 'admin') as PermissionLevel,
       permissions: raw?.permissions ?? raw?.Permissions ?? [],
-      isArchived: raw?.isArchived ?? raw?.IsArchived ?? false,
-      tags: raw?.tags ?? raw?.Tags ?? [],
       hasChildren: raw?.hasChildren ?? raw?.HasChildren ?? false,
     };
   }
@@ -386,7 +386,7 @@
     if (!tenant) return;
 
     try {
-      const response = await api.get<any>(`/${tenant}/api/Topic/${childTopicId}`);
+      const response = await api.get<RawTopic>(`/${tenant}/api/topic/${childTopicId}`);
       const normalizedTopic = normalizeTopicResponse(response);
       if (!normalizedTopic.id) return;
 

@@ -21,12 +21,12 @@
   const modalId = 'topic-create';
   let modalConfig = $derived.by(() => $activeModals.find((m) => m.id === modalId) ?? null);
   let isOpen = $derived.by(() => modalConfig !== null);
-  let modalData = $derived.by(() => modalConfig?.data ?? {});
-  let parentId = $derived.by(() => modalData.parentId ?? $createTopicParentId);
-  let prefillTitle = $derived.by(() => modalData.prefillTitle ?? '');
-  let prefillDescription = $derived.by(() => modalData.prefillDescription ?? '');
-  let navigateOnCreate = $derived.by(() => modalData.autoNavigate ?? false);
-  let sourceMessageId = $derived.by(() => modalData.sourceMessageId ?? null);
+  let modalData = $derived.by(() => modalConfig?.data ?? {} as Record<string, unknown>);
+  let parentId = $derived.by(() => (modalData.parentId ?? null) as string | null);
+  let prefillTitle = $derived.by(() => (modalData.prefillTitle ?? '') as string);
+  let prefillDescription = $derived.by(() => (modalData.prefillDescription ?? '') as string);
+  let navigateOnCreate = $derived.by(() => (modalData.autoNavigate ?? false) as boolean);
+  let sourceMessageId = $derived.by(() => (modalData.sourceMessageId ?? null) as string | null);
   let transferHistory = $state(false);
 
   let title = $state('');
@@ -43,7 +43,7 @@
         description = prefillDescription ?? '';
         error = null;
         titleError = undefined;
-        transferHistory = modalData.transferHistory ?? false;
+        transferHistory = (modalData.transferHistory ?? false) as boolean;
         hasInitializedModal = true;
       }
     } else {
@@ -78,7 +78,7 @@
 
     try {
       const tenant = api.getCurrentTenant();
-      const response = (await api.post(`/${tenant}/api/Topic`, {
+      const response = (await api.post(`/${tenant}/api/topic`, {
         roomId: $currentRoom.id,
         title: title.trim(),
         description: description.trim(),
@@ -128,7 +128,7 @@
         transferHistory && activeParentId && sourceMessageId;
       if (shouldTransferHistory) {
         try {
-          await api.post(`/${tenant}/api/Message/move`, {
+          await api.post(`/${tenant}/api/message/move`, {
             sourceTopicId: activeParentId,
             targetTopicId: normalizedTopic.id,
             anchorMessageId: sourceMessageId,

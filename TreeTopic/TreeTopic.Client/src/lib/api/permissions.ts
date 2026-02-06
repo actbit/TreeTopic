@@ -30,13 +30,6 @@ export const permissionsApi = {
  */
 export const userPermissionsApi = {
   /**
-   * 現在のユーザーのテナント権限を取得
-   * GET /{tenant}/api/tenant/my/permissions
-   */
-  getMyTenantPermissions: (tenant: string) =>
-    api.get<{ permissions: string[] }>(`/${tenant}/api/tenant/my/permissions`),
-
-  /**
    * 現在のユーザーのルーム権限を取得
    * GET /{tenant}/api/room/{roomId}/my/permissions
    */
@@ -122,7 +115,7 @@ export const roomRolePermissionsApi = {
    * ルームロールの権限をすべてクリア
    */
   clearPermissions: (tenant: string, roleName: string) =>
-    api.delete(`/${tenant}/api/roomroles/${roleName}/permissions`),
+    api.delete(`/${tenant}/api/roomroles/${roleName}/permissions/clear`),
 };
 
 /**

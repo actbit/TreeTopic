@@ -29,9 +29,9 @@ public class MessageController : ControllerBase
         get
         {
             var userIdValue = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-            if (string.IsNullOrEmpty(userIdValue) || !Guid.TryParse(userIdValue, out var userId))
+            if (!Guid.TryParse(userIdValue, out var userId))
             {
-                throw new InvalidOperationException("User is not authenticated or has invalid user ID.");
+                throw new UnauthorizedAccessException("User is not authenticated or has invalid user ID.");
             }
             return userId;
         }
@@ -50,6 +50,26 @@ public class MessageController : ControllerBase
     public async Task<IActionResult> GetByTopic([FromRoute] MaskedGuid topicId, CancellationToken cancellationToken)
     {
         var result = await _messageManagementService.GetMessagesByTopicAsync((Guid)topicId, CurrentUserId, cancellationToken);
+        return result.ToApiResult();
+    }
+
+    [HttpGet("topic/{topicId}/search")]
+    [RequireAny(TopicPermissions.ReadMessages, TenantPermissions.TopicReadMessages)]
+    public async Task<IActionResult> SearchByTopic(
+        [FromRoute] MaskedGuid topicId,
+        [FromQuery(Name = "q")] string query,
+        [FromQuery] MessageSearchMode mode = MessageSearchMode.Contains,
+        [FromQuery] bool caseSensitive = false,
+        [FromQuery][Range(1, 200)] int take = 100,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await _messageManagementService.SearchMessagesByTopicAsync(
+            (Guid)topicId,
+            query,
+            mode,
+            caseSensitive,
+            take,
+            cancellationToken);
         return result.ToApiResult();
     }
 

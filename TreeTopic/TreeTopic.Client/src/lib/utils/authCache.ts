@@ -9,7 +9,7 @@ const AUTH_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
 interface AuthCacheEntry {
 	tenant: string;
-	user: any;
+	user: Record<string, unknown>;
 	timestamp: number;
 }
 
@@ -20,7 +20,7 @@ let authCache: AuthCacheEntry | null = null;
  * @param tenant - The tenant identifier
  * @returns The cached user data if valid, null otherwise
  */
-export function getCachedAuth(tenant: string): any | null {
+export function getCachedAuth(tenant: string): Record<string, unknown> | null {
 	if (authCache && authCache.tenant === tenant) {
 		const age = Date.now() - authCache.timestamp;
 		if (age < AUTH_CACHE_TTL) {
@@ -37,7 +37,7 @@ export function getCachedAuth(tenant: string): any | null {
  * @param tenant - The tenant identifier
  * @param user - The user data to cache
  */
-export function setCachedAuth(tenant: string, user: any): void {
+export function setCachedAuth(tenant: string, user: Record<string, unknown>): void {
 	authCache = { tenant, user, timestamp: Date.now() };
 }
 

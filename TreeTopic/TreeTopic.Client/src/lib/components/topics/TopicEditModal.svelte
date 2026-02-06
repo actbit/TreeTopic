@@ -65,7 +65,7 @@
       const trimmedTitle = title.trim();
       const trimmedDescription = description.trim();
 
-      await api.put(`/${tenant}/api/Topic/${topicId}`, {
+      await api.put(`/${tenant}/api/topic/${topicId}`, {
         parentId: topic.parentId,
         title: trimmedTitle,
         description: trimmedDescription || null,

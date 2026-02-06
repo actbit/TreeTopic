@@ -4,16 +4,17 @@
   import { api } from '$lib/api/client';
   import { ui, activeModals } from '$lib/stores/ui';
   import { page } from '$app/stores';
+  import type { PermissionDefinition } from '$lib/types/permissions';
 
   const modalId = 'topic-user-permission';
   let modal = $derived.by(() => $activeModals.find((m) => m.id === modalId) ?? null);
   let isOpen = $derived.by(() => modal !== null);
-  let tenant = $derived.by(() => modal?.data?.tenant ?? $page.params.tenant ?? '');
-  let roomId = $derived.by(() => modal?.data?.roomId ?? '');
-  let topicId = $derived.by(() => modal?.data?.topicId ?? '');
+  let tenant = $derived.by(() => (modal?.data?.tenant ?? $page.params.tenant ?? '') as string);
+  let roomId = $derived.by(() => (modal?.data?.roomId ?? '') as string);
+  let topicId = $derived.by(() => (modal?.data?.topicId ?? '') as string);
 
-  let availablePermissions = $state<any[]>([]);
-  let roomUsers = $state<any[]>([]);
+  let availablePermissions = $state<PermissionDefinition[]>([]);
+  let roomUsers = $state<{ id: string; displayName: string; userName?: string; roomRoleName?: string }[]>([]);
   let userPermissions = $state<Record<string, string[]>>({});
   let isLoading = $state(true);
   let error = $state<string | null>(null);
@@ -36,7 +37,7 @@
       availablePermissions = availablePermsData.topic || [];
 
       // Fetch room users
-      const usersData = await api.get<any>(`/${tenant}/api/RoomUsers/room/${roomId}`);
+      const usersData = await api.get<any>(`/${tenant}/api/roomusers/room/${roomId}`);
       roomUsers = usersData;
 
       // Fetch permissions for each user
@@ -56,8 +57,8 @@
       });
 
       error = null;
-    } catch (err: any) {
-      error = err.message || 'Failed to load data';
+    } catch (err) {
+      error = err instanceof Error ? err.message : 'Failed to load data';
     } finally {
       isLoading = false;
     }
@@ -80,8 +81,8 @@
         });
         userPermissions[userId] = [...currentPerms, permissionName];
       }
-    } catch (err: any) {
-      error = err.message || 'Failed to update permissions';
+    } catch (err) {
+      error = err instanceof Error ? err.message : 'Failed to update permissions';
     }
   }
 
@@ -104,8 +105,8 @@
       selectedUserId = '';
       selectedPermission = '';
       error = null;
-    } catch (err: any) {
-      error = err.message || 'Failed to add permission';
+    } catch (err) {
+      error = err instanceof Error ? err.message : 'Failed to add permission';
     }
   }
 
@@ -113,12 +114,12 @@
     try {
       await api.delete(`/${tenant}/api/topics/${topicId}/permissions/users/${userId}/${encodeURIComponent(permissionName)}`);
       userPermissions[userId] = (userPermissions[userId] || []).filter((p) => p !== permissionName);
-    } catch (err: any) {
-      error = err.message || 'Failed to remove permission';
+    } catch (err) {
+      error = err instanceof Error ? err.message : 'Failed to remove permission';
     }
   }
 
-  function getDisplayName(user: any): string {
+  function getDisplayName(user: { displayName?: string; userName?: string }): string {
     return user.displayName || user.userName || 'Unknown';
   }
 
@@ -259,7 +260,7 @@
                             ? 'bg-primary bg-opacity-10 border-primary text-primary'
                             : 'border-border hover:bg-surface'}"
                         >
-                          {perm.label}
+                          {formatPermissionName(perm.name)}
                         </button>
                       {/each}
                     </div>

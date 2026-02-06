@@ -4,6 +4,31 @@
   import { onMount } from 'svelte';
   import { ui, modals } from '$lib/stores/ui';
 
+  // Type definitions
+  interface Role {
+    id: string;
+    name: string;
+    permissions?: string[];
+  }
+
+  interface User {
+    id: string;
+    userName: string;
+    displayName?: string;
+    email?: string;
+    iconUrl?: string;
+    roles?: string[];
+    isBanned?: boolean;
+    banReason?: string;
+    bannedAt?: string | null;
+  }
+
+  interface TenantDetail {
+    canCreateUsers: boolean;
+    canAssignRolesToUsers?: boolean;
+    [key: string]: unknown;
+  }
+
   let isLoading = $state(false);
   let error = $state<string | null>(null);
   let activeTab = $state('users');
@@ -11,9 +36,9 @@
   const tenant = $page.params.tenant ?? '';
 
   // データ
-  let roles = $state<any[]>([]);
-  let users = $state<any[]>([]);
-  let tenantDetail = $state<any>(null);
+  let roles = $state<Role[]>([]);
+  let users = $state<User[]>([]);
+  let tenantDetail = $state<TenantDetail | null>(null);
   let canManageUsers = $state(false);
 
   // Create user modal
@@ -22,7 +47,7 @@
 
   // Ban modal
   let showBanModal = $state(false);
-  let banTargetUser = $state<any>(null);
+  let banTargetUser = $state<User | null>(null);
   let banReason = $state('');
 
   const tabs = [
@@ -47,8 +72,8 @@
       // ユーザー一覧を取得
       const usersData = await api.get<any[]>(`/${tenant}/api/users`);
       users = usersData;
-    } catch (err: any) {
-      error = err.message || 'データの読み込みに失敗しました';
+    } catch (err) {
+      error = err instanceof Error ? err.message : 'データの読み込みに失敗しました';
     } finally {
       isLoading = false;
     }
@@ -57,10 +82,10 @@
   async function loadTenantDetail() {
     try {
       const detail = await getTenantDetail(tenant);
-      tenantDetail = detail;
+      tenantDetail = detail as TenantDetail;
       // バックエンドで判定された結果を使用
-      canManageUsers = tenantDetail.canCreateUsers;
-    } catch (err: any) {
+      canManageUsers = tenantDetail?.canCreateUsers ?? false;
+    } catch (err) {
       console.error('Failed to load tenant detail:', err);
     }
   }
@@ -80,14 +105,14 @@
       newEmail = '';
 
       await loadData();
-    } catch (err: any) {
-      error = err.message || 'ユーザーの作成に失敗しました';
+    } catch (err) {
+      error = err instanceof Error ? err.message : 'ユーザーの作成に失敗しました';
     } finally {
       isLoading = false;
     }
   }
 
-  function openBanModal(user: any) {
+  function openBanModal(user: User) {
     banTargetUser = user;
     banReason = '';
     showBanModal = true;
@@ -109,14 +134,14 @@
       banReason = '';
 
       await loadData();
-    } catch (err: any) {
-      error = err.message || 'Banに失敗しました';
+    } catch (err) {
+      error = err instanceof Error ? err.message : 'Banに失敗しました';
     } finally {
       isLoading = false;
     }
   }
 
-  async function handleUnban(user: any) {
+  async function handleUnban(user: User) {
     if (!confirm(`${user.displayName || user.userName}のBanを解除しますか？`)) {
       return;
     }
@@ -127,14 +152,14 @@
 
       await unbanUser(tenant, user.id);
       await loadData();
-    } catch (err: any) {
-      error = err.message || 'Ban解除に失敗しました';
+    } catch (err) {
+      error = err instanceof Error ? err.message : 'Ban解除に失敗しました';
     } finally {
       isLoading = false;
     }
   }
 
-  async function handleAddRole(user: any, roleName: string) {
+  async function handleAddRole(user: User, roleName: string) {
     if (!roleName) return;
 
     try {
@@ -143,36 +168,36 @@
 
       await assignUserRole(tenant, user.id, roleName);
       await loadData();
-    } catch (err: any) {
-      error = err.message || 'ロールの追加に失敗しました';
+    } catch (err) {
+      error = err instanceof Error ? err.message : 'ロールの追加に失敗しました';
     } finally {
       isLoading = false;
     }
   }
 
-  async function handleRemoveRole(user: any, roleName: string) {
+  async function handleRemoveRole(user: User, roleName: string) {
     try {
       isLoading = true;
       error = null;
 
       await removeUserRole(tenant, user.id, roleName);
       await loadData();
-    } catch (err: any) {
-      error = err.message || 'ロールの削除に失敗しました';
+    } catch (err) {
+      error = err instanceof Error ? err.message : 'ロールの削除に失敗しました';
     } finally {
       isLoading = false;
     }
   }
 
-  function getUserRoles(user: any): string[] {
+  function getUserRoles(user: User): string[] {
     return user.roles || [];
   }
 
-  function getDisplayName(user: any): string {
+  function getDisplayName(user: User): string {
     return user.displayName || user.userName || 'Unknown';
   }
 
-  function formatDate(dateString: string | null): string {
+  function formatDate(dateString: string | null | undefined): string {
     if (!dateString) return '-';
     return new Date(dateString).toLocaleString('ja-JP');
   }

@@ -24,6 +24,17 @@ export interface UIStateData {
 /**
  * Create UI store
  */
+// Store notification timeout IDs for cleanup
+const notificationTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+// Cleanup on page unload
+if (typeof window !== 'undefined') {
+  window.addEventListener('beforeunload', () => {
+    notificationTimers.forEach((timer) => clearTimeout(timer));
+    notificationTimers.clear();
+  });
+}
+
 function createUIStore() {
   const { subscribe, set, update } = writable<UIStateData>({
     viewMode: 'default',
@@ -129,9 +140,11 @@ function createUIStore() {
 
       // Auto-remove notifications after duration
       if (notification.duration !== 0) {
-        setTimeout(() => {
+        const timer = setTimeout(() => {
           ui.removeNotification(newNotification.id);
+          notificationTimers.delete(newNotification.id);
         }, notification.duration ?? 3000);
+        notificationTimers.set(newNotification.id, timer);
       }
 
       return newNotification.id;
@@ -140,6 +153,13 @@ function createUIStore() {
      * Remove notification
      */
     removeNotification: (notificationId: string) => {
+      // Clear the auto-remove timeout if it exists
+      const timer = notificationTimers.get(notificationId);
+      if (timer) {
+        clearTimeout(timer);
+        notificationTimers.delete(notificationId);
+      }
+
       update((state) => ({
         ...state,
         notifications: state.notifications.filter((n) => n.id !== notificationId),
@@ -149,6 +169,10 @@ function createUIStore() {
      * Clear all notifications
      */
     clearNotifications: () => {
+      // Clear all notification timeouts
+      notificationTimers.forEach((timer) => clearTimeout(timer));
+      notificationTimers.clear();
+
       update((state) => ({
         ...state,
         notifications: [],
@@ -327,7 +351,7 @@ export const selectionCount = derived(
  * Modal store utilities
  */
 export const modals = {
-  open: (id: string, title: string, data?: any) => {
+  open: (id: string, title: string, data?: Record<string, unknown>) => {
     ui.openModal({ id, title, type: 'custom', data });
   },
   close: (id: string) => {

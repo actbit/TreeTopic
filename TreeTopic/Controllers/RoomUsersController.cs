@@ -22,6 +22,7 @@ namespace TreeTopic.Controllers;
 
 [ApiController]
 [Route("{tenant}/api/[controller]")]
+[Authorize]
 public class RoomUsersController : ControllerBase
 {
     private readonly IRoomUserRepository _roomUserRepository;
@@ -48,7 +49,18 @@ public class RoomUsersController : ControllerBase
     }
 
     private string? CurrentTenantId => _tenantAccessor.MultiTenantContext?.TenantInfo?.Id;
-    private Guid CurrentUserId => Guid.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? Guid.Empty.ToString());
+    private Guid CurrentUserId
+    {
+        get
+        {
+            var userIdValue = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (!Guid.TryParse(userIdValue, out var userId))
+            {
+                throw new UnauthorizedAccessException("User is not authenticated or has invalid user ID.");
+            }
+            return userId;
+        }
+    }
 
     [HttpGet("room/{roomId}")]
     [RequireAny(RoomPermissions.ManageUsers, TenantPermissions.RoomManage)]
@@ -89,6 +101,7 @@ public class RoomUsersController : ControllerBase
     }
 
     [HttpPost("room/{roomId}/join")]
+    [RequireRoomJoinAccess]
     public async Task<IActionResult> Join([FromRoute] MaskedGuid roomId, [FromBody] JoinRoomUserRequest request, CancellationToken cancellationToken)
     {
         if (!ModelState.IsValid)
@@ -238,16 +251,7 @@ public class RoomUsersController : ControllerBase
         var roomUser = await _roomUserRepository.GetByRoomAndUserAsync((Guid)roomId, CurrentUserId, cancellationToken);
         if (roomUser == null)
         {
-            roomUser = new RoomUser
-            {
-                ApplicationUserId = CurrentUserId,
-                RoomId = (Guid)roomId,
-                Name = RoomUserNameHelper.DefaultUserToken,
-                UseMainName = true,
-                UseMainIcon = false
-            };
-            await _roomUserRepository.AddAsync(roomUser, cancellationToken);
-            await _roomUserRepository.SaveChangesAsync(cancellationToken);
+            return Forbid();
         }
 
         var fileName = await _iconService.SaveRoomUserIconAsync(roomUser, file, cancellationToken);
@@ -419,7 +423,7 @@ public class RoomUsersController : ControllerBase
     [RequireAny(RoomPermissions.ManageUsers, TenantPermissions.RoomManage)]
     public async Task<IActionResult> SetUserRole(
         [FromRoute] MaskedGuid roomUserId,
-        [FromBody] SetUserRoleRequest request,
+        [FromBody] SetRoomUserRoleRequest request,
         CancellationToken cancellationToken)
     {
         var roomUserGuid = (Guid)roomUserId;
@@ -433,33 +437,29 @@ public class RoomUsersController : ControllerBase
             return NotFound(new { message = "RoomUser not found" });
         }
 
-        // RoomRoleの存在確認
-        if (!string.IsNullOrEmpty(request.RoleName))
+        // RoleIdがnullの場合は、全てのロールを削除
+        if (request.RoleId.HasValue)
         {
+            var roleId = (Guid)request.RoleId.Value;
             var role = await _dbContext.RoomRoles
-                .FirstOrDefaultAsync(r => r.Name == request.RoleName, cancellationToken);
+                .FirstOrDefaultAsync(r => r.Id == roleId, cancellationToken);
             if (role == null)
             {
-                return NotFound(new { message = $"RoomRole '{request.RoleName}' not found" });
+                return NotFound(new { message = $"RoomRole '{request.RoleId}' not found" });
             }
 
             // RoomUserManagerを使ってロールを設定（既存のロールを置き換え）
-            await _roomUserManager.SetRolesAsync(roomUser, new List<Guid> { role.Id }, cancellationToken);
+            await _roomUserManager.SetRolesAsync(roomUser, new List<Guid> { roleId }, cancellationToken);
         }
         else
         {
-            // roleNameが空の場合は、全てのロールを削除
+            // roleIdが空の場合は、全てのロールを削除
             await _roomUserManager.SetRolesAsync(roomUser, new List<Guid>(), cancellationToken);
         }
 
         return Ok(MapToDto(roomUser));
     }
 }
-
-/// <summary>
-/// RoomUserのロール設定リクエスト
-/// </summary>
-public record SetUserRoleRequest(string? RoleName);
 
 
 

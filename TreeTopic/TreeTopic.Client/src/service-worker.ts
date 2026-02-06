@@ -10,17 +10,40 @@ if (typeof self !== 'undefined') {
 
     const data = event.data.json();
 
-    // dataプロパティからテナント情報を取得
+    // dataプロパティからテナント情報とトピック情報を取得
     let tenantInfo = '';
     let tenantId = '';
+    let topicId = '';
+    let roomId = '';
     try {
       const parsedData = typeof data.data === 'string' ? JSON.parse(data.data) : data.data;
       if (parsedData?.tenant) {
         tenantId = parsedData.tenant;
         tenantInfo = `[${parsedData.tenant}] `;
       }
+      if (parsedData?.topicId) {
+        topicId = parsedData.topicId;
+      }
+      if (parsedData?.roomId) {
+        roomId = parsedData.roomId;
+      }
     } catch (e) {
       // パースエラーは無視
+    }
+
+    // クリック時に開くURLを生成（テナント、ルーム、トピック情報を含む）
+    let url = '/';
+    if (tenantId) {
+      if (topicId && roomId) {
+        // トピック情報がある場合はトピックページへ
+        url = `/${tenantId}/room/${roomId}/topic/${topicId}`;
+      } else if (roomId) {
+        // ルーム情報のみがある場合はルームページへ
+        url = `/${tenantId}/room/${roomId}`;
+      } else {
+        // テナント情報のみの場合はルーム一覧へ
+        url = `/${tenantId}/room`;
+      }
     }
 
     const options: NotificationOptions = {
@@ -31,8 +54,9 @@ if (typeof self !== 'undefined') {
       data: {
         ...data.data,
         tenant: tenantId,
-        // クリック時に開くURL（テナント情報を含む）
-        url: tenantId ? `/${tenantId}/room` : '/'
+        topicId,
+        roomId,
+        url
       },
       requireInteraction: false
     };

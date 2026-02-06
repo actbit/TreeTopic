@@ -8,44 +8,80 @@
   let activeTab = $state('roles');
   let isLoading = $state(false);
   let error = $state<string | null>(null);
+  let canManageRoles = $state(false);
+  let canManageUsers = $state(false);
 
   const tenant = $page.params.tenant ?? '';
   const roomId = $page.params.roomId ?? '';
 
   // メンバーデータ
-  let roomUsers = $state<any[]>([]);
-  let roomRoles = $state<any[]>([]);
+  let roomUsers = $state<Array<{ id: string; displayName?: string; userName?: string; roomRoleId?: string | null }>>([]);
+  let roomRoles = $state<Array<{ id: string; name: string; description?: string | null }>>([]);
 
-  const tabs = [
-    { id: 'roles', label: 'ロール' },
-    { id: 'members', label: 'メンバー' }
-  ];
+  let tabs = $derived.by(() => {
+    const t: Array<{ id: string; label: string }> = [];
+    if (canManageRoles) t.push({ id: 'roles', label: 'ロール' });
+    if (canManageUsers) t.push({ id: 'members', label: 'メンバー' });
+    return t;
+  });
 
   onMount(async () => {
+    await loadCapabilities();
+    if (!canManageRoles && !canManageUsers) {
+      error = 'この画面にアクセスする権限がありません';
+      return;
+    }
+
+    if (canManageRoles && !canManageUsers) {
+      activeTab = 'roles';
+    } else if (canManageUsers && !canManageRoles) {
+      activeTab = 'members';
+    }
     await loadMembersData();
   });
+
+  async function loadCapabilities() {
+    try {
+      const [roomPermRes, tenantPermRes] = await Promise.all([
+        api.get<{ permissions?: string[] }>(`/${tenant}/api/room/${roomId}/my/permissions`),
+        api.get<{ permissions?: string[] }>(`/${tenant}/auth/me/permissions`)
+      ]);
+      const roomPerms = new Set(roomPermRes?.permissions ?? []);
+      const tenantPerms = new Set(tenantPermRes?.permissions ?? []);
+      const isTenantRoomManage = tenantPerms.has('tenant.room.manage');
+
+      canManageRoles = isTenantRoomManage || roomPerms.has('room.manageRoles');
+      canManageUsers = isTenantRoomManage || roomPerms.has('room.manageUsers');
+    } catch {
+      canManageRoles = false;
+      canManageUsers = false;
+    }
+  }
 
   async function loadMembersData() {
     try {
       isLoading = true;
 
-      // ルームユーザー一覧を取得
-      const usersData = await api.get<any>(`/${tenant}/api/RoomUsers/room/${roomId}`);
-      roomUsers = usersData;
+      if (canManageUsers) {
+        const usersData = await api.get<Array<{ id: string; displayName?: string; userName?: string; roomRoleId?: string | null }>>(`/${tenant}/api/roomusers/room/${roomId}`);
+        roomUsers = usersData;
+      }
 
-      // ルームロール一覧を取得
-      const rolesData = await api.get<any[]>(`/${tenant}/api/roomroles`);
-      roomRoles = rolesData;
+      if (canManageRoles || canManageUsers) {
+        const rolesData = await api.get<Array<{ id: string; name: string; description?: string | null }>>(`/${tenant}/api/roomroles`);
+        roomRoles = rolesData;
+      }
 
       error = null;
-    } catch (err: any) {
-      error = err.message || 'データの読み込みに失敗しました';
+    } catch (err) {
+      error = err instanceof Error ? err.message : 'データの読み込みに失敗しました';
     } finally {
       isLoading = false;
     }
   }
 
   function openRoleModal() {
+    if (!canManageRoles) return;
     ui.openModal({
       id: 'room-role-permission',
       title: 'ロール権限管理',
@@ -55,6 +91,7 @@
   }
 
   function openUserPermissionModal() {
+    if (!canManageUsers) return;
     ui.openModal({
       id: 'room-user-permission',
       title: 'ルームユーザー権限管理',
@@ -64,25 +101,22 @@
   }
 
   async function updateUserRole(roomUserId: string, roleId: string | null) {
+    if (!canManageUsers) return;
     try {
       isLoading = true;
-      await api.put(`/${tenant}/api/RoomUsers/${roomUserId}/role`, { roomId });
+      await api.put(`/${tenant}/api/roomusers/${roomUserId}/role`, { roleId });
       await loadMembersData();
-    } catch (err: any) {
-      error = err.message || 'ロールの更新に失敗しました';
+    } catch (err) {
+      error = err instanceof Error ? err.message : 'ロールの更新に失敗しました';
     } finally {
       isLoading = false;
     }
   }
 
-  function getDisplayName(user: any): string {
+  function getDisplayName(user: { displayName?: string; userName?: string }): string {
     return user.displayName || user.userName || 'Unknown';
   }
 
-  function getRoleName(roleId: string): string {
-    const role = roomRoles.find((r) => r.id === roleId);
-    return role?.name || '未割り当て';
-  }
 </script>
 
 <svelte:head>
@@ -121,7 +155,11 @@
           </div>
         {/if}
 
-        {#if activeTab === 'roles'}
+        {#if !canManageRoles && !canManageUsers}
+          <div class="border border-border rounded-lg p-8 text-center text-text-light">
+            <p>この画面にアクセスする権限がありません。</p>
+          </div>
+        {:else if activeTab === 'roles' && canManageRoles}
           <div class="space-y-6">
             <div>
               <h2 class="text-2xl font-bold text-text mb-2">ロール管理</h2>
@@ -156,7 +194,7 @@
             </div>
           </div>
 
-        {:else if activeTab === 'members'}
+        {:else if activeTab === 'members' && canManageUsers}
           <div class="space-y-6">
             <div class="flex justify-between items-center">
               <div>

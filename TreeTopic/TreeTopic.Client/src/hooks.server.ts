@@ -18,8 +18,10 @@ export const handle: Handle = async ({ event, resolve }) => {
   const acceptHeader = event.request.headers.get('accept');
   if (acceptHeader?.includes('text/html')) {
     // 現在のシステムではCookieベースの認証を使用
-    // Cookieに認証情報があるかチェック
-    const hasAuthCookie = event.request.headers.get('cookie')?.includes('AuthSession=') || false;
+    // バックエンド既定値(TreeTopic.Cookie)と旧名(AuthSession)の両方に対応
+    const hasAuthCookie =
+      Boolean(event.cookies.get('TreeTopic.Cookie')) ||
+      Boolean(event.cookies.get('AuthSession'));
 
     if (!hasAuthCookie) {
       // 未認証の場合はリダイレクト

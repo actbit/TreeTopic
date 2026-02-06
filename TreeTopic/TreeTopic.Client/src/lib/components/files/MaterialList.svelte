@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { fileList, deleteFile as deleteFileApi } from '$lib/stores/files';
+  import { fileList, deleteFile as deleteFileApi, type Material } from '$lib/stores/files';
   import { currentRoom } from '$lib/stores/rooms';
   import { formatFileSize } from '$lib/utils/validation';
   import { formatDate } from '$lib/utils/date';
@@ -79,7 +79,7 @@
     });
   }
 
-  function openPdfViewer(file: any) {
+  function openPdfViewer(file: Material) {
     ui.openModal({
       id: 'pdf-viewer',
       title: file.fileName,
@@ -88,7 +88,16 @@
     });
   }
 
-  function openImageEditor(file: any) {
+  function openPdfEditor(file: Material) {
+    ui.openModal({
+      id: 'pdf-editor',
+      title: `Edit ${file.fileName}`,
+      type: 'custom',
+      data: { fileUrl: file.url, fileName: file.fileName, fileId: file.id },
+    });
+  }
+
+  function openImageEditor(file: Material) {
     ui.openModal({
       id: 'image-editor',
       title: `Edit ${file.fileName}`,
@@ -158,6 +167,14 @@
                     title="Open PDF"
                   >
                     Open PDF
+                  </button>
+                  <button
+                    type="button"
+                    onclick={() => openPdfEditor(file)}
+                    class="px-3 py-2 text-sm text-text-light hover:text-primary rounded hover:bg-white transition-colors font-medium"
+                    title="Edit PDF"
+                  >
+                    Edit PDF
                   </button>
                 {:else}
                   <a

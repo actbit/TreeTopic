@@ -63,15 +63,15 @@
 
           addFile(response);
           delete uploadProgress[file.name];
-        } catch (err: any) {
-          error = `Failed to upload ${file.name}: ${err.message}`;
+        } catch (err) {
+          error = `Failed to upload ${file.name}: ${err instanceof Error ? err.message : 'Unknown error'}`;
         }
       }
 
       selectedFiles = [];
       ui.closeModal(modalId);
-    } catch (err: any) {
-      error = err.message || 'Failed to upload files';
+    } catch (err) {
+      error = err instanceof Error ? err.message : 'Failed to upload files';
     } finally {
       isLoading = false;
     }

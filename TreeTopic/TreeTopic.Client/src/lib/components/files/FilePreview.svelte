@@ -86,13 +86,6 @@
           </p>
         </div>
       </div>
-
-      {#if file.description}
-        <div class="mt-4 pt-4 border-t border-border">
-          <p class="text-text-light text-sm">Description</p>
-          <p class="text-text">{file.description}</p>
-        </div>
-      {/if}
     </div>
   </Modal>
 {/if}

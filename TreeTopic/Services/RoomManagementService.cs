@@ -75,6 +75,8 @@ public class RoomManagementService : BaseService, IRoomManagementService
             var room = new Room
             {
                 Name = request.Name,
+                Description = request.Description,
+                JoinPolicy = request.JoinPolicy,
                 CreatedUserId = createdUserId
             };
 
@@ -102,6 +104,11 @@ public class RoomManagementService : BaseService, IRoomManagementService
             if (!string.IsNullOrEmpty(request.Name))
                 room.Name = request.Name;
 
+            room.Description = request.Description;
+            if (request.JoinPolicy.HasValue)
+            {
+                room.JoinPolicy = request.JoinPolicy.Value;
+            }
             room.UpdatedAt = DateTime.UtcNow;
             _roomRepository.Update(room);
             await _roomRepository.SaveChangesAsync(cancellationToken);
@@ -136,13 +143,12 @@ public class RoomManagementService : BaseService, IRoomManagementService
 
     private RoomRealtimeDto MapToRealtime(RoomDto dto)
     {
-        var id = (Guid)dto.Id;
-        var createdUserId = (Guid)dto.CreatedUserId;
-
         return new RoomRealtimeDto(
-            id == Guid.Empty ? string.Empty : _maskedUuidService.EncodeSynchronous(id),
+            dto.Id,
             dto.Name,
-            createdUserId == Guid.Empty ? null : _maskedUuidService.EncodeSynchronous(createdUserId),
+            dto.Description,
+            (int)dto.JoinPolicy,
+            dto.CreatedUserId,
             dto.CreatedUserName,
             dto.CreatedAt,
             dto.UpdatedAt);
@@ -167,8 +173,7 @@ public class RoomManagementService : BaseService, IRoomManagementService
     private Task BroadcastRoomDeletedAsync(Guid roomId)
     {
         var groupName = RoomTopicHubGroups.Tenant(ResolveTenantKey());
-        var payload = new RoomDeletedEvent(
-            roomId == Guid.Empty ? string.Empty : _maskedUuidService.EncodeSynchronous(roomId));
+        var payload = new RoomDeletedEvent(roomId);
         Logger.LogInformation("[RoomTopicHub] Broadcast RoomDeleted room={RoomId} group={Group}", roomId, groupName);
         return _roomTopicHub.Clients.Group(groupName).RoomDeleted(payload);
     }
@@ -179,6 +184,8 @@ public class RoomManagementService : BaseService, IRoomManagementService
         {
             Id = room.Id,
             Name = room.Name,
+            Description = room.Description,
+            JoinPolicy = room.JoinPolicy,
             CreatedUserId = room.CreatedUserId,
             CreatedUserName = room.CreatedUser?.UserName,
             CreatedAt = room.CreatedAt,

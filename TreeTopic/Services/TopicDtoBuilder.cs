@@ -96,7 +96,7 @@ public class TopicDtoBuilder
                 }
             }
         }
-        catch (Exception ex)
+        catch (Exception)
         {
         }
 
@@ -155,31 +155,6 @@ public class TopicDtoBuilder
             SourceMessageId = topic.SourceMessageId,
             Description = topic.Description,
             HasChildren = _hasChildrenSet?.Contains(topic.Id) ?? false,
-            UnreadCount = _unreadCountsMap?.GetValueOrDefault(topic.Id) ?? 0,
-            CreatedAt = topic.CreatedAt,
-            UpdatedAt = topic.UpdatedAt
-        }).ToList());
-    }
-
-    /// <summary>
-    /// 古いビルドメソッド（廃止予定）
-    /// </summary>
-    [Obsolete("Use BuildBasicAsync, BuildTreeAsync, or BuildDetailAsync instead")]
-    public Task<List<TopicDto>> BuildAsync(CancellationToken cancellationToken)
-    {
-        if (_topics.Count == 0)
-            return Task.FromResult(new List<TopicDto>());
-
-        return Task.FromResult(_topics.Select(topic => new TopicDto
-        {
-            Id = topic.Id,
-            RoomId = topic.RoomId,
-            ParentId = topic.ParentId.HasValue ? topic.ParentId : null,
-            SourceMessageId = topic.SourceMessageId.HasValue ? topic.SourceMessageId : null,
-            Title = topic.Title,
-            Description = topic.Description,
-            HasChildren = _hasChildrenSet?.Contains(topic.Id) ?? false,
-            ChildIds = new List<MaskedGuid>(),
             UnreadCount = _unreadCountsMap?.GetValueOrDefault(topic.Id) ?? 0,
             CreatedAt = topic.CreatedAt,
             UpdatedAt = topic.UpdatedAt

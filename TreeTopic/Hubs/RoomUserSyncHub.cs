@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 using TreeTopic.Dtos;
+using MaskedUUID.AspNetCore.Types;
+using TreeTopic.Services;
 
 namespace TreeTopic.Hubs;
 
@@ -10,8 +12,8 @@ public interface IRoomUserSyncHubClient
 }
 
 public record TopicUnreadUpdateEvent(
-    string RoomId,
-    string TopicId,
+    MaskedGuid RoomId,
+    MaskedGuid TopicId,
     int UnreadCount,
     DateTime? LastReadAt);
 
@@ -19,30 +21,73 @@ public record TopicUnreadUpdateEvent(
 public class RoomUserSyncHub : Hub<IRoomUserSyncHubClient>
 {
     private readonly ILogger<RoomUserSyncHub> _logger;
+    private readonly IRealtimeAccessService _realtimeAccessService;
 
-    public RoomUserSyncHub(ILogger<RoomUserSyncHub> logger)
+    public RoomUserSyncHub(
+        ILogger<RoomUserSyncHub> logger,
+        IRealtimeAccessService realtimeAccessService)
     {
         _logger = logger;
+        _realtimeAccessService = realtimeAccessService;
     }
 
     public async Task JoinRoomUserGroup(string roomId, string userId)
     {
-        if (string.IsNullOrWhiteSpace(roomId) || string.IsNullOrWhiteSpace(userId))
-            return;
+        try
+        {
+            if (string.IsNullOrWhiteSpace(roomId) || string.IsNullOrWhiteSpace(userId))
+                return;
 
-        var groupName = RoomUserSyncHubGroups.RoomUser(roomId, userId);
-        _logger.LogInformation("[RoomUserSyncHub] JoinRoomUserGroup connection={ConnectionId} room={Room} user={User} group={Group}", Context.ConnectionId, roomId, userId, groupName);
-        await Groups.AddToGroupAsync(Context.ConnectionId, groupName);
+            if (!await _realtimeAccessService.CanJoinRoomUserGroupAsync(roomId, userId, Context.User, Context.ConnectionAborted))
+            {
+                _logger.LogWarning("[RoomUserSyncHub] JoinRoomUserGroup denied connection={ConnectionId} room={Room} user={User}",
+                    Context.ConnectionId, roomId, userId);
+                return;
+            }
+
+            var groupName = RoomUserSyncHubGroups.RoomUser(roomId, userId);
+            _logger.LogInformation("[RoomUserSyncHub] JoinRoomUserGroup connection={ConnectionId} room={Room} user={User} group={Group}", Context.ConnectionId, roomId, userId, groupName);
+            await Groups.AddToGroupAsync(Context.ConnectionId, groupName);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[RoomUserSyncHub] Error in JoinRoomUserGroup: {Message}", ex.Message);
+        }
     }
 
-    public Task LeaveRoomUserGroup(string roomId, string userId)
+    public async Task LeaveRoomUserGroup(string roomId, string userId)
     {
-        if (string.IsNullOrWhiteSpace(roomId) || string.IsNullOrWhiteSpace(userId))
-            return Task.CompletedTask;
+        try
+        {
+            if (string.IsNullOrWhiteSpace(roomId) || string.IsNullOrWhiteSpace(userId))
+                return;
 
-        var groupName = RoomUserSyncHubGroups.RoomUser(roomId, userId);
-        _logger.LogInformation("[RoomUserSyncHub] LeaveRoomUserGroup connection={ConnectionId} room={Room} user={User} group={Group}", Context.ConnectionId, roomId, userId, groupName);
-        return Groups.RemoveFromGroupAsync(Context.ConnectionId, groupName);
+            var groupName = RoomUserSyncHubGroups.RoomUser(roomId, userId);
+            _logger.LogInformation("[RoomUserSyncHub] LeaveRoomUserGroup connection={ConnectionId} room={Room} user={User} group={Group}", Context.ConnectionId, roomId, userId, groupName);
+            await Groups.RemoveFromGroupAsync(Context.ConnectionId, groupName);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[RoomUserSyncHub] Error in LeaveRoomUserGroup: {Message}", ex.Message);
+        }
+    }
+
+    public override async Task OnDisconnectedAsync(Exception? exception)
+    {
+        try
+        {
+            _logger.LogInformation("[RoomUserSyncHub] Client disconnected: {ConnectionId}, Exception: {Exception}",
+                Context.ConnectionId, exception?.Message ?? "None");
+
+            // Note: Groups are automatically cleaned up by SignalR when a connection closes
+            // No manual cleanup needed unless using custom group management
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[RoomUserSyncHub] Error in OnDisconnectedAsync: {Message}", ex.Message);
+        }
+
+        await base.OnDisconnectedAsync(exception);
     }
 }
 

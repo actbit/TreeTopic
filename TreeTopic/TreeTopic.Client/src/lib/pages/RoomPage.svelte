@@ -19,7 +19,8 @@
   toggleTopicExpansion,
   moveTopicParent,
   } from '$lib/stores/topics';
-  import type { Topic } from '$lib/stores/topics';
+  import type { Topic, PermissionLevel, TopicPermission } from '$lib/stores/topics';
+  import type { RawTopic, RawRoom, RawMessage, RawMaterial, RawRoomUser } from '$lib/types/signalr';
   import { addMessage, deleteMessage, messageList, messages, setMessages, updateMessage, type Message } from '$lib/stores/messages';
   import { setFiles } from '$lib/stores/files';
   import { push } from '$lib/stores/push';
@@ -40,10 +41,28 @@
   import ShareList from '$lib/components/shares/ShareList.svelte';
   import FileUploadModal from '$lib/components/files/FileUploadModal.svelte';
   import PdfViewerModal from '$lib/components/documents/PdfViewerModal.svelte';
+  import PdfEditorModal from '$lib/components/documents/PdfEditorModal.svelte';
   import ImageEditorModal from '$lib/components/images/ImageEditorModal.svelte';
   import UserSettingModal from '$lib/components/user/UserSettingModal.svelte';
   import { ui } from '$lib/stores/ui';
   import { api, getApiBaseUrl, getCurrentTenant } from '$lib/api/client';
+  import type {
+    MessageCreatedEvent,
+    MessageUpdatedEvent,
+    MessageDeletedEvent,
+    RoomCreatedEvent,
+    RoomUpdatedEvent,
+    RoomDeletedEvent,
+    TopicCreatedEvent,
+    TopicUpdatedEvent,
+    TopicDeletedEvent,
+    TopicUnreadUpdatedEvent,
+    RoomUserJoinedEvent,
+    RoomUserLeftEvent,
+    RoomUserUpdatedEvent,
+    RoomUserRoleAddedEvent,
+    RoomUserRoleRemovedEvent,
+  } from '$lib/types/signalr';
 
   let isLoading = $state(true);
   let loadError = $state<string | null>(null);
@@ -64,7 +83,11 @@
   let messageHubTenant: string | null = null;
   let messageHubTopicId: string | null = null;
   let messageSyncTimer: ReturnType<typeof setTimeout> | null = null;
+  let markAsReadTimer: ReturnType<typeof setTimeout> | null = null;
   let messageHubConnected = $state(false);
+
+  // Mark as read deduplication - prevent concurrent calls for same topic
+  const pendingMarkAsRead = new Map<string, Promise<number | null>>();
   let roomTopicHub: HubConnection | null = null;
   let roomTopicHubTenant: string | null = null;
   let roomTopicHubRoomId: string | null = null;
@@ -109,7 +132,7 @@
       .withAutomaticReconnect()
       .build();
 
-    connection.on('MessageCreated', (raw: any) => {
+    connection.on('MessageCreated', (raw: MessageCreatedEvent) => {
       try {
         const normalized = normalizeMessage(raw);
         const exists = $messageList.some((m) => m.id === normalized.id);
@@ -153,13 +176,13 @@
       }
     });
 
-    connection.on('MessageUpdated', (raw: any) => {
+    connection.on('MessageUpdated', (raw: MessageUpdatedEvent) => {
       const normalized = normalizeMessage(raw);
       updateMessage(normalized.id, normalized);
       if (normalized.topicId) scheduleMessageSync(normalized.topicId);
     });
 
-    connection.on('MessageDeleted', (raw: any) => {
+    connection.on('MessageDeleted', (raw: MessageDeletedEvent) => {
       const messageId = raw?.messageId ?? raw?.MessageId ?? '';
       if (!messageId) return;
       deleteMessage(messageId);
@@ -200,7 +223,7 @@
       .withAutomaticReconnect()
       .build();
 
-    connection.on('RoomCreated', (raw: any) => {
+    connection.on('RoomCreated', (raw: RoomCreatedEvent) => {
       const normalized = normalizeRoom(raw);
       const exists = $roomList.some((r) => r.id === normalized.id);
       if (exists) {
@@ -210,74 +233,71 @@
       }
     });
 
-    connection.on('RoomUpdated', (raw: any) => {
+    connection.on('RoomUpdated', (raw: RoomUpdatedEvent) => {
       const normalized = normalizeRoom(raw);
       updateRoom(normalized.id, normalized);
     });
 
-    connection.on('RoomDeleted', (raw: any) => {
+    connection.on('RoomDeleted', (raw: RoomDeletedEvent) => {
       const roomId = raw?.roomId ?? raw?.RoomId ?? '';
       if (!roomId) return;
       deleteRoom(roomId);
     });
 
-    connection.on('TopicCreated', async (raw: any) => {
+    connection.on('TopicCreated', async (raw: TopicCreatedEvent) => {
       const normalized = normalizeTopic(raw);
       if (!$currentRoom || normalized.roomId !== $currentRoom.id) return;
+      const tenantForEvent = messageHubTenant ?? $page.params.tenant ?? getCurrentTenant();
 
-      const exists = $topicList.some((t) => t.id === normalized.id);
-      if (exists) {
-        // 既存の場合はトピックを更新
-        updateTopic(normalized.id, normalized);
-        return;
-      }
-
-      // 親トピックのID
-      const parentId = normalized.parentId ?? null;
-
-      // 親がtopicListにない場合は先に親を取得
-      if (parentId && !$topicList.some((t) => t.id === parentId)) {
+      if (tenantForEvent) {
         try {
-          const tenant = messageHubTenant ?? $page.params.tenant ?? getCurrentTenant();
-          if (tenant) {
-            const parentRaw = await api.get<any>(`/${tenant}/api/Topic/${parentId}`);
-            const parentNormalized = normalizeTopic(parentRaw);
-            // 親を追加
-            if (!$topicList.some((t) => t.id === parentNormalized.id)) {
-              addTopic(parentNormalized);
-            }
-          }
+          await ensureTopicPathLoaded(tenantForEvent, normalized.id);
         } catch (err) {
-          console.error('Failed to fetch parent topic:', err);
-          // 親の取得に失敗しても子は追加する
+          console.error('Failed to ensure topic path on TopicCreated:', err);
         }
       }
 
-      // 親トピックのhasChildrenを更新
-      if (parentId) {
-        updateTopic(parentId, { hasChildren: true });
+      const topicFromStore = $topicList.find((t) => t.id === normalized.id) ?? normalized;
+      const exists = $topicList.some((t) => t.id === topicFromStore.id);
+      if (exists) {
+        updateTopic(topicFromStore.id, topicFromStore);
+      } else {
+        addTopic(topicFromStore);
       }
 
-      addTopic(normalized);
-
-      // 親トピックを自動展開（作成したクライアントで子が表示されるように）
+      const parentId = topicFromStore.parentId ?? null;
       if (parentId) {
-        // 親がまだ展開されていない場合は展開
+        updateTopic(parentId, { hasChildren: true });
         if (!$expandedTopics.has(parentId)) {
           toggleTopicExpansion(parentId);
+        }
+        if (tenantForEvent) {
+          void refreshTopicHasChildren(parentId, tenantForEvent);
         }
       }
     });
 
-    connection.on('TopicUpdated', async (raw: any) => {
+    connection.on('TopicUpdated', async (raw: TopicUpdatedEvent) => {
       const normalized = normalizeTopic(raw);
+      const tenantForEvent = messageHubTenant ?? $page.params.tenant ?? getCurrentTenant();
       if (!$currentRoom || normalized.roomId !== $currentRoom.id) {
         const existing = $topicList.find((t) => t.id === normalized.id);
         if (existing) deleteTopic(normalized.id);
         return;
       }
 
-      const existing = $topicList.find((t) => t.id === normalized.id);
+      let existing = $topicList.find((t) => t.id === normalized.id);
+      if (!existing) {
+        if (tenantForEvent) {
+          try {
+            await ensureTopicPathLoaded(tenantForEvent, normalized.id);
+          } catch (err) {
+            console.error('Failed to ensure topic path on TopicUpdated:', err);
+          }
+        }
+        existing = $topicList.find((t) => t.id === normalized.id);
+      }
+
       if (!existing) {
         addTopic(normalized);
         return;
@@ -288,14 +308,14 @@
       if (previousParentId !== normalizedParentId) {
         moveTopicParent(normalized.id, normalizedParentId);
 
-        // 古い親のhasChildrenを更新
-        if (previousParentId) {
-          const hasOtherChildren = $topicList.some(t => t.parentId === previousParentId && t.id !== normalized.id);
-          updateTopic(previousParentId, { hasChildren: hasOtherChildren });
-        }
-
-        // 新しい親のhasChildrenを更新
-        if (normalizedParentId) {
+        if (tenantForEvent) {
+          if (previousParentId) {
+            void refreshTopicHasChildren(previousParentId, tenantForEvent);
+          }
+          if (normalizedParentId) {
+            void refreshTopicHasChildren(normalizedParentId, tenantForEvent);
+          }
+        } else if (normalizedParentId) {
           updateTopic(normalizedParentId, { hasChildren: true });
         }
       }
@@ -315,27 +335,29 @@
         unreadCount,
         userPermission: normalized.userPermission,
         permissions: normalized.permissions,
-        isArchived: normalized.isArchived,
-        tags: normalized.tags,
         hasChildren: normalized.hasChildren,
         createdAt: normalized.createdAt,
         updatedAt: normalized.updatedAt,
       });
     });
 
-    connection.on('TopicDeleted', async (raw: any) => {
+    connection.on('TopicDeleted', async (raw: TopicDeletedEvent) => {
       const topicId = raw?.topicId ?? raw?.TopicId ?? '';
       const roomId = raw?.roomId ?? raw?.RoomId ?? '';
       const parentId = raw?.parentId ?? raw?.ParentId ?? null;
+      const tenantForEvent = messageHubTenant ?? $page.params.tenant ?? getCurrentTenant();
       if (!topicId) return;
       if ($currentRoom && roomId && roomId !== $currentRoom.id) return;
 
       deleteTopic(topicId);
 
-      // 親トピックがあればhasChildrenを更新（子がまだいるかチェック）
       if (parentId) {
-        const hasOtherChildren = $topicList.some(t => t.parentId === parentId);
-        updateTopic(parentId, { hasChildren: hasOtherChildren });
+        if (tenantForEvent) {
+          void refreshTopicHasChildren(parentId, tenantForEvent);
+        } else {
+          const hasOtherChildren = $topicList.some((t) => t.parentId === parentId);
+          updateTopic(parentId, { hasChildren: hasOtherChildren });
+        }
       }
     });
 
@@ -380,7 +402,7 @@
       .withAutomaticReconnect()
       .build();
 
-    connection.on('TopicUnreadUpdated', async (raw: any) => {
+    connection.on('TopicUnreadUpdated', async (raw: TopicUnreadUpdatedEvent) => {
       // SignalRはPascalCaseでシリアライズされる
       const topicId = raw?.TopicId ?? raw?.topicId ?? '';
       const unreadCount = raw?.UnreadCount ?? raw?.unreadCount ?? 0;
@@ -504,7 +526,7 @@
     }
   }
 
-  function normalizeRoom(raw: any) {
+  function normalizeRoom(raw: RawRoom) {
     const id = raw?.id ?? raw?.Id ?? '';
     const name = raw?.name ?? raw?.Name ?? '';
     const createdAt = raw?.createdAt ?? raw?.CreatedAt ?? null;
@@ -514,6 +536,7 @@
       id,
       name,
       description: raw?.description ?? raw?.Description,
+      joinPolicy: raw?.joinPolicy ?? raw?.JoinPolicy ?? 0,
       avatar: raw?.avatar ?? raw?.Avatar,
       createdAt: createdAt ? new Date(createdAt) : new Date(),
       updatedAt: updatedAt ? new Date(updatedAt) : new Date(),
@@ -521,11 +544,13 @@
       memberCount: raw?.memberCount ?? raw?.MemberCount ?? 0,
       unreadCount: raw?.unreadCount ?? raw?.UnreadCount ?? 0,
       isArchived: raw?.isArchived ?? raw?.IsArchived ?? false,
+      canEdit: (raw?.canEdit ?? raw?.CanEdit ?? undefined) as boolean | undefined,
+      canDelete: (raw?.canDelete ?? raw?.CanDelete ?? undefined) as boolean | undefined,
       settings: raw?.settings ?? raw?.Settings,
     };
   }
 
-  function normalizeTopic(raw: any) {
+  function normalizeTopic(raw: RawTopic) {
     const id = raw?.id ?? raw?.Id ?? '';
     const createdAt = raw?.createdAt ?? raw?.CreatedAt ?? null;
     const updatedAt = raw?.updatedAt ?? raw?.UpdatedAt ?? null;
@@ -538,15 +563,13 @@
       parentId: raw?.parentId ?? raw?.ParentId ?? null,
       sourceMessageId: raw?.sourceMessageId ?? raw?.SourceMessageId ?? null,
       childIds: raw?.childIds ?? raw?.ChildIds ?? [],
-      createdAt: createdAt ? new Date(createdAt) : new Date(),
-      updatedAt: updatedAt ? new Date(updatedAt) : new Date(),
+      createdAt: createdAt ? new Date(createdAt as string) : new Date(),
+      updatedAt: updatedAt ? new Date(updatedAt as string) : new Date(),
       creatorId: raw?.creatorId ?? raw?.CreatorId ?? '',
       messageCount: raw?.messageCount ?? raw?.MessageCount ?? 0,
       unreadCount: raw?.unreadCount ?? raw?.UnreadCount ?? 0,
-      userPermission: raw?.userPermission ?? raw?.UserPermission ?? 'read',
+      userPermission: (raw?.userPermission ?? raw?.UserPermission ?? 'read') as PermissionLevel,
       permissions: raw?.permissions ?? raw?.Permissions ?? [],
-      isArchived: raw?.isArchived ?? raw?.IsArchived ?? false,
-      tags: raw?.tags ?? raw?.Tags ?? [],
       hasChildren: raw?.hasChildren ?? raw?.HasChildren ?? false,
     };
   }
@@ -555,7 +578,7 @@
    * Fetch a topic once with deduplication
    * Prevents duplicate fetches of the same topic
    */
-  async function fetchTopicOnce(tenant: string, topicId: string): Promise<any> {
+  async function fetchTopicOnce(tenant: string, topicId: string): Promise<Topic | null> {
     // Check if there's already a pending fetch for this topic
     if (pendingTopicFetches.has(topicId)) {
       return pendingTopicFetches.get(topicId);
@@ -567,36 +590,37 @@
     if (cached) return cached;
 
     // Create new fetch promise
-    const promise = api.get<any>(`/${tenant}/api/Topic/${topicId}`)
+    const promise = api.get<RawTopic>(`/${tenant}/api/topic/${topicId}`)
       .then(data => {
-        pendingTopicFetches.delete(topicId);
-        return data;
+        pendingTopicFetches.delete(cacheKey);
+        if (!data) return null;
+        return normalizeTopic(data);
       })
       .catch(err => {
-        pendingTopicFetches.delete(topicId);
+        pendingTopicFetches.delete(cacheKey);
         throw err;
       });
 
-    pendingTopicFetches.set(topicId, promise);
+    pendingTopicFetches.set(cacheKey, promise);
     return promise;
   }
 
   async function ensureTopicPathLoaded(tenant: string, topicId: string) {
-    const chain: any[] = [];
+    const chain: Topic[] = [];
     let cursorId: string | null = topicId;
     const visited = new Set<string>();
 
     // Fetch all topics in the path (in parallel for better performance)
-    const fetchPromises: Map<string, Promise<any>> = new Map();
+    const fetchPromises: Map<string, Promise<Topic | null>> = new Map();
 
     while (cursorId && !visited.has(cursorId)) {
       visited.add(cursorId);
       // Use fetchTopicOnce for deduplication
       fetchPromises.set(cursorId, fetchTopicOnce(tenant, cursorId));
-      const raw = await fetchPromises.get(cursorId);
-      const normalized = normalizeTopic(raw);
-      chain.push(normalized);
-      cursorId = normalized.parentId ?? null;
+      const topic = await fetchPromises.get(cursorId);
+      if (!topic) break;
+      chain.push(topic);
+      cursorId = topic.parentId ?? null;
     }
 
     chain.reverse(); // root -> leaf
@@ -635,7 +659,7 @@
     if (!$currentRoom) return;
 
     try {
-      const response = await api.get<any[]>(`/${tenant}/api/Topic/room/${$currentRoom.id}/all-with-unread`);
+      const response = await api.get<any[]>(`/${tenant}/api/topic/room/${$currentRoom.id}/all-with-unread`);
       const allTopics = Array.isArray(response) ? response.map(normalizeTopic) : [];
 
       console.log(`[loadDescendantsForExpandedTopics] Loaded ${allTopics.length} topics from all-with-unread API`);
@@ -716,7 +740,7 @@
   /// </summary>
   async function refreshTopicUnreadStatus(topicId: string, tenant: string) {
     try {
-      const updated = await api.get<any>(`/${tenant}/api/Topic/${topicId}`);
+      const updated = await api.get<RawTopic>(`/${tenant}/api/topic/${topicId}`);
       if (updated) {
         const normalized = normalizeTopic(updated);
         if (normalized.id) {
@@ -730,7 +754,20 @@
     }
   }
 
-  function normalizeMessage(raw: any) {
+  async function refreshTopicHasChildren(topicId: string, tenant: string) {
+    try {
+      const updated = await api.get<RawTopic>(`/${tenant}/api/topic/${topicId}`);
+      if (!updated) return;
+      const normalized = normalizeTopic(updated);
+      if (normalized.id) {
+        updateTopic(normalized.id, { hasChildren: normalized.hasChildren });
+      }
+    } catch (err) {
+      console.error('Failed to refresh topic hasChildren status:', err);
+    }
+  }
+
+  function normalizeMessage(raw: RawMessage): Message {
     const id = raw?.id ?? raw?.Id ?? '';
 
     // IDが空文字列の場合はエラーとして扱う（デバッグ用）
@@ -754,7 +791,7 @@
     const rawFiles = raw?.files ?? raw?.Files ?? [];
     const attachments =
       Array.isArray(rawFiles)
-        ? rawFiles.map((f: any) => {
+        ? rawFiles.map((f: RawMaterial) => {
             const fid = f?.id ?? f?.Id ?? '';
             const fileName = f?.fileName ?? f?.FileName ?? '';
             const mimeType = f?.fileType ?? f?.FileType ?? 'application/octet-stream';
@@ -803,10 +840,10 @@
       updatedAt: updatedAt ? new Date(updatedAt) : undefined,
       attachments,
       isOwner: false,
-      canEdit: true,
-      canDelete: true,
-      childTopicId: (raw?.childTopicId || raw?.ChildTopicId) || null,
-      childTopicTitle: (raw?.childTopicTitle || raw?.ChildTopicTitle) || null,
+      canEdit: false,
+      canDelete: false,
+      childTopicId: (raw?.childTopicId || raw?.ChildTopicId) || undefined,
+      childTopicTitle: (raw?.childTopicTitle || raw?.ChildTopicTitle) || undefined,
     };
   }
 
@@ -814,7 +851,10 @@
     const existing = $messageList.filter((m) => m.topicId === topicId);
     const map = new Map<string, typeof existing[number]>();
     existing.forEach((m) => map.set(m.id, m));
-    incoming.forEach((m) => map.set(m.id, { ...map.get(m.id), ...m }));
+    incoming.forEach((m) => {
+      const existingMsg = map.get(m.id);
+      map.set(m.id, existingMsg ? { ...existingMsg, ...m } : m);
+    });
 
     const merged = Array.from(map.values())
       .filter((m) => m.topicId === topicId)
@@ -866,33 +906,56 @@
     const tenant = $page.params.tenant ?? getCurrentTenant();
     if (!tenant) return null;
 
-    // 未読更新を実行（常に実行して状態を正しく保つ）
-    try {
-      console.log(`Marking topic ${topicId} as read (attempt ${retryCount + 1})`);
-      const response = await api.post<number>(`/${tenant}/api/Message/topic/${topicId}/markAsRead`);
-      const unreadCount = typeof response === 'number' ? response : 0;
-      console.log(`Mark topic ${topicId} as read, unread count: ${unreadCount}`);
-      return unreadCount;
-    } catch (err: unknown) {
-      const error = err as Error & { status?: number };
-      console.error('Failed to mark topic as read:', error);
-      console.error('Topic ID:', topicId);
-      console.error('User ID:', $auth?.user?.id);
-
-      // リトライロジック（最大3回）
-      if (retryCount < 3 && error.status && error.status >= 500) {
-        console.log(`Retrying markAsRead for topic ${topicId} (attempt ${retryCount + 1})`);
-        await new Promise(resolve => setTimeout(resolve, 1000 * (retryCount + 1)));
-        return await markTopicAsRead(topicId, retryCount + 1);
-      }
-
-      // ユーザーにエラーを通知
-      if (error.status && error.status >= 400 && error.status < 500) {
-        // クライアントエラーはユーザーに通知
-        alert('未読の更新に失敗しました。ページを再読み込みしてください。');
-      }
-      return null;
+    // Check if there's already a pending request for this topic
+    const existing = pendingMarkAsRead.get(topicId);
+    if (existing) {
+      console.log(`MarkAsRead already in progress for topic ${topicId}, waiting for existing request`);
+      return existing;
     }
+
+    // Create new request promise
+    let requestPromise: Promise<number | null> | undefined;
+    let cleanupPromise: Promise<number | null> | undefined;
+
+    cleanupPromise = (async () => {
+      try {
+        console.log(`Marking topic ${topicId} as read (attempt ${retryCount + 1})`);
+        const response = await api.post<number>(`/${tenant}/api/message/topic/${topicId}/markAsRead`);
+        const unreadCount = typeof response === 'number' ? response : 0;
+        console.log(`Mark topic ${topicId} as read, unread count: ${unreadCount}`);
+        return unreadCount;
+      } catch (err: unknown) {
+        const error = err as Error & { status?: number };
+        console.error('Failed to mark topic as read:', error);
+        console.error('Topic ID:', topicId);
+        console.error('User ID:', $auth?.user?.id);
+
+        // リトライロジック（最大3回）
+        if (retryCount < 3 && error.status && error.status >= 500) {
+          console.log(`Retrying markAsRead for topic ${topicId} (attempt ${retryCount + 1})`);
+          await new Promise(resolve => setTimeout(resolve, 1000 * (retryCount + 1)));
+          // Retry by calling the function again (will reuse same promise due to pending check)
+          return await markTopicAsRead(topicId, retryCount + 1);
+        }
+
+        // ユーザーにエラーを通知
+        if (error.status && error.status >= 400 && error.status < 500) {
+          // クライアントエラーはユーザーに通知
+          alert('未読の更新に失敗しました。ページを再読み込みしてください。');
+        }
+
+        return null;
+      } finally {
+        // Clean up pending map when done
+        if (pendingMarkAsRead.get(topicId) === cleanupPromise) {
+          pendingMarkAsRead.delete(topicId);
+        }
+      }
+    })();
+
+    requestPromise = cleanupPromise;
+    pendingMarkAsRead.set(topicId, requestPromise);
+    return requestPromise;
   }
 
   function getAnchorIdForTopic(topicId: string, backCount: number) {
@@ -941,6 +1004,10 @@
     if (messageSyncTimer) {
       clearTimeout(messageSyncTimer);
     }
+    if (markAsReadTimer) {
+      clearTimeout(markAsReadTimer);
+      markAsReadTimer = null;
+    }
 
     messageSyncTimer = setTimeout(async () => {
       const tenant = $page.params.tenant ?? getCurrentTenant();
@@ -951,16 +1018,17 @@
 
       try {
         const response = await api.get<any[]>(
-          `/${tenant}/api/Message/topic/${topicId}/after/${anchorId}`,
+          `/${tenant}/api/message/topic/${topicId}/after/${anchorId}`,
           { params: { take: 50 } }
         );
         const list = Array.isArray(response) ? response.map(normalizeMessage) : [];
         mergeMessagesForTopic(topicId, list);
 
         // 同期後に未読更新を実行（同期したメッセージが表示されたと判断）
-        setTimeout(async () => {
+        markAsReadTimer = setTimeout(async () => {
           console.log('Executing markTopicAsRead after message sync for topic:', topicId);
           await markTopicAsRead(topicId);
+          markAsReadTimer = null;
         }, 300);
       } catch (err) {
         console.error('Failed to sync messages:', err);
@@ -968,7 +1036,7 @@
     }, 300);
   }
 
-  function normalizeMaterial(raw: any) {
+  function normalizeMaterial(raw: RawMaterial) {
     const id = raw?.id ?? raw?.Id ?? '';
     const createdAt = raw?.uploadedAt ?? raw?.UploadedAt ?? raw?.createdAt ?? raw?.CreatedAt ?? null;
 
@@ -981,14 +1049,11 @@
       mimeType: raw?.mimeType ?? raw?.MimeType ?? 'application/octet-stream',
       size: raw?.size ?? raw?.Size ?? 0,
       url: raw?.url ?? raw?.Url ?? '',
-      fileType: raw?.fileType ?? raw?.FileType ?? 'other',
-      uploadedAt: createdAt ?? new Date().toISOString(),
+      fileType: (raw?.fileType ?? raw?.FileType ?? 'other') as 'image' | 'pdf' | 'document' | 'other',
+      uploadedAt: createdAt ? new Date(createdAt) : new Date(),
       uploadedBy: raw?.uploadedBy ?? raw?.UploadedBy ?? '',
       uploadedByName: raw?.uploadedByName ?? raw?.UploadedByName ?? raw?.uploadedBy ?? raw?.UploadedBy ?? 'Unknown',
-      versions: raw?.versions ?? raw?.Versions ?? [],
-      isArchived: raw?.isArchived ?? raw?.IsArchived ?? false,
-      tags: raw?.tags ?? raw?.Tags ?? undefined,
-      description: raw?.description ?? raw?.Description ?? undefined,
+      versions: [], // RawMaterial doesn't contain versionNumber required for FileVersion
     };
   }
 
@@ -1042,10 +1107,10 @@
             console.error('Failed to load room user:', err);
             return null;
           }),
-          api.get<any[]>(`/${tenant}/api/Topic/room/${initialRoom.id}/root-with-unread`).catch(err => {
+          api.get<any[]>(`/${tenant}/api/topic/room/${initialRoom.id}/root-with-unread`).catch(err => {
             console.error('Failed to load root topics with unread:', err);
             // フォールバックとして通常のAPIを使用
-            return api.get<any[]>(`/${tenant}/api/Topic/room/${initialRoom.id}/root`).catch(err => {
+            return api.get<any[]>(`/${tenant}/api/topic/room/${initialRoom.id}/root`).catch(err => {
               console.error('Failed to load root topics (fallback):', err);
               return [];
             });
@@ -1096,7 +1161,7 @@
           void markTopicAsRead(selected.id);
 
           const requestId = ++loadRequestId;
-          api.get<any[]>(`/${tenant}/api/Message/topic/${selected.id}`)
+          api.get<any[]>(`/${tenant}/api/message/topic/${selected.id}`)
             .then(async (response) => {
               if (requestId !== loadRequestId) return;
               const list = Array.isArray(response) ? response.map(normalizeMessage) : [];
@@ -1138,7 +1203,7 @@
         (error.status === 401 || error.status === 403)
       ) {
         isLoading = false;
-        auth.logout();
+        await auth.logout(resolvedTenant);
         redirectToTenantLogin(resolvedTenant);
         return;
       }
@@ -1166,7 +1231,7 @@
     checkedRoomUserId = roomId;
 
     try {
-      const roomUserData = await api.get<any>(`/${tenant}/api/RoomUsers/room/${roomId}/me`);
+      const roomUserData = await api.get<RawRoomUser>(`/${tenant}/api/roomusers/room/${roomId}/me`);
       if (roomUserData) {
         const roomUser = {
           id: roomUserData.id ?? roomUserData.Id ?? '',
@@ -1221,6 +1286,7 @@
     return () => {
       void stopMessageHub();
       void stopRoomTopicHub();
+      void stopRoomUserSyncHub();
     };
   });
 
@@ -1262,7 +1328,7 @@
       });
     } catch (error: unknown) {
       if (error instanceof api.ApiError && error.status === 404) {
-        auth.logout();
+        await auth.logout(tenant);
         redirectToTenantLogin(tenant);
         return;
       }
@@ -1296,7 +1362,7 @@
     messages.setLoading(true);
     messages.setError(null);
 
-    api.get<any[]>(`/${tenant}/api/Message/topic/${$selectedTopic.id}`)
+    api.get<any[]>(`/${tenant}/api/message/topic/${$selectedTopic.id}`)
       .then((response) => {
         if (requestId !== loadRequestId) return;
         const list = Array.isArray(response) ? response.map(normalizeMessage) : [];
@@ -1489,6 +1555,7 @@
   <TopicDeleteModal />
   <FileUploadModal />
   <PdfViewerModal />
+  <PdfEditorModal />
   <ImageEditorModal />
   <MessageEditModal />
   <MessageDeleteModal />

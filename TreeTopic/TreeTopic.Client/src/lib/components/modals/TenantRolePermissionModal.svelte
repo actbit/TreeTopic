@@ -8,7 +8,7 @@
   const modalId = 'tenant-role-permission';
   let modal = $derived.by(() => $activeModals.find((m) => m.id === modalId) ?? null);
   let isOpen = $derived.by(() => modal !== null);
-  let tenant = $derived.by(() => modal?.data?.tenant ?? $page.params.tenant ?? '');
+  let tenant = $derived.by(() => (modal?.data?.tenant ?? $page.params.tenant ?? '') as string);
 
   let roles = $state<Role[]>([]);
   let availablePermissions = $state<AvailablePermissions>({ tenant: [], topic: [], room: [] });
@@ -54,8 +54,8 @@
       availablePermissions = await permissionsApi.getAvailablePermissions(tenant);
 
       error = null;
-    } catch (err: any) {
-      error = err.message || 'Failed to load data';
+    } catch (err) {
+      error = err instanceof Error ? err.message : 'Failed to load data';
     } finally {
       isLoading = false;
     }
@@ -75,8 +75,8 @@
         await tenantRolePermissionsApi.addPermission(tenant, roleName, { permissionName });
         rolePermissions[roleName] = [...currentPerms, permissionName];
       }
-    } catch (err: any) {
-      error = err.message || 'Failed to update permissions';
+    } catch (err) {
+      error = err instanceof Error ? err.message : 'Failed to update permissions';
     }
   }
 
@@ -91,8 +91,8 @@
       newRoleName = '';
       showCreateRole = false;
       await loadData();
-    } catch (err: any) {
-      error = err.message || 'Failed to create role';
+    } catch (err) {
+      error = err instanceof Error ? err.message : 'Failed to create role';
     }
   }
 
@@ -102,8 +102,8 @@
     try {
       await api.delete(`/${tenant}/api/roles/${roleName}`);
       await loadData();
-    } catch (err: any) {
-      error = err.message || 'Failed to delete role';
+    } catch (err) {
+      error = err instanceof Error ? err.message : 'Failed to delete role';
     }
   }
 

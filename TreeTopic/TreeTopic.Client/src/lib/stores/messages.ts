@@ -86,7 +86,11 @@ function createMessagesStore() {
         messages.forEach((m) => messagesMap.set(m.id, m));
 
         const allMessages = Array.from(messagesMap.values());
-        const sorted = [...allMessages].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+        const sorted = [...allMessages].sort((a, b) => {
+          const aTime = a.createdAt?.getTime() ?? 0;
+          const bTime = b.createdAt?.getTime() ?? 0;
+          return aTime - bTime;
+        });
 
         return {
           ...state,
@@ -114,7 +118,10 @@ function createMessagesStore() {
 
         const messagesByTopic = new Map(state.messagesByTopic);
         const topicMessages = messagesByTopic.get(message.topicId) || [];
-        messagesByTopic.set(message.topicId, [...topicMessages, message.id]);
+        const existingTopicMessageIds = new Set(topicMessages);
+        if (!existingTopicMessageIds.has(message.id)) {
+          messagesByTopic.set(message.topicId, [...topicMessages, message.id]);
+        }
 
         const newMessages = [...state.messages, message];
         const sorted = [...newMessages].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
@@ -310,15 +317,24 @@ export const getThreadedMessages = (topicId: string) =>
   derived(getMessagesByTopic(topicId), ($messages) => {
     const parentMessages: Message[] = [];
     const childrenMap = new Map<string, Message[]>();
+    const validParentIds = new Set($messages.map(m => m.id));
 
     $messages.forEach((msg) => {
       if (!msg.replyToId) {
+        // No replyToId means it's a parent message
         parentMessages.push(msg);
       } else {
-        if (!childrenMap.has(msg.replyToId)) {
-          childrenMap.set(msg.replyToId, []);
+        // Check if replyToId points to an existing message
+        if (validParentIds.has(msg.replyToId)) {
+          if (!childrenMap.has(msg.replyToId)) {
+            childrenMap.set(msg.replyToId, []);
+          }
+          childrenMap.get(msg.replyToId)!.push(msg);
+        } else {
+          // Invalid replyToId - treat as parent message
+          console.warn(`Message ${msg.id} has invalid replyToId ${msg.replyToId}, treating as parent`);
+          parentMessages.push(msg);
         }
-        childrenMap.get(msg.replyToId)!.push(msg);
       }
     });
 

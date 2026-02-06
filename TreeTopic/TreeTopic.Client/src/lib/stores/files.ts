@@ -31,9 +31,6 @@ export interface Material {
   uploadedBy: string;
   uploadedByName: string;
   versions: FileVersion[];
-  isArchived: boolean;
-  tags?: string[];
-  description?: string;
 }
 
 /**
@@ -89,10 +86,19 @@ function createFilesStore() {
      * Add a new file
      */
     addFile: (file: Material) => {
-      update((state) => ({
-        ...state,
-        files: [file, ...state.files],
-      }));
+      update((state) => {
+        // Check if file already exists to prevent duplicates
+        const existingFile = state.files.find((f) => f.id === file.id);
+        if (existingFile) {
+          console.warn(`File with ID ${file.id} already exists, skipping duplicate`);
+          return state;
+        }
+
+        return {
+          ...state,
+          files: [file, ...state.files],
+        };
+      });
     },
     /**
      * Update file
@@ -124,17 +130,6 @@ function createFilesStore() {
           f.id === fileId
             ? { ...f, versions: [...f.versions, version], url: version.url }
             : f
-        ),
-      }));
-    },
-    /**
-     * Update file tags
-     */
-    updateFileTags: (fileId: string, tags: string[]) => {
-      update((state) => ({
-        ...state,
-        files: state.files.map((f) =>
-          f.id === fileId ? { ...f, tags } : f
         ),
       }));
     },
@@ -314,7 +309,7 @@ export async function updateFile(fileId: string, updates: Partial<Material>, ten
   try {
     // Call backend API to update file
     // Note: Backend UpdateFileRequest only supports FileName and FileType
-    await api.put(`/${tenant}/api/File/${fileId}`, {
+    await api.put(`/${tenant}/api/file/${fileId}`, {
       fileName: updates.fileName,
       fileType: updates.mimeType
     });

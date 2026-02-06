@@ -89,7 +89,7 @@
       brainstorm.setCurrentBoard(boardData);
       void ensureRoomUserForTopic(tenant, boardData.topicId);
     } catch (err: unknown) {
-      if (tenant && handleUnauthorizedError(err, tenant)) {
+      if (tenant && await handleUnauthorizedError(err, tenant)) {
         return;
       }
 
@@ -114,12 +114,12 @@
     window.location.href = `/${tenant}/auth/login?returnUrl=${encodeURIComponent(returnUrl)}`;
   }
 
-  function handleUnauthorizedError(error: unknown, tenant: string): boolean {
+  async function handleUnauthorizedError(error: unknown, tenant: string): Promise<boolean> {
     if (
       error instanceof api.ApiError &&
       (error.status === 401 || error.status === 403)
     ) {
-      auth.logout();
+      await auth.logout(tenant);
       redirectToTenantLogin(tenant);
       return true;
     }
@@ -136,12 +136,12 @@
         data: { roomId },
       });
     } catch (error: unknown) {
-      if (handleUnauthorizedError(error, tenant)) {
+      if (await handleUnauthorizedError(error, tenant)) {
         return;
       }
 
       if (error instanceof api.ApiError && error.status === 404) {
-        auth.logout();
+        await auth.logout(tenant);
         redirectToTenantLogin(tenant);
         return;
       }
@@ -155,11 +155,11 @@
     let roomId = '';
 
     try {
-      const topic = await api.get<any>(`/${tenant}/api/Topic/${topicId}`);
+      const topic = await api.get<any>(`/${tenant}/api/topic/${topicId}`);
       roomId = topic?.roomId ?? topic?.RoomId ?? '';
       if (!roomId) return;
     } catch (error: unknown) {
-      if (handleUnauthorizedError(error, tenant)) {
+      if (await handleUnauthorizedError(error, tenant)) {
         return;
       }
 
@@ -168,7 +168,7 @@
     }
 
     try {
-      const roomUserData = await api.get<any>(`/${tenant}/api/RoomUsers/room/${roomId}/me`);
+      const roomUserData = await api.get<any>(`/${tenant}/api/roomusers/room/${roomId}/me`);
       if (roomUserData) {
         rooms.setCurrentRoomUser({
           id: roomUserData.id ?? roomUserData.Id ?? '',
@@ -178,7 +178,7 @@
         });
       }
     } catch (error: unknown) {
-      if (handleUnauthorizedError(error, tenant)) {
+      if (await handleUnauthorizedError(error, tenant)) {
         return;
       }
 

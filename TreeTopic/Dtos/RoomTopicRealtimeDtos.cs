@@ -1,25 +1,30 @@
+using MaskedUUID.AspNetCore.Types;
+
 namespace TreeTopic.Dtos;
 
 public record RoomRealtimeDto(
-    string Id,
+    MaskedGuid Id,
     string Name,
-    string? CreatedUserId,
+    string? Description,
+    int JoinPolicy,
+    MaskedGuid? CreatedUserId,
     string? CreatedUserName,
     DateTime CreatedAt,
     DateTime? UpdatedAt);
 
-public record RoomDeletedEvent(string RoomId);
+public record RoomDeletedEvent(MaskedGuid RoomId);
 
 public record TopicRealtimeDto(
-    string Id,
-    string RoomId,
-    string? ParentId,
+    MaskedGuid Id,
+    MaskedGuid RoomId,
+    MaskedGuid? ParentId,
     string Title,
     string? Description,
     bool HasChildren,
-    string? SourceMessageId,
+    MaskedGuid? SourceMessageId,
     int UnreadCount,
+    int MessageCount,
     DateTime CreatedAt,
     DateTime? UpdatedAt);
 
-public record TopicDeletedEvent(string TopicId, string RoomId, string? ParentId);
+public record TopicDeletedEvent(MaskedGuid TopicId, MaskedGuid RoomId, MaskedGuid? ParentId);

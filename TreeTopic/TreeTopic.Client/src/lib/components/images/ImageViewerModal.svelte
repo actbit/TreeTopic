@@ -6,8 +6,8 @@
   const modalId = 'image-viewer';
   let modal = $derived.by(() => $activeModals.find((m) => m.id === modalId) ?? null);
   let isOpen = $derived.by(() => modal !== null);
-  let fileUrl = $derived.by(() => modal?.data?.fileUrl ?? null);
-  let fileName = $derived.by(() => modal?.data?.fileName ?? 'Image');
+  let fileUrl = $derived.by(() => (modal?.data?.fileUrl ?? null) as string | null);
+  let fileName = $derived.by(() => (modal?.data?.fileName ?? 'Image') as string);
 
   let scale = $state(1.0);
   let isLoading = $state(false);

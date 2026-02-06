@@ -1,5 +1,6 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
+  import type { Snippet } from 'svelte';
 
   type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'success' | 'danger';
   type ButtonSize = 'small' | 'base' | 'large';
@@ -13,7 +14,7 @@
     icon?: string;
     type?: 'button' | 'submit' | 'reset';
     onclick?: (e: MouseEvent) => void;
-    children?: any;
+    children?: Snippet;
     ariaLabel?: string;
     title?: string;
   }

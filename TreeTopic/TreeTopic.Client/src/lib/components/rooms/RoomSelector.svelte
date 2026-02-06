@@ -114,7 +114,7 @@
                 </div>
               </div>
 
-              {#if room.canEdit}
+              {#if room.canEdit !== false}
                 <a
                   href="/{$page.params.tenant}/room/{room.id}/settings"
                   onclick={(e) => e.stopPropagation()}
@@ -127,7 +127,7 @@
             </div>
           {/each}
 
-          {#if $currentRoom}
+          {#if $currentRoom && $currentRoom.canEdit !== false}
             <div class="border-t border-border mt-2 pt-2">
               <a
                 href="/{$page.params.tenant}/room/{$currentRoom.id}/settings"

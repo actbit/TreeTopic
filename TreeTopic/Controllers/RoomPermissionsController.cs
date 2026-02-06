@@ -72,7 +72,7 @@ public class RoomPermissionsController : BaseController
         if (result.IsSuccess)
         {
             var permission = result.Data;
-            return Ok(new { permissionId = permission.Id, name = permission.PermissionName });
+            return Ok(new { permissionId = new MaskedGuid(permission.Id), name = permission.PermissionName });
         }
         return result.Error?.Message.Contains("already") == true
             ? Ok(new { message = "Permission already assigned" })

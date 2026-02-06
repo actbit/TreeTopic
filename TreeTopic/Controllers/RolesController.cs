@@ -22,17 +22,9 @@ public class RolesController : ControllerBase
 
     [HttpGet]
     [Authorize]
+    [RequireAny(TenantPermissions.RoleRead, TenantPermissions.UserManagement)]
     public async Task<ActionResult<List<RoleDto>>> List()
     {
-        // Allow access with either RoleRead OR UserManagement permission
-        var hasPermission = User.HasClaim(c =>
-            c.Type == "permission" && (
-                c.Value == TenantPermissions.RoleRead ||
-                c.Value == TenantPermissions.UserManagement));
-
-        if (!hasPermission)
-            return Forbid();
-
         var roles = await _roleManager.Roles
             .Include(r => r.Authorities)
             .ToListAsync();

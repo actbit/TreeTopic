@@ -5,7 +5,7 @@
 export interface DragPayload {
   type: 'message' | 'topic' | 'idea' | 'file';
   id: string;
-  data?: any;
+  data?: Record<string, unknown>;
 }
 
 // Some browsers restrict reading custom drag data during dragover.
@@ -124,7 +124,8 @@ export function setDragData(
   event: DragEvent,
   dragPayload: DragPayload
 ): void {
-  const dataTransfer = (event as any).dataTransfer;
+  // TypeScript's DOM types don't include dataTransfer on all DragEvent variants
+  const dataTransfer = event.dataTransfer;
   if (dataTransfer) {
     dataTransfer.effectAllowed = 'move';
     dataTransfer.setData('application/json', JSON.stringify(dragPayload));
@@ -138,7 +139,8 @@ export function setDragData(
  * Get drag data
  */
 export function getDragData(event: DragEvent): DragPayload | null {
-  const dataTransfer = (event as any).dataTransfer;
+  // TypeScript's DOM types don't include dataTransfer on all DragEvent variants
+  const dataTransfer = event.dataTransfer;
   if (dataTransfer) {
     const data = dataTransfer.getData('application/json');
     if (data) {

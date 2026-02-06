@@ -103,7 +103,7 @@ public class RoomUserPermissionsController : ControllerBase
 
         _logger.LogInformation("Permission {Permission} added to RoomUser {RoomUserId}", request.PermissionName, roomUserGuid);
 
-        return Ok(new { permissionId = permission.Id, name = permission.Name });
+        return Ok(new { permissionId = new MaskedGuid(permission.Id), name = permission.Name });
     }
 
     /// <summary>

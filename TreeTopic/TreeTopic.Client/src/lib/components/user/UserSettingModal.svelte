@@ -140,7 +140,7 @@
       const tenant = api.getCurrentTenant();
 
       // RoomUser 情報を取得（直接データを取得）
-      const roomUserData = await api.get(`/${tenant}/api/RoomUsers/room/${roomId}/me`) as typeof roomUser;
+      const roomUserData = await api.get(`/${tenant}/api/roomusers/room/${roomId}/me`) as typeof roomUser;
       roomUser = roomUserData;
       // ユーザー名を同期
       applicationUser.displayName = roomUser.displayName;
@@ -150,7 +150,7 @@
       }
 
       // ApplicationUser 情報を取得（直接データを取得）
-      const userData = await api.get(`/${tenant}/api/Users/me`) as typeof applicationUser;
+      const userData = await api.get(`/${tenant}/api/users/me`) as typeof applicationUser;
       applicationUser = userData;
       // 元の設定がまだ保存されていない場合のみ保存
       if (!originalApplicationUser) {
@@ -175,7 +175,7 @@
       // テナントを取得
       const tenant = api.getCurrentTenant();
 
-      const updatedRoomUser = await api.put(`/${tenant}/api/RoomUsers/room/${roomId}/me`, roomUser) as typeof roomUser;
+      const updatedRoomUser = await api.put(`/${tenant}/api/roomusers/room/${roomId}/me`, roomUser) as typeof roomUser;
 
       success = 'Room user settings saved';
       // 元の設定を更新
@@ -199,10 +199,16 @@
       // テナントを取得
       const tenant = api.getCurrentTenant();
 
-      const updatedUser = await api.put(`/${tenant}/api/Users/me`, applicationUser) as typeof applicationUser;
+      const updatedUser = await api.put(`/${tenant}/api/users/me`, applicationUser) as typeof applicationUser;
 
       success = 'User settings saved';
-      // TODO: 認証ストアを更新
+      // 認証ストアを更新
+      if (updatedUser) {
+        auth.updateUser({
+          displayName: updatedUser.displayName ?? updatedUser.displayName,
+          iconUrl: updatedUser.iconUrl ?? updatedUser.iconUrl
+        });
+      }
       // 元の設定を更新
       originalApplicationUser = JSON.parse(JSON.stringify(updatedUser));
     } catch (err) {
@@ -226,7 +232,7 @@
       const formData = new FormData();
       formData.append('icon', iconFile);
 
-      const response = await api.post(`/${tenant}/api/RoomUsers/room/${roomId}/me/icon`, formData) as { iconUrl: string; iconFileName?: string };
+      const response = await api.post(`/${tenant}/api/roomusers/room/${roomId}/me/icon`, formData) as { iconUrl: string; iconFileName?: string };
 
       // RoomUser のアイコンを更新
       roomUser.iconUrl = response.iconUrl;
@@ -258,7 +264,7 @@
       const formData = new FormData();
       formData.append('icon', applicationIconFile);
 
-      const response = await api.post(`/${tenant}/api/Users/me/icon`, formData) as { iconUrl: string; iconFileName?: string };
+      const response = await api.post(`/${tenant}/api/users/me/icon`, formData) as { iconUrl: string; iconFileName?: string };
 
       // ApplicationUser のアイコンを更新
       if (response.iconUrl) {

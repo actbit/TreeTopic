@@ -25,7 +25,7 @@ export class ApiError extends Error {
     public status: number,
     public statusText: string,
     message: string,
-    public data?: any
+    public data?: unknown
   ) {
     super(message);
     this.name = 'ApiError';
@@ -110,7 +110,7 @@ function redirectToTenantOidc(tenant: string): void {
  */
 async function handleResponse<T>(response: Response): Promise<T> {
   const contentType = response.headers.get('content-type');
-  let data: any;
+  let data: unknown;
 
   if (contentType?.includes('application/json')) {
     data = await response.json();
@@ -122,7 +122,9 @@ async function handleResponse<T>(response: Response): Promise<T> {
     const error = new ApiError(
       response.status,
       response.statusText,
-      data?.error?.message || data?.message || 'An error occurred',
+      (data as { error?: { message?: string }; message?: string })?.error?.message
+        || (data as { message?: string })?.message
+        || 'An error occurred',
       data
     );
 
@@ -136,8 +138,9 @@ async function handleResponse<T>(response: Response): Promise<T> {
     }
 
     const currentPath = typeof window !== 'undefined' ? window.location.pathname : '';
+    const tenantFromConfig = apiClientConfig.tenant || '';
     const tenant =
-      apiClientConfig.tenant ||
+      tenantFromConfig ||
       (typeof window !== 'undefined' ? inferTenantFromPathname(currentPath) : '');
 
     const isAuthMeRequest = requestPath.toLowerCase().endsWith('/auth/me');
@@ -244,7 +247,7 @@ export async function get<T>(
  */
 export async function post<T>(
   path: string,
-  data?: any,
+  data?: FormData | object,
   options?: {
     headers?: Record<string, string>;
   }
@@ -282,7 +285,7 @@ export async function post<T>(
  */
 export async function put<T>(
   path: string,
-  data?: any,
+  data?: object,
   options?: {
     headers?: Record<string, string>;
   }
@@ -313,7 +316,7 @@ export async function put<T>(
  */
 export async function patch<T>(
   path: string,
-  data?: any,
+  data?: object,
   options?: {
     headers?: Record<string, string>;
   }
@@ -586,6 +589,9 @@ export async function assignUserRoleWithSetupToken(
   roleName: string,
   setupToken: string
 ) {
+  if (!userId || userId === 'undefined' || userId === 'null') {
+    throw new Error('Invalid userId for setup role assignment');
+  }
   return api.post(
     `/${tenant}/api/setup/users/${userId}/roles`,
     { roleName },
@@ -599,6 +605,9 @@ export async function removeUserRoleWithSetupToken(
   roleName: string,
   setupToken: string
 ) {
+  if (!userId || userId === 'undefined' || userId === 'null') {
+    throw new Error('Invalid userId for setup role removal');
+  }
   const url = apiClientConfig.baseUrl ? `${apiClientConfig.baseUrl}/${tenant}/api/setup/users/${userId}/roles` : `/${tenant}/api/setup/users/${userId}/roles`;
 
   const response = await fetch(url, {
@@ -626,7 +635,7 @@ export async function getCurrentUser(tenant: string) {
 }
 
 export async function checkUserPermissions(tenant: string) {
-  return api.get(`/${tenant}/api/auth/me/permissions`);
+  return api.get(`/${tenant}/auth/me/permissions`);
 }
 
 // User management functions
