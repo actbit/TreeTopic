@@ -51,6 +51,11 @@ public class CreateTopicRequest : BaseCreateRequest
     public string? Description { get; set; }
 
     public MaskedGuid? SourceMessageId { get; set; }
+
+    /// <summary>
+    /// 親トピックの権限を継承するかどうか（デフォルト: true）
+    /// </summary>
+    public bool InheritPermissions { get; set; } = true;
 }
 
 public class UpdateTopicRequest : BaseUpdateRequest

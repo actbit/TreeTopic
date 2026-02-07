@@ -2,6 +2,7 @@ using TreeTopic.Dtos;
 using TreeTopic.Models;
 using TreeTopic.Repositories;
 using TreeTopic.Common;
+using TreeTopic.Permissions;
 using Finbuckle.MultiTenant.Abstractions;
 using Microsoft.AspNetCore.SignalR;
 using MaskedUUID.AspNetCore.Services;
@@ -29,6 +30,8 @@ public class RoomManagementService : BaseService, IRoomManagementService
     private readonly IMultiTenantContextAccessor<ApplicationTenantInfo> _tenantAccessor;
     private readonly IHubContext<RoomTopicHub, IRoomTopicHubClient> _roomTopicHub;
     private readonly IMaskedUUIDService _maskedUuidService;
+    private readonly IRoomUserRepository _roomUserRepository;
+    private readonly RoomUserManager _roomUserManager;
 
     public RoomManagementService(
         IRoomRepository roomRepository,
@@ -36,6 +39,8 @@ public class RoomManagementService : BaseService, IRoomManagementService
         IMultiTenantContextAccessor<ApplicationTenantInfo> tenantAccessor,
         IHubContext<RoomTopicHub, IRoomTopicHubClient> roomTopicHub,
         IMaskedUUIDService maskedUuidService,
+        IRoomUserRepository roomUserRepository,
+        RoomUserManager roomUserManager,
         ILogger<RoomManagementService> logger) : base(logger)
     {
         _roomRepository = roomRepository;
@@ -43,6 +48,8 @@ public class RoomManagementService : BaseService, IRoomManagementService
         _tenantAccessor = tenantAccessor;
         _roomTopicHub = roomTopicHub;
         _maskedUuidService = maskedUuidService;
+        _roomUserRepository = roomUserRepository;
+        _roomUserManager = roomUserManager;
     }
 
     public async Task<Result<List<RoomDto>>> GetAllRoomsAsync(
@@ -156,6 +163,43 @@ public class RoomManagementService : BaseService, IRoomManagementService
 
             await _roomRepository.AddAsync(room, cancellationToken);
             await _roomRepository.SaveChangesAsync(cancellationToken);
+
+            // Room作成者のRoomUserを作成して管理者権限を付与
+            var roomUser = new RoomUser
+            {
+                Id = Guid.CreateVersion7(),
+                ApplicationUserId = createdUserId,
+                RoomId = room.Id,
+                Name = RoomUserNameHelper.DefaultUserToken,
+                UseMainName = true,
+                UseMainIcon = true
+            };
+
+            await _roomUserRepository.AddAsync(roomUser, cancellationToken);
+            await _roomUserRepository.SaveChangesAsync(cancellationToken);
+
+            // 管理者権限を付与
+            var adminPermissions = new[]
+            {
+                RoomPermissions.Manage,
+                RoomPermissions.ManageUsers,
+                RoomPermissions.ManageRoles,
+                RoomPermissions.Delete,
+                RoomPermissions.TopicManage,
+                RoomPermissions.TopicWrite,
+                RoomPermissions.TopicRead,
+                RoomPermissions.Write,
+                RoomPermissions.Join
+            };
+
+            foreach (var permissionName in adminPermissions)
+            {
+                await _roomUserManager.AddPermissionAsync(roomUser, permissionName, cancellationToken);
+            }
+
+            Logger.LogInformation(
+                "Admin permissions granted to RoomUser {RoomUserId} for room {RoomId}",
+                roomUser.Id, room.Id);
 
             var dto = MapToDto(room);
             await BroadcastRoomCreatedAsync(dto);

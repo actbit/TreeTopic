@@ -25,7 +25,7 @@ public interface ITopicManagementService
 
     // 詳細情報
     Task<Result<TopicDetailDto>> GetTopicByIdAsync(Guid topicId, Guid? userId = null, CancellationToken cancellationToken = default);
-    Task<Result<TopicDetailDto>> CreateTopicAsync(CreateTopicRequest request, CancellationToken cancellationToken = default);
+    Task<Result<TopicDetailDto>> CreateTopicAsync(CreateTopicRequest request, Guid? userId = null, CancellationToken cancellationToken = default);
     Task<Result<TopicDetailDto>> UpdateTopicAsync(Guid topicId, UpdateTopicRequest request, CancellationToken cancellationToken = default);
 
     // 削除（戻り値なし）
@@ -44,6 +44,7 @@ public class TopicManagementService : BaseService, ITopicManagementService
     private readonly IMaskedUUIDService _maskedUuidService;
     private readonly ApplicationDbContext _dbContext;
     private readonly ILogger<TopicDtoBuilder> _topicDtoBuilderLogger;
+    private readonly ILogger<TopicPermissionManager> _permissionManagerLogger;
 
     public TopicManagementService(
         ITopicRepository topicRepository,
@@ -52,6 +53,7 @@ public class TopicManagementService : BaseService, ITopicManagementService
         IMaskedUUIDService maskedUuidService,
         ApplicationDbContext dbContext,
         ILogger<TopicDtoBuilder> topicDtoBuilderLogger,
+        ILogger<TopicPermissionManager> permissionManagerLogger,
         ILogger<TopicManagementService> logger) : base(logger)
     {
         _topicRepository = topicRepository;
@@ -60,6 +62,7 @@ public class TopicManagementService : BaseService, ITopicManagementService
         _maskedUuidService = maskedUuidService;
         _dbContext = dbContext;
         _topicDtoBuilderLogger = topicDtoBuilderLogger;
+        _permissionManagerLogger = permissionManagerLogger;
     }
 
     public async Task<Result<List<TopicBasicDto>>> GetAllTopicsAsync(Guid? userId = null, CancellationToken cancellationToken = default)
@@ -148,6 +151,7 @@ public class TopicManagementService : BaseService, ITopicManagementService
 
     public async Task<Result<TopicDetailDto>> CreateTopicAsync(
         CreateTopicRequest request,
+        Guid? userId = null,
         CancellationToken cancellationToken = default)
     {
         return await ExecuteAsync(async () =>
@@ -181,6 +185,26 @@ public class TopicManagementService : BaseService, ITopicManagementService
 
             await _topicRepository.AddAsync(topic, cancellationToken);
             await _topicRepository.SaveChangesAsync(cancellationToken);
+
+            // 親トピックの権限をコピー（オプション）
+            if (parentId.HasValue && request.InheritPermissions)
+            {
+                var permissionManager = new TopicPermissionManager(_dbContext, _permissionManagerLogger);
+                await permissionManager.CopyPermissionsAsync(parentId.Value, topic.Id, cancellationToken);
+            }
+
+            // 作成者に管理者権限を付与
+            if (userId.HasValue)
+            {
+                var roomUser = await _dbContext.RoomUsers
+                    .FirstOrDefaultAsync(ru => ru.RoomId == topic.RoomId && ru.ApplicationUserId == userId.Value, cancellationToken);
+
+                if (roomUser != null)
+                {
+                    var permissionManager = new TopicPermissionManager(_dbContext, _permissionManagerLogger);
+                    await permissionManager.GrantCreatorPermissionsAsync(topic.Id, roomUser.Id, cancellationToken);
+                }
+            }
 
             var dto = await MapToTopicDetailDtoAsync(topic, null, cancellationToken);
             await BroadcastTopicCreatedAsync(topic.Id, dto, cancellationToken);

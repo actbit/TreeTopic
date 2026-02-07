@@ -56,6 +56,7 @@ public class MessageManagementService : BaseService, IMessageManagementService
     private readonly IRegexSearchPatternConverter _regexSearchPatternConverter;
     private readonly ApplicationDbContext _dbContext;
     private readonly IServiceScopeFactory _serviceScopeFactory;
+    private readonly TopicPermissionManager _topicPermissionManager;
 
     public MessageManagementService(
         IMessageRepository messageRepository,
@@ -74,6 +75,7 @@ public class MessageManagementService : BaseService, IMessageManagementService
         IRegexSearchPatternConverter regexSearchPatternConverter,
         ApplicationDbContext dbContext,
         IServiceScopeFactory serviceScopeFactory,
+        TopicPermissionManager topicPermissionManager,
         ILogger<MessageManagementService> logger) : base(logger)
     {
         _messageRepository = messageRepository;
@@ -92,6 +94,7 @@ public class MessageManagementService : BaseService, IMessageManagementService
         _regexSearchPatternConverter = regexSearchPatternConverter;
         _dbContext = dbContext;
         _serviceScopeFactory = serviceScopeFactory;
+        _topicPermissionManager = topicPermissionManager;
     }
 
     private string? CurrentTenantId => _tenantAccessor.MultiTenantContext?.TenantInfo?.Id;
@@ -856,6 +859,15 @@ public class MessageManagementService : BaseService, IMessageManagementService
 
                 await _topicRepository.AddAsync(childTopic, cancellationToken);
                 await _topicRepository.SaveChangesAsync(cancellationToken);
+
+                // 親トピックの権限をコピー（オプション）
+                if (childRequest.InheritPermissions)
+                {
+                    await _topicPermissionManager.CopyPermissionsAsync(parentId, childTopic.Id, cancellationToken);
+                }
+
+                // 作成者に管理者権限を付与
+                await _topicPermissionManager.GrantCreatorPermissionsAsync(childTopic.Id, roomUser.Id, cancellationToken);
 
                 // メッセージから既存のChildTopicsを取得して、親を新しく作られたTopicに変更
                 var existingChildTopics = await _topicRepository.Query()

@@ -193,7 +193,7 @@ public class TopicController : ControllerBase
 
         request.RoomId = roomId;
 
-        var result = await _topicManagementService.CreateTopicAsync(request, cancellationToken);
+        var result = await _topicManagementService.CreateTopicAsync(request, CurrentUserId, cancellationToken);
         return result.ToApiResult();
     }
 

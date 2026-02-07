@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using TreeTopic.Models;
+using TreeTopic.Permissions;
 
 namespace TreeTopic.Services;
 
@@ -211,6 +212,97 @@ public class TopicPermissionManager
         await _context.SaveChangesAsync(cancellationToken);
 
         _logger.LogInformation("All TopicUserPermissions cleared: TopicId={TopicId}, RoomUserId={RoomUserId}", topicId, roomUserId);
+    }
+
+    #endregion
+
+    #region 権限コピー
+
+    /// <summary>
+    /// 親トピックの権限を子トピックにコピー
+    /// </summary>
+    public async Task CopyPermissionsAsync(
+        Guid parentTopicId,
+        Guid childTopicId,
+        CancellationToken cancellationToken = default)
+    {
+        // 1. TopicRolePermissionをコピー
+        var parentRolePermissions = await _context.TopicRolePermissions
+            .Where(trp => trp.TopicId == parentTopicId)
+            .ToListAsync(cancellationToken);
+
+        foreach (var parentPerm in parentRolePermissions)
+        {
+            var childPerm = new TopicRolePermission
+            {
+                Id = Guid.CreateVersion7(),
+                TopicId = childTopicId,
+                RoomRoleId = parentPerm.RoomRoleId,
+                Name = parentPerm.Name
+            };
+            _context.TopicRolePermissions.Add(childPerm);
+        }
+
+        // 2. TopicUserPermissionをコピー
+        var parentUserPermissions = await _context.TopicUserPermissions
+            .Where(tup => tup.TopicId == parentTopicId)
+            .ToListAsync(cancellationToken);
+
+        foreach (var parentPerm in parentUserPermissions)
+        {
+            var childPerm = new TopicUserPermission
+            {
+                Id = Guid.CreateVersion7(),
+                TopicId = childTopicId,
+                RoomUserId = parentPerm.RoomUserId,
+                Name = parentPerm.Name
+            };
+            _context.TopicUserPermissions.Add(childPerm);
+        }
+
+        await _context.SaveChangesAsync(cancellationToken);
+
+        _logger.LogInformation(
+            "Permissions copied from parent topic {ParentTopicId} to child topic {ChildTopicId}: {RoleCount} role permissions, {UserCount} user permissions",
+            parentTopicId, childTopicId, parentRolePermissions.Count, parentUserPermissions.Count);
+    }
+
+    /// <summary>
+    /// トピック作成者に管理者権限を付与
+    /// </summary>
+    public async Task GrantCreatorPermissionsAsync(
+        Guid topicId,
+        Guid roomUserId,
+        CancellationToken cancellationToken = default)
+    {
+        // Topic作成者に全権限を付与
+        var permissions = new[]
+        {
+            TopicPermissions.Read,
+            TopicPermissions.Write,
+            TopicPermissions.Delete,
+            TopicPermissions.Manage,
+            TopicPermissions.ReadMessages,
+            TopicPermissions.WriteMessages
+        };
+
+        foreach (var permissionName in permissions)
+        {
+            var permission = new TopicUserPermission
+            {
+                Id = Guid.CreateVersion7(),
+                TopicId = topicId,
+                RoomUserId = roomUserId,
+                Name = permissionName
+            };
+            _context.TopicUserPermissions.Add(permission);
+        }
+
+        await _context.SaveChangesAsync(cancellationToken);
+
+        _logger.LogInformation(
+            "Creator permissions granted to RoomUser {RoomUserId} for topic {TopicId}",
+            roomUserId, topicId);
     }
 
     #endregion
