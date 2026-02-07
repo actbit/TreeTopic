@@ -163,7 +163,7 @@ public class RoomRoleManagementService : BaseService
     }
 
     /// <summary>
-    /// RoomRoleをDTOに変換
+    /// DTOに変換
     /// </summary>
     public static RoomRoleDto ToDto(RoomRole role)
     {

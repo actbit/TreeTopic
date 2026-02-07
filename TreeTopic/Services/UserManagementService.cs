@@ -148,4 +148,112 @@ public class UserManagementService : BaseService
             return Result<(ApplicationUser, IList<string>)>.Success((user, updatedRoles));
         }, nameof(RemoveRoleFromUserAsync));
     }
+
+    public async Task<Result<(ApplicationUser user, IList<string> roles)>> CreateUserAsync(CreateUserRequest request)
+    {
+        return await ExecuteAsync(async () =>
+        {
+            var emailValidation = ValidationHelper.ValidateRequired(request.Email, "Email");
+            if (emailValidation.IsFailure)
+            {
+                return Result<(ApplicationUser, IList<string>)>.BadRequest(emailValidation.Error!.Message);
+            }
+
+            var email = request.Email!.Trim().ToLowerInvariant();
+
+            // Check if user already exists
+            var existingUser = await _userManager.FindByEmailAsync(email);
+            if (existingUser != null)
+            {
+                return Result<(ApplicationUser, IList<string>)>.Conflict($"User with email '{email}' already exists");
+            }
+
+            // Create new user with email as username
+            var user = new ApplicationUser
+            {
+                UserName = email,
+                Email = email,
+                DisplayName = email,
+                EmailConfirmed = true
+            };
+
+            var result = await _userManager.CreateAsync(user);
+            if (!result.Succeeded)
+            {
+                return Result<(ApplicationUser, IList<string>)>.BadRequest(
+                    string.Join(", ", result.Errors.Select(e => e.Description)));
+            }
+
+            var roles = await _userManager.GetRolesAsync(user);
+            return Result<(ApplicationUser, IList<string>)>.Success((user, roles), 201);
+        }, nameof(CreateUserAsync));
+    }
+
+    public async Task<Result<(ApplicationUser user, IList<string> roles)>> BanUserAsync(
+        Guid userId, BanUserRequest request, string bannedBy)
+    {
+        return await ExecuteAsync(async () =>
+        {
+            var userResult = await EntityHelper.FindUserByIdOrNotFoundAsync(_userManager, userId);
+            if (userResult.IsFailure)
+            {
+                return Result<(ApplicationUser, IList<string>)>.NotFound(userResult.Error!.Message);
+            }
+
+            var user = userResult.Data!;
+
+            // Validate reason is not empty
+            var reasonValidation = ValidationHelper.ValidateRequired(request.Reason, "Reason");
+            if (reasonValidation.IsFailure)
+            {
+                return Result<(ApplicationUser, IList<string>)>.BadRequest(reasonValidation.Error!.Message);
+            }
+
+            // Update user with ban info
+            user.IsBanned = true;
+            user.BannedAt = DateTime.UtcNow;
+            user.BannedBy = bannedBy;
+            user.BanReason = request.Reason!.Trim();
+
+            var result = await _userManager.UpdateAsync(user);
+            if (!result.Succeeded)
+            {
+                return Result<(ApplicationUser, IList<string>)>.BadRequest(
+                    string.Join(", ", result.Errors.Select(e => e.Description)));
+            }
+
+            var roles = await _userManager.GetRolesAsync(user);
+            return Result<(ApplicationUser, IList<string>)>.Success((user, roles));
+        }, nameof(BanUserAsync));
+    }
+
+    public async Task<Result<(ApplicationUser user, IList<string> roles)>> UnbanUserAsync(Guid userId)
+    {
+        return await ExecuteAsync(async () =>
+        {
+            var userResult = await EntityHelper.FindUserByIdOrNotFoundAsync(_userManager, userId);
+            if (userResult.IsFailure)
+            {
+                return Result<(ApplicationUser, IList<string>)>.NotFound(userResult.Error!.Message);
+            }
+
+            var user = userResult.Data!;
+
+            // Clear ban info
+            user.IsBanned = false;
+            user.BannedAt = null;
+            user.BannedBy = null;
+            user.BanReason = null;
+
+            var result = await _userManager.UpdateAsync(user);
+            if (!result.Succeeded)
+            {
+                return Result<(ApplicationUser, IList<string>)>.BadRequest(
+                    string.Join(", ", result.Errors.Select(e => e.Description)));
+            }
+
+            var roles = await _userManager.GetRolesAsync(user);
+            return Result<(ApplicationUser, IList<string>)>.Success((user, roles));
+        }, nameof(UnbanUserAsync));
+    }
 }

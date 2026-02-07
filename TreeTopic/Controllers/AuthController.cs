@@ -3,12 +3,15 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using MaskedUUID.AspNetCore.Types;
 using System.Security.Claims;
 using Finbuckle.MultiTenant;
+using TreeTopic.Dtos;
 using TreeTopic.Models;
 using TreeTopic.Constants;
 using TreeTopic.Services;
+using TreeTopic.Permissions;
 
 namespace TreeTopic.Controllers;
 
@@ -95,28 +98,46 @@ public class AuthController : ControllerBase
     }
 
     /// <summary>
-    /// ログアウト
+    /// ログアウト（POST必須）
     /// </summary>
-    [HttpGet("logout")]
-    public IActionResult Logout()
+    [HttpPost("logout")]
+    [Authorize]
+    public IActionResult Logout([FromBody] LogoutRequest? request)
+    {
+        return PerformLogout(request?.returnUrl);
+    }
+
+    private IActionResult PerformLogout(string? returnUrl)
     {
         _logger.LogInformation("Logout initiated");
+
+        // returnUrl をバリデーション
+        var currentTenant = HttpContext.GetRouteValue("tenant")?.ToString();
+        if (!string.IsNullOrEmpty(returnUrl) && !IsValidReturnUrl(returnUrl, currentTenant))
+        {
+            _logger.LogWarning("Invalid returnUrl detected on logout: {ReturnUrl}", returnUrl);
+            returnUrl = null;
+        }
+
+        // リダイレクト先
+        var redirectUri = returnUrl ?? "/";
+        _logger.LogInformation("Logout redirecting to: {RedirectUri}", redirectUri);
 
         // Only logout from application session (Cookies)
         // Don't logout from Keycloak to preserve session for other applications
         return SignOut(
             new AuthenticationProperties
             {
-                RedirectUri = "/"
+                RedirectUri = redirectUri
             },
             "Cookies"
         );
     }
-
     /// <summary>
     /// 現在のユーザー情報を取得
     /// </summary>
     [HttpGet("me")]
+    [Authorize]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetCurrentUser()
@@ -129,7 +150,8 @@ public class AuthController : ControllerBase
 
         var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         MaskedGuid? maskedUserId = null;
-        if (!string.IsNullOrEmpty(userId) && Guid.TryParse(userId, out var userGuid))
+        Guid userGuid = Guid.Empty;
+        if (!string.IsNullOrEmpty(userId) && Guid.TryParse(userId, out userGuid))
         {
             maskedUserId = userGuid;
         }
@@ -141,13 +163,15 @@ public class AuthController : ControllerBase
         string? userName = null;
         string? displayName = null;
         string? iconUrl = null;
-        if (!string.IsNullOrEmpty(userId))
+        if (!string.IsNullOrEmpty(userId) && userGuid != Guid.Empty)
         {
-            var list = _userManager.Users;
             var user = await _userManager.FindByIdAsync(userId);
-            userName = user?.UserName;
-            displayName = user?.DisplayName ?? user?.UserName;
-            iconUrl = _iconService.GetUserIconUrl(user);
+            if (user != null)
+            {
+                userName = user.UserName;
+                displayName = user.DisplayName ?? user.UserName;
+                iconUrl = _iconService.GetUserIconUrl(user);
+            }
         }
 
         return Ok(new
@@ -167,13 +191,71 @@ public class AuthController : ControllerBase
     /// ログイン状態をチェック
     /// </summary>
     [HttpGet("check")]
+    [Authorize]
     [ProducesResponseType(StatusCodes.Status200OK)]
     public IActionResult CheckAuth()
     {
         return Ok(new { isAuthenticated = User.Identity?.IsAuthenticated ?? false });
     }
+
+    /// <summary>
+    /// 現在のユーザーの権限をチェック
+    /// </summary>
+    [HttpGet("me/permissions")]
+    [Authorize]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> CheckUserPermissions()
+    {
+        if (!User.Identity?.IsAuthenticated ?? true)
+        {
+            return Unauthorized();
+        }
+
+        var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (!Guid.TryParse(userId, out var userGuid))
+        {
+            return Unauthorized();
+        }
+
+        // DBコンテキストを取得
+        var dbContext = HttpContext.RequestServices.GetRequiredService<ApplicationDbContext>();
+        var userManager = HttpContext.RequestServices.GetRequiredService<UserManager<ApplicationUser>>();
+
+        // ApplicationUserを取得
+        var appUser = await userManager.FindByIdAsync(userGuid.ToString());
+        if (appUser == null)
+        {
+            return Unauthorized();
+        }
+
+        // ユーザーのロールを取得（Identity管理ロール + claimsロールをマージ）
+        var identityRoles = await userManager.GetRolesAsync(appUser);
+        var claimRoles = User.FindAll(ClaimTypes.Role).Select(c => c.Value);
+        var roles = new HashSet<string>(identityRoles, StringComparer.OrdinalIgnoreCase);
+        foreach (var claimRole in claimRoles)
+        {
+            if (!string.IsNullOrWhiteSpace(claimRole))
+            {
+                roles.Add(claimRole);
+            }
+        }
+
+        // ユーザーの全ての権限を取得
+        var userPermissions = await dbContext.Permissions
+            .AsNoTracking()
+            .Include(p => p.Role)
+            .Where(p => p.Role != null && p.Role.Name != null && roles.Contains(p.Role.Name))
+            .Select(p => p.Name)
+            .Distinct()
+            .ToListAsync(HttpContext.RequestAborted);
+
+        // RoleManage権限をチェック
+        var hasRoleManagePermission = userPermissions.Contains(TenantPermissions.RoleManage);
+
+        return Ok(new {
+            hasRoleManagePermission,
+            permissions = userPermissions
+        });
+    }
 }
-
-
-
-

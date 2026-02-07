@@ -1,4 +1,4 @@
-import { writable, derived } from 'svelte/store';
+import { writable, derived, get } from 'svelte/store';
 
 export interface BrainIdeaVote {
   id: string;
@@ -273,41 +273,58 @@ export const brainstorm = createBrainstormStore();
  */
 export function addIdea(idea: BrainIdea) {
   if (brainstorm && typeof brainstorm === 'object' && 'subscribe' in brainstorm) {
-    // Use store subscription to get current state and find board
-    let currentBoardId: string | null = null;
-    brainstorm.subscribe((state) => {
-      currentBoardId = state.currentBoard?.id ?? null;
-    })();
+    try {
+      const state = get(brainstorm);
+      const currentBoardId = state.currentBoard?.id ?? null;
 
-    if (currentBoardId) {
-      brainstorm.addIdea(currentBoardId, idea);
+      if (currentBoardId) {
+        brainstorm.addIdea(currentBoardId, idea);
+      } else {
+        console.warn('Cannot add idea: No current board selected');
+      }
+    } catch (error) {
+      console.error('Error adding idea:', error);
     }
+  } else {
+    console.warn('Brainstorm store not initialized');
   }
 }
 
 export function deleteIdea(ideaId: string) {
   if (brainstorm && typeof brainstorm === 'object' && 'subscribe' in brainstorm) {
-    let currentBoardId: string | null = null;
-    brainstorm.subscribe((state) => {
-      currentBoardId = state.currentBoard?.id ?? null;
-    })();
+    try {
+      const state = get(brainstorm);
+      const currentBoardId = state.currentBoard?.id ?? null;
 
-    if (currentBoardId) {
-      brainstorm.deleteIdea(currentBoardId, ideaId);
+      if (currentBoardId) {
+        brainstorm.deleteIdea(currentBoardId, ideaId);
+      } else {
+        console.warn('Cannot delete idea: No current board selected');
+      }
+    } catch (error) {
+      console.error('Error deleting idea:', error);
     }
+  } else {
+    console.warn('Brainstorm store not initialized');
   }
 }
 
 export function updateIdeaPosition(ideaId: string, positionLeft: number, positionTop: number) {
   if (brainstorm && typeof brainstorm === 'object' && 'subscribe' in brainstorm) {
-    let currentBoardId: string | null = null;
-    brainstorm.subscribe((state) => {
-      currentBoardId = state.currentBoard?.id ?? null;
-    })();
+    try {
+      const state = get(brainstorm);
+      const currentBoardId = state.currentBoard?.id ?? null;
 
-    if (currentBoardId) {
-      brainstorm.moveIdea(currentBoardId, ideaId, positionLeft, positionTop);
+      if (currentBoardId) {
+        brainstorm.moveIdea(currentBoardId, ideaId, positionLeft, positionTop);
+      } else {
+        console.warn('Cannot move idea: No current board selected');
+      }
+    } catch (error) {
+      console.error('Error moving idea:', error);
     }
+  } else {
+    console.warn('Brainstorm store not initialized');
   }
 }
 

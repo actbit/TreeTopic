@@ -8,21 +8,27 @@ using Microsoft.Extensions.Logging;
 namespace TreeTopic.Services;
 
 /// <summary>
-/// TopicDtoビルダー - メソッドチェーンで必要なデータを追加
+/// TopicDtoビルダー
 /// </summary>
 public class TopicDtoBuilder
 {
     private readonly List<Topic> _topics;
     private readonly ApplicationDbContext _dbContext;
     private readonly ITopicRepository _topicRepository;
+    private readonly ILogger<TopicDtoBuilder>? _logger;
     private HashSet<Guid>? _hasChildrenSet;
     private Dictionary<Guid, int>? _unreadCountsMap;
 
-    public TopicDtoBuilder(List<Topic> topics, ApplicationDbContext dbContext, ITopicRepository topicRepository)
+    public TopicDtoBuilder(
+        List<Topic> topics,
+        ApplicationDbContext dbContext,
+        ITopicRepository topicRepository,
+        ILogger<TopicDtoBuilder>? logger = null)
     {
         _topics = topics;
         _dbContext = dbContext;
         _topicRepository = topicRepository;
+        _logger = logger;
     }
 
     public async Task<TopicDtoBuilder> WithHasChildren(CancellationToken cancellationToken)
@@ -41,89 +47,37 @@ public class TopicDtoBuilder
 
     public async Task<TopicDtoBuilder> WithUnread(Guid? userId, CancellationToken cancellationToken)
     {
-        Console.WriteLine($"[TopicDtoBuilder.WithUnread] START - topics: {_topics.Count}, userId: {userId}");
-
         if (_topics.Count == 0 || !userId.HasValue || userId.Value == Guid.Empty)
         {
-            Console.WriteLine($"[TopicDtoBuilder.WithUnread] EARLY RETURN - topics: {_topics.Count}, userId: {userId}");
             return this;
         }
 
         var topicIds = _topics.Select(t => t.Id).ToList();
-        _unreadCountsMap = new Dictionary<Guid, int>();
+        _unreadCountsMap = topicIds.ToDictionary(topicId => topicId, _ => 0);
 
         try
         {
-            // UserTopicsを一括取得
-            var userTopics = await _dbContext.UserTopics
-                .Where(ut => topicIds.Contains(ut.TopicId) && ut.UserId == userId.Value)
-                .ToListAsync(cancellationToken);
+            var unreadCounts = await UnreadCountQueryHelper.GetUnreadCountsByTopicAsync(
+                _dbContext,
+                topicIds,
+                userId.Value,
+                cancellationToken);
 
-            Console.WriteLine($"[TopicDtoBuilder.WithUnread] UserTopics found: {userTopics.Count}");
-
-            var userTopicsMap = userTopics.ToDictionary(ut => ut.TopicId, ut => ut);
-
-            // 各トピックの全メッセージ数を一括取得
-            var messageCountsByTopic = await _dbContext.Messages
-                .Where(m => topicIds.Contains(m.TopicId))
-                .GroupBy(m => m.TopicId)
-                .Select(g => new { TopicId = g.Key, Count = g.Count() })
-                .ToDictionaryAsync(x => x.TopicId, x => x.Count, cancellationToken);
-
-            Console.WriteLine($"[TopicDtoBuilder.WithUnread] Message counts: {string.Join(", ", messageCountsByTopic.Select(kvp => $"{kvp.Key}={kvp.Value}"))}");
-
-            // LastReadMessageIdがあるトピックの未読数を計算
-            var lastReadMessageMap = userTopicsMap
-                .Where(kvp => kvp.Value.LastReadMessageId.HasValue)
-                .ToDictionary(kvp => kvp.Key, kvp => kvp.Value.LastReadMessageId!.Value);
-
-            Console.WriteLine($"[TopicDtoBuilder.WithUnread] Topics with LastReadMessageId: {lastReadMessageMap.Count}");
-
-            if (lastReadMessageMap.Count > 0)
+            foreach (var item in unreadCounts)
             {
-                // まずメッセージをメモリに取得してからフィルタリング（SQL変換エラーを回避）
-                var messages = await _dbContext.Messages
-                    .Where(m => lastReadMessageMap.Keys.Contains(m.TopicId))
-                    .ToListAsync(cancellationToken);
-
-                var unreadCounts = messages
-                    .GroupBy(m => m.TopicId)
-                    .Select(g => new
-                    {
-                        TopicId = g.Key,
-                        UnreadCount = g.Count(m => m.Id > lastReadMessageMap[g.Key])
-                    })
-                    .ToDictionary(x => x.TopicId, x => x.UnreadCount);
-
-                foreach (var item in lastReadMessageMap)
-                {
-                    _unreadCountsMap[item.Key] = unreadCounts.GetValueOrDefault(item.Key, 0);
-                }
+                _unreadCountsMap[item.Key] = item.Value;
             }
-
-            // UserTopicがないトピックは全メッセージが未読
-            foreach (var topicId in topicIds)
-            {
-                if (!_unreadCountsMap.ContainsKey(topicId))
-                {
-                    _unreadCountsMap[topicId] = messageCountsByTopic.GetValueOrDefault(topicId, 0);
-                }
-            }
-
-            Console.WriteLine($"[TopicDtoBuilder.WithUnread] Final unread counts: {string.Join(", ", _unreadCountsMap.Select(kvp => $"{kvp.Key}={kvp.Value}"))}");
         }
         catch (Exception ex)
         {
-            // エラー時は空のマップを返す
-            Console.WriteLine($"[TopicDtoBuilder.WithUnread] ERROR occurred: {ex.Message}");
-            Console.WriteLine($"[TopicDtoBuilder.WithUnread] ERROR StackTrace: {ex.StackTrace}");
+            _logger?.LogWarning(ex, "Failed to calculate unread counts in {Builder}", nameof(TopicDtoBuilder));
         }
 
         return this;
     }
 
     /// <summary>
-    /// 基本DTO（最小限）で構築
+    /// 基本DTOで構築
     /// </summary>
     public Task<List<TopicBasicDto>> BuildBasicAsync(CancellationToken cancellationToken)
     {
@@ -139,7 +93,7 @@ public class TopicDtoBuilder
     }
 
     /// <summary>
-    /// ツリー用DTO（hasChildrenと未読数付き）で構築
+    /// ツリー用DTOで構築
     /// </summary>
     public Task<List<TopicTreeDto>> BuildTreeAsync(CancellationToken cancellationToken)
     {
@@ -174,32 +128,6 @@ public class TopicDtoBuilder
             SourceMessageId = topic.SourceMessageId,
             Description = topic.Description,
             HasChildren = _hasChildrenSet?.Contains(topic.Id) ?? false,
-            UnreadCount = _unreadCountsMap?.GetValueOrDefault(topic.Id) ?? 0,
-            CreatedAt = topic.CreatedAt,
-            UpdatedAt = topic.UpdatedAt
-        }).ToList());
-    }
-
-    /// <summary>
-    /// 互換性のために残す古いビルドメソッド（新規コードでは使用禁止）
-    /// TODO: 移行完了後に削除
-    /// </summary>
-    [Obsolete("Use BuildBasicAsync, BuildTreeAsync, or BuildDetailAsync instead")]
-    public Task<List<TopicDto>> BuildAsync(CancellationToken cancellationToken)
-    {
-        if (_topics.Count == 0)
-            return Task.FromResult(new List<TopicDto>());
-
-        return Task.FromResult(_topics.Select(topic => new TopicDto
-        {
-            Id = topic.Id,
-            RoomId = topic.RoomId,
-            ParentId = topic.ParentId.HasValue ? topic.ParentId : null,
-            SourceMessageId = topic.SourceMessageId.HasValue ? topic.SourceMessageId : null,
-            Title = topic.Title,
-            Description = topic.Description,
-            HasChildren = _hasChildrenSet?.Contains(topic.Id) ?? false,
-            ChildIds = new List<MaskedGuid>(),
             UnreadCount = _unreadCountsMap?.GetValueOrDefault(topic.Id) ?? 0,
             CreatedAt = topic.CreatedAt,
             UpdatedAt = topic.UpdatedAt

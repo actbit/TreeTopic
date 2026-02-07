@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using TreeTopic.Models;
+using TreeTopic.Permissions;
 
 namespace TreeTopic.Services;
 
@@ -57,15 +58,6 @@ public class TopicPermissionManager
         string permissionName,
         CancellationToken cancellationToken = default)
     {
-        // 重複チェック
-        var existing = await _context.TopicRolePermissions
-            .FirstOrDefaultAsync(trp => trp.TopicId == topicId && trp.RoomRoleId == roleId && trp.Name == permissionName, cancellationToken);
-
-        if (existing != null)
-        {
-            return existing;
-        }
-
         var permission = new TopicRolePermission
         {
             Id = Guid.CreateVersion7(),
@@ -74,12 +66,16 @@ public class TopicPermissionManager
             Name = permissionName
         };
 
-        _context.TopicRolePermissions.Add(permission);
-        await _context.SaveChangesAsync(cancellationToken);
-
-        _logger.LogInformation("TopicRolePermission added: TopicId={TopicId}, RoleId={RoleId}, Permission={Permission}",
-            topicId, roleId, permissionName);
-        return permission;
+        return await PermissionHelper.AddWithTransactionAsync(
+            _context,
+            _context.TopicRolePermissions,
+            permission,
+            async (ctx, ct) => await ctx.TopicRolePermissions
+                .FirstOrDefaultAsync(trp => trp.TopicId == topicId && trp.RoomRoleId == roleId && trp.Name == permissionName, ct),
+            _logger,
+            $"TopicRolePermission added: TopicId={topicId}, RoleId={roleId}, Permission={permissionName}",
+            $"Failed to add role permission: TopicId={topicId}, RoleId={roleId}, Permission={permissionName}",
+            cancellationToken);
     }
 
     /// <summary>
@@ -91,20 +87,15 @@ public class TopicPermissionManager
         string permissionName,
         CancellationToken cancellationToken = default)
     {
-        var permission = await _context.TopicRolePermissions
-            .FirstOrDefaultAsync(trp => trp.TopicId == topicId && trp.RoomRoleId == roleId && trp.Name == permissionName, cancellationToken);
-
-        if (permission == null)
-        {
-            return false;
-        }
-
-        _context.TopicRolePermissions.Remove(permission);
-        await _context.SaveChangesAsync(cancellationToken);
-
-        _logger.LogInformation("TopicRolePermission removed: TopicId={TopicId}, RoleId={RoleId}, Permission={Permission}",
-            topicId, roleId, permissionName);
-        return true;
+        return await PermissionHelper.RemoveWithTransactionAsync(
+            _context,
+            _context.TopicRolePermissions,
+            async (ctx, ct) => await ctx.TopicRolePermissions
+                .FirstOrDefaultAsync(trp => trp.TopicId == topicId && trp.RoomRoleId == roleId && trp.Name == permissionName, ct),
+            _logger,
+            $"TopicRolePermission removed: TopicId={topicId}, RoleId={roleId}, Permission={permissionName}",
+            $"Failed to remove role permission: TopicId={topicId}, RoleId={roleId}, Permission={permissionName}",
+            cancellationToken);
     }
 
     /// <summary>
@@ -165,15 +156,6 @@ public class TopicPermissionManager
         string permissionName,
         CancellationToken cancellationToken = default)
     {
-        // 重複チェック
-        var existing = await _context.TopicUserPermissions
-            .FirstOrDefaultAsync(tup => tup.TopicId == topicId && tup.RoomUserId == roomUserId && tup.Name == permissionName, cancellationToken);
-
-        if (existing != null)
-        {
-            return existing;
-        }
-
         var permission = new TopicUserPermission
         {
             Id = Guid.CreateVersion7(),
@@ -182,12 +164,16 @@ public class TopicPermissionManager
             Name = permissionName
         };
 
-        _context.TopicUserPermissions.Add(permission);
-        await _context.SaveChangesAsync(cancellationToken);
-
-        _logger.LogInformation("TopicUserPermission added: TopicId={TopicId}, RoomUserId={RoomUserId}, Permission={Permission}",
-            topicId, roomUserId, permissionName);
-        return permission;
+        return await PermissionHelper.AddWithTransactionAsync(
+            _context,
+            _context.TopicUserPermissions,
+            permission,
+            async (ctx, ct) => await ctx.TopicUserPermissions
+                .FirstOrDefaultAsync(tup => tup.TopicId == topicId && tup.RoomUserId == roomUserId && tup.Name == permissionName, ct),
+            _logger,
+            $"TopicUserPermission added: TopicId={topicId}, RoomUserId={roomUserId}, Permission={permissionName}",
+            $"Failed to add user permission: TopicId={topicId}, RoomUserId={roomUserId}, Permission={permissionName}",
+            cancellationToken);
     }
 
     /// <summary>
@@ -199,20 +185,15 @@ public class TopicPermissionManager
         string permissionName,
         CancellationToken cancellationToken = default)
     {
-        var permission = await _context.TopicUserPermissions
-            .FirstOrDefaultAsync(tup => tup.TopicId == topicId && tup.RoomUserId == roomUserId && tup.Name == permissionName, cancellationToken);
-
-        if (permission == null)
-        {
-            return false;
-        }
-
-        _context.TopicUserPermissions.Remove(permission);
-        await _context.SaveChangesAsync(cancellationToken);
-
-        _logger.LogInformation("TopicUserPermission removed: TopicId={TopicId}, RoomUserId={RoomUserId}, Permission={Permission}",
-            topicId, roomUserId, permissionName);
-        return true;
+        return await PermissionHelper.RemoveWithTransactionAsync(
+            _context,
+            _context.TopicUserPermissions,
+            async (ctx, ct) => await ctx.TopicUserPermissions
+                .FirstOrDefaultAsync(tup => tup.TopicId == topicId && tup.RoomUserId == roomUserId && tup.Name == permissionName, ct),
+            _logger,
+            $"TopicUserPermission removed: TopicId={topicId}, RoomUserId={roomUserId}, Permission={permissionName}",
+            $"Failed to remove user permission: TopicId={topicId}, RoomUserId={roomUserId}, Permission={permissionName}",
+            cancellationToken);
     }
 
     /// <summary>
@@ -235,6 +216,97 @@ public class TopicPermissionManager
 
     #endregion
 
+    #region 権限コピー
+
+    /// <summary>
+    /// 親トピックの権限を子トピックにコピー
+    /// </summary>
+    public async Task CopyPermissionsAsync(
+        Guid parentTopicId,
+        Guid childTopicId,
+        CancellationToken cancellationToken = default)
+    {
+        // 1. TopicRolePermissionをコピー
+        var parentRolePermissions = await _context.TopicRolePermissions
+            .Where(trp => trp.TopicId == parentTopicId)
+            .ToListAsync(cancellationToken);
+
+        foreach (var parentPerm in parentRolePermissions)
+        {
+            var childPerm = new TopicRolePermission
+            {
+                Id = Guid.CreateVersion7(),
+                TopicId = childTopicId,
+                RoomRoleId = parentPerm.RoomRoleId,
+                Name = parentPerm.Name
+            };
+            _context.TopicRolePermissions.Add(childPerm);
+        }
+
+        // 2. TopicUserPermissionをコピー
+        var parentUserPermissions = await _context.TopicUserPermissions
+            .Where(tup => tup.TopicId == parentTopicId)
+            .ToListAsync(cancellationToken);
+
+        foreach (var parentPerm in parentUserPermissions)
+        {
+            var childPerm = new TopicUserPermission
+            {
+                Id = Guid.CreateVersion7(),
+                TopicId = childTopicId,
+                RoomUserId = parentPerm.RoomUserId,
+                Name = parentPerm.Name
+            };
+            _context.TopicUserPermissions.Add(childPerm);
+        }
+
+        await _context.SaveChangesAsync(cancellationToken);
+
+        _logger.LogInformation(
+            "Permissions copied from parent topic {ParentTopicId} to child topic {ChildTopicId}: {RoleCount} role permissions, {UserCount} user permissions",
+            parentTopicId, childTopicId, parentRolePermissions.Count, parentUserPermissions.Count);
+    }
+
+    /// <summary>
+    /// トピック作成者に管理者権限を付与
+    /// </summary>
+    public async Task GrantCreatorPermissionsAsync(
+        Guid topicId,
+        Guid roomUserId,
+        CancellationToken cancellationToken = default)
+    {
+        // Topic作成者に全権限を付与
+        var permissions = new[]
+        {
+            TopicPermissions.Read,
+            TopicPermissions.Write,
+            TopicPermissions.Delete,
+            TopicPermissions.Manage,
+            TopicPermissions.ReadMessages,
+            TopicPermissions.WriteMessages
+        };
+
+        foreach (var permissionName in permissions)
+        {
+            var permission = new TopicUserPermission
+            {
+                Id = Guid.CreateVersion7(),
+                TopicId = topicId,
+                RoomUserId = roomUserId,
+                Name = permissionName
+            };
+            _context.TopicUserPermissions.Add(permission);
+        }
+
+        await _context.SaveChangesAsync(cancellationToken);
+
+        _logger.LogInformation(
+            "Creator permissions granted to RoomUser {RoomUserId} for topic {TopicId}",
+            roomUserId, topicId);
+    }
+
+    #endregion
+
     #region 権限チェック
 
     /// <summary>
@@ -247,18 +319,20 @@ public class TopicPermissionManager
     {
         var permissions = new HashSet<string>();
 
-        // 1. ロールから権限を取得
-        if (roomUser.RoomRole != null)
-        {
-            var rolePermissions = await _context.TopicRolePermissions
-                .Where(trp => trp.TopicId == topicId && trp.RoomRoleId == roomUser.RoomRole.Id)
-                .Select(trp => trp.Name)
-                .ToListAsync(cancellationToken);
+        // 1. ロールから権限を取得（多対多関係）
+        var rolePermissions = await _context.RoomUserRoomRoles
+            .Where(rur => rur.RoomUserId == roomUser.Id)
+            .Join(_context.TopicRolePermissions,
+                rur => rur.RoomRoleId,
+                trp => trp.RoomRoleId,
+                (rur, trp) => new { trp.TopicId, trp.Name })
+            .Where(x => x.TopicId == topicId)
+            .Select(x => x.Name)
+            .ToListAsync(cancellationToken);
 
-            foreach (var perm in rolePermissions)
-            {
-                permissions.Add(perm);
-            }
+        foreach (var perm in rolePermissions)
+        {
+            permissions.Add(perm);
         }
 
         // 2. 個別ユーザー権限を追加（ロール権限に追加）
@@ -284,16 +358,18 @@ public class TopicPermissionManager
         string permissionName,
         CancellationToken cancellationToken = default)
     {
-        // 1. ロール権限を確認
-        if (roomUser.RoomRole != null)
-        {
-            var hasRolePermission = await _context.TopicRolePermissions
-                .AnyAsync(trp => trp.TopicId == topicId && trp.RoomRoleId == roomUser.RoomRole.Id && trp.Name == permissionName, cancellationToken);
+        // 1. ロール権限を確認（多対多関係）
+        var hasRolePermission = await _context.RoomUserRoomRoles
+            .Where(rur => rur.RoomUserId == roomUser.Id)
+            .Join(_context.TopicRolePermissions,
+                rur => rur.RoomRoleId,
+                trp => trp.RoomRoleId,
+                (rur, trp) => new { trp.TopicId, trp.Name })
+            .AnyAsync(x => x.TopicId == topicId && x.Name == permissionName, cancellationToken);
 
-            if (hasRolePermission)
-            {
-                return true;
-            }
+        if (hasRolePermission)
+        {
+            return true;
         }
 
         // 2. 個別ユーザー権限を確認

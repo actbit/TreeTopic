@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import type { Snippet } from 'svelte';
 
   interface Props {
     isOpen?: boolean;
@@ -7,7 +8,7 @@
     onClose?: () => void;
     size?: 'small' | 'medium' | 'large' | 'xlarge';
     closeButton?: boolean;
-    children?: any;
+    children?: Snippet;
   }
 
   let { isOpen = false, title, onClose, size = 'medium', closeButton = true, children }: Props = $props();

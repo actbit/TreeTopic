@@ -22,7 +22,7 @@
   async function refreshHasChildren(topicId: string) {
     try {
       const tenant = getCurrentTenant();
-      const updated = await api.get<any>(`/${tenant}/api/Topic/${topicId}`);
+      const updated = await api.get<any>(`/${tenant}/api/topic/${topicId}`);
       const hasChildren = updated?.hasChildren ?? updated?.HasChildren ?? undefined;
       if (typeof hasChildren === 'boolean') {
         updateTopic(topicId, { hasChildren });
@@ -56,7 +56,7 @@
 
     try {
       const tenant = getCurrentTenant();
-      await api.put(`/${tenant}/api/Topic/${payload.id}`, { parentId: null });
+      await api.put(`/${tenant}/api/topic/${payload.id}`, { parentId: null });
       moveTopicParent(payload.id, null);
       if (oldParentId) await refreshHasChildren(oldParentId);
     } catch (err) {

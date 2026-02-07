@@ -1,9 +1,10 @@
 <script lang="ts">
   import { subpanelCollapsed, responsiveLayout } from '$lib/stores/ui';
+  import type { Snippet } from 'svelte';
 
   interface Props {
     title?: string;
-    children?: any;
+    children?: Snippet;
   }
 
   let { title, children }: Props = $props();

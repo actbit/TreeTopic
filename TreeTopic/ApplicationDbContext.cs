@@ -25,8 +25,11 @@ namespace TreeTopic
         public DbSet<Message> Messages => Set<Message>();
         public DbSet<File> Files => Set<File>();
         public DbSet<RoomUser> RoomUsers => Set<RoomUser>();
+        public DbSet<RoomJoinUserPermission> RoomJoinUserPermissions => Set<RoomJoinUserPermission>();
+        public DbSet<RoomJoinRolePermission> RoomJoinRolePermissions => Set<RoomJoinRolePermission>();
         public DbSet<RoomPermission> RoomPermissions => Set<RoomPermission>();
         public DbSet<RoomRole> RoomRoles => Set<RoomRole>();
+        public DbSet<RoomUserRoomRole> RoomUserRoomRoles => Set<RoomUserRoomRole>();
         public DbSet<RoomRolePermission> RoomRolePermissions => Set<RoomRolePermission>();
         public DbSet<TopicRolePermission> TopicRolePermissions => Set<TopicRolePermission>();
         public DbSet<TopicUserPermission> TopicUserPermissions => Set<TopicUserPermission>();
@@ -49,6 +52,11 @@ namespace TreeTopic
 
             // Room リレーション
             modelBuilder.Entity<Room>()
+                .Property(r => r.JoinPolicy)
+                .HasConversion<int>()
+                .HasDefaultValue(RoomJoinPolicy.Public);
+
+            modelBuilder.Entity<Room>()
                 .HasOne(r => r.CreatedUser)
                 .WithMany(u => u.Rooms)
                 .HasForeignKey(r => r.CreatedUserId)
@@ -64,6 +72,38 @@ namespace TreeTopic
                 .HasMany(r => r.RoomUsers)
                 .WithOne(ru => ru.Room)
                 .HasForeignKey(ru => ru.RoomId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<RoomJoinUserPermission>()
+                .HasIndex(p => new { p.RoomId, p.ApplicationUserId })
+                .IsUnique();
+
+            modelBuilder.Entity<RoomJoinUserPermission>()
+                .HasOne(p => p.Room)
+                .WithMany(r => r.JoinUserPermissions)
+                .HasForeignKey(p => p.RoomId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<RoomJoinUserPermission>()
+                .HasOne(p => p.ApplicationUser)
+                .WithMany()
+                .HasForeignKey(p => p.ApplicationUserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<RoomJoinRolePermission>()
+                .HasIndex(p => new { p.RoomId, p.RoleId })
+                .IsUnique();
+
+            modelBuilder.Entity<RoomJoinRolePermission>()
+                .HasOne(p => p.Room)
+                .WithMany(r => r.JoinRolePermissions)
+                .HasForeignKey(p => p.RoomId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<RoomJoinRolePermission>()
+                .HasOne(p => p.Role)
+                .WithMany()
+                .HasForeignKey(p => p.RoleId)
                 .OnDelete(DeleteBehavior.Cascade);
 
             modelBuilder.Entity<Room>()
@@ -179,6 +219,9 @@ namespace TreeTopic
                 .HasForeignKey(m => m.ReplyId)
                 .OnDelete(DeleteBehavior.SetNull);
 
+            modelBuilder.Entity<Message>()
+                .HasIndex(m => new { m.TopicId, m.CreatedAt, m.Id });
+
             // RoomUser リレーション
             modelBuilder.Entity<RoomUser>()
                 .HasOne(ru => ru.ApplicationUser)
@@ -192,11 +235,22 @@ namespace TreeTopic
                 .HasForeignKey(rp => rp.RoomUserId)
                 .OnDelete(DeleteBehavior.Cascade);
 
-            modelBuilder.Entity<RoomUser>()
-                .HasOne(ru => ru.RoomRole)
-                .WithMany(rr => rr.RoomUsers)
-                .HasForeignKey(ru => ru.RoomRoleId)
-                .OnDelete(DeleteBehavior.SetNull);
+            // RoomUserRoomRole 多対多リレーション
+            modelBuilder.Entity<RoomUserRoomRole>()
+                .HasIndex(rur => new { rur.RoomUserId, rur.RoomRoleId })
+                .IsUnique();
+
+            modelBuilder.Entity<RoomUserRoomRole>()
+                .HasOne(rur => rur.RoomUser)
+                .WithMany(ru => ru.RoomUserRoomRoles)
+                .HasForeignKey(rur => rur.RoomUserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<RoomUserRoomRole>()
+                .HasOne(rur => rur.RoomRole)
+                .WithMany(rr => rr.RoomUserRoomRoles)
+                .HasForeignKey(rur => rur.RoomRoleId)
+                .OnDelete(DeleteBehavior.Cascade);
 
             // RoomRole リレーション
             modelBuilder.Entity<RoomRole>()

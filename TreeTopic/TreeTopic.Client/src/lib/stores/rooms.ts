@@ -23,6 +23,7 @@ export interface Room {
   id: string;
   name: string;
   description?: string;
+  joinPolicy?: number;
   avatar?: string;
   createdAt: Date;
   updatedAt: Date;
@@ -34,10 +35,12 @@ export interface Room {
   settings?: {
     isPublic?: boolean;
     allowGuestAccess?: boolean;
-    [key: string]: any;
+    [key: string]: unknown;
   };
   canEdit?: boolean;
   canDelete?: boolean;
+  canJoin?: boolean;
+  isJoined?: boolean;
 }
 
 /**

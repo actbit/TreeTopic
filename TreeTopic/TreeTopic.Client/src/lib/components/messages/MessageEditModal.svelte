@@ -60,7 +60,7 @@
       const trimmedSubject = subject.trim();
       const trimmedContent = content.trim();
 
-      await api.put(`/${tenant}/api/Message/${messageId}`, {
+      await api.put(`/${tenant}/api/message/${messageId}`, {
         header: trimmedSubject || undefined,
         body: trimmedContent,
       });

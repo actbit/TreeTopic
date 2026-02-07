@@ -11,17 +11,19 @@
   const modalId = 'image-editor';
   let modal = $derived.by(() => $activeModals.find((m) => m.id === modalId) ?? null);
   let isOpen = $derived.by(() => modal !== null);
-  let fileUrl = $derived.by(() => modal?.data?.fileUrl ?? null);
-  let fileName = $derived.by(() => modal?.data?.fileName ?? 'Image');
+  let fileUrl = $derived.by(() => (modal?.data?.fileUrl ?? null) as string | null);
+  let fileName = $derived.by(() => (modal?.data?.fileName ?? 'Image') as string);
 
   let canvasElement: HTMLCanvasElement | null = $state(null);
   let canvas: fabric.Canvas | null = $state(null);
+  let backgroundImageObject: fabric.Image | null = $state(null);
   let selectedColor = $state('#4A90E2'); // Blue
   let markerSize = $state(50);
   let isLoading = $state(false);
   let error = $state<string | null>(null);
-  let history = $state<any[]>([]);
+  let history = $state<string[]>([]);
   let historyIndex = $state(-1);
+  let isRestoring = $state(false);
 
   const colors = [
     { name: 'Blue', value: '#4A90E2' },
@@ -64,6 +66,12 @@
         height: 600,
         backgroundColor: '#ffffff',
       });
+      canvas.on('object:modified', () => {
+        if (!isRestoring) saveState();
+      });
+      canvas.on('object:removed', () => {
+        if (!isRestoring) saveState();
+      });
 
       resetHistory();
       await loadBackgroundImage();
@@ -76,6 +84,7 @@
 
   async function loadBackgroundImage() {
     if (!canvas) return;
+    backgroundImageObject = null;
 
     if (!fileUrl) {
       canvas.renderAll();
@@ -101,6 +110,7 @@
         selectable: false,
         evented: false,
       });
+      backgroundImageObject = img;
       canvas.sendObjectToBack(img);
       canvas.renderAll();
       saveState();
@@ -138,7 +148,6 @@
     if (activeObj) {
       canvas.remove(activeObj);
       canvas.renderAll();
-      saveState();
     }
   }
 
@@ -147,7 +156,7 @@
 
     historyIndex++;
     history = history.slice(0, historyIndex);
-    history.push(canvas.toJSON());
+    history.push(JSON.stringify(canvas.toJSON()));
   }
 
   function undo() {
@@ -155,8 +164,13 @@
       historyIndex--;
       const currentCanvas = canvas;
       const snapshot = history[historyIndex];
+      isRestoring = true;
       currentCanvas.loadFromJSON(snapshot, () => {
+        backgroundImageObject =
+          (currentCanvas.getObjects().find((obj) => !obj.evented && !obj.selectable) as fabric.Image | undefined) ??
+          null;
         currentCanvas.renderAll();
+        isRestoring = false;
       });
     }
   }
@@ -166,8 +180,13 @@
       historyIndex++;
       const currentCanvas = canvas;
       const snapshot = history[historyIndex];
+      isRestoring = true;
       currentCanvas.loadFromJSON(snapshot, () => {
+        backgroundImageObject =
+          (currentCanvas.getObjects().find((obj) => !obj.evented && !obj.selectable) as fabric.Image | undefined) ??
+          null;
         currentCanvas.renderAll();
+        isRestoring = false;
       });
     }
   }
@@ -208,7 +227,8 @@
       const blob = await response.blob();
 
       // Create file
-      const file = new File([blob], `edited_${fileName}`, { type: 'image/png' });
+      const baseName = fileName.replace(/\.[^.]+$/, '');
+      const file = new File([blob], `edited_${baseName}.png`, { type: 'image/png' });
 
       // Upload
       const tenant = api.getCurrentTenant() || $page.params.tenant || 'default';
@@ -252,9 +272,6 @@
           uploadedByName:
             uploadResponse.uploadedByName ?? uploadResponse.UploadedByName ?? '',
           versions: [],
-          isArchived: uploadResponse.isArchived ?? uploadResponse.IsArchived ?? false,
-          tags: uploadResponse.tags ?? uploadResponse.Tags ?? [],
-          description: uploadResponse.description ?? uploadResponse.Description ?? '',
         });
       }
 
@@ -286,6 +303,9 @@
     const pointerPoint = new fabric.Point(pointer.x, pointer.y);
 
     const clickedObject = objects.find((obj: fabric.Object) => {
+      if (obj === backgroundImageObject) {
+        return false;
+      }
       if (obj.containsPoint) {
         if (obj.containsPoint(pointerPoint)) {
           return true;

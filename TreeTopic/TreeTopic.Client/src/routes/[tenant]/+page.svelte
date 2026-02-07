@@ -7,11 +7,12 @@
   import { ui } from '$lib/stores/ui';
   import RoomCreateModal from '$lib/components/rooms/RoomCreateModal.svelte';
   import { api, getCurrentTenant } from '$lib/api/client';
+  import type { RawRoom } from '$lib/types/signalr';
 
   let isLoading = $state(true);
   let loadError = $state<string | null>(null);
 
-  function normalizeRoom(raw: any) {
+  function normalizeRoom(raw: RawRoom) {
     const id = raw?.id ?? raw?.Id ?? '';
     const name = raw?.name ?? raw?.Name ?? '';
     const createdAt = raw?.createdAt ?? raw?.CreatedAt ?? null;
@@ -22,12 +23,14 @@
       name,
       description: raw?.description ?? raw?.Description,
       avatar: raw?.avatar ?? raw?.Avatar,
-      createdAt: createdAt ? new Date(createdAt) : new Date(),
-      updatedAt: updatedAt ? new Date(updatedAt) : new Date(),
+      createdAt: createdAt ? new Date(createdAt as string) : new Date(),
+      updatedAt: updatedAt ? new Date(updatedAt as string) : new Date(),
       ownerId: raw?.ownerId ?? raw?.OwnerId ?? raw?.createdUserId ?? raw?.CreatedUserId ?? '',
       memberCount: raw?.memberCount ?? raw?.MemberCount ?? 0,
       unreadCount: raw?.unreadCount ?? raw?.UnreadCount ?? 0,
       isArchived: raw?.isArchived ?? raw?.IsArchived ?? false,
+      canJoin: (raw?.canJoin ?? raw?.CanJoin ?? true) as boolean,
+      isJoined: (raw?.isJoined ?? raw?.IsJoined ?? false) as boolean,
       settings: raw?.settings ?? raw?.Settings,
     };
   }
@@ -44,7 +47,7 @@
       }
       await auth.fetchCurrentUser(tenant);
 
-      const response = await api.get<any[]>(`/${tenant}/api/Room`);
+      const response = await api.get<RawRoom[]>(`/${tenant}/api/Room`);
       const rooms = Array.isArray(response) ? response.map(normalizeRoom) : [];
       setRooms(rooms);
     } catch (error) {
@@ -52,9 +55,9 @@
       if (
         resolvedTenant &&
         error instanceof api.ApiError &&
-        (error.status === 401 || error.status === 403)
+        error.status === 401
       ) {
-        auth.logout();
+        await auth.logout(resolvedTenant);
         redirectToTenantLogin(resolvedTenant);
         return;
       }
@@ -72,6 +75,7 @@
     const tenant = $page.params.tenant ?? getCurrentTenant();
     if (!tenant) return;
     const room = $roomList.find((r) => r.id === roomId);
+    if (room?.canJoin === false) return;
     if (room) {
       setCurrentRoom(room);
     }
@@ -131,13 +135,18 @@
             {#each $roomList as room (room.id)}
               <button
                 class="list-item clickable hoverable w-full text-left"
+                class:disabled={room.canJoin === false}
                 onclick={() => enterRoom(room.id)}
+                disabled={room.canJoin === false}
               >
                 <div class="flex items-center justify-between">
                   <div class="min-w-0">
                     <div class="text-bold text-base">{room.name}</div>
                     {#if room.description}
                       <div class="text-small text-light truncate">{room.description}</div>
+                    {/if}
+                    {#if room.canJoin === false}
+                      <div class="text-small text-light">You cannot join this room</div>
                     {/if}
                   </div>
                   {#if room.unreadCount > 0}

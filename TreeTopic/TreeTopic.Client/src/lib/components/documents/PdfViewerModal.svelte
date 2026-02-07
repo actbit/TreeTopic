@@ -18,8 +18,8 @@
   const modalId = 'pdf-viewer';
   let modal = $derived.by(() => $activeModals.find((m) => m.id === modalId) ?? null);
   let isOpen = $derived.by(() => modal !== null);
-  let fileUrl = $derived.by(() => modal?.data?.fileUrl ?? null);
-  let fileName = $derived.by(() => modal?.data?.fileName ?? 'Document');
+  let fileUrl = $derived.by(() => (modal?.data?.fileUrl ?? null) as string | null);
+  let fileName = $derived.by(() => (modal?.data?.fileName ?? 'Document') as string);
 
   let canvasElement: HTMLCanvasElement | null = $state(null);
   let pdfDocument: PDFDocumentProxy | null = $state(null);
@@ -195,9 +195,6 @@
           uploadedByName:
             uploadResponse.uploadedByName ?? uploadResponse.UploadedByName ?? '',
           versions: [],
-          isArchived: uploadResponse.isArchived ?? uploadResponse.IsArchived ?? false,
-          tags: uploadResponse.tags ?? uploadResponse.Tags ?? [],
-          description: uploadResponse.description ?? uploadResponse.Description ?? '',
         });
       }
     } catch (err) {

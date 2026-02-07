@@ -13,7 +13,7 @@ export interface Tenant {
     theme?: 'light' | 'dark' | 'auto';
     language?: string;
     timezone?: string;
-    [key: string]: any;
+    [key: string]: unknown;
   };
 }
 

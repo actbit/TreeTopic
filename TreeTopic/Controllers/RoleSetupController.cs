@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using TreeTopic.Common;
 using TreeTopic.Dtos;
+using TreeTopic.Helpers;
 using TreeTopic.Models;
 using TreeTopic.Services;
 
@@ -8,6 +9,7 @@ namespace TreeTopic.Controllers;
 
 [ApiController]
 [Route("{tenant}/api/setup/[controller]")]
+[RequireSetupToken]
 public class RoleSetupController : ControllerBase
 {
     private readonly RoleManagementService _roleManagementService;
@@ -15,6 +17,30 @@ public class RoleSetupController : ControllerBase
     public RoleSetupController(RoleManagementService roleManagementService)
     {
         _roleManagementService = roleManagementService;
+    }
+
+    [HttpGet]
+    public async Task<ActionResult<IEnumerable<RoleDto>>> GetRoles(string tenant)
+    {
+        var result = await _roleManagementService.GetAllRolesAsync(tenant);
+
+        if (result.IsFailure)
+        {
+            return result.ToActionResult(r => r.Select(MapRoleToDto));
+        }
+
+        var roles = result.Data!;
+        return Ok(roles.Select(MapRoleToDto));
+    }
+
+    private static RoleDto MapRoleToDto(ApplicationRole role)
+    {
+        return new RoleDto
+        {
+            Id = role.Id,
+            Name = role.Name,
+            Permissions = role.Authorities?.Select(a => a.Name).ToList() ?? new List<string>()
+        };
     }
 
     [HttpPost("create")]
@@ -29,19 +55,22 @@ public class RoleSetupController : ControllerBase
 
         if (result.IsFailure)
         {
-            return result.ToActionResult(r => new RoleDto { Id = r.Id, Name = r.Name });
+            return result.ToActionResult(r => MapRoleToDto(r));
         }
 
         var role = result.Data!;
-        return Ok(new RoleDto { Id = role.Id, Name = role.Name });
+        return Ok(MapRoleToDto(role));
     }
 
     [HttpDelete("{roleName}")]
-    public async Task<IActionResult> DeleteRole(string tenant, string roleName, [FromBody] SetupTokenRequest request)
+    public async Task<IActionResult> DeleteRole(string tenant, string roleName)
     {
+        // 属性で検証済みのSetupTokenを取得
+        var setupToken = HttpContext.Items["ValidatedSetupToken"]?.ToString();
+
         var deletionRequest = new SetupRoleDeletionRequest
         {
-            SetupToken = request.SetupToken,
+            SetupToken = setupToken!,
             RoleName = roleName
         };
 
@@ -62,6 +91,10 @@ public class RoleSetupController : ControllerBase
         {
             return ValidationProblem(ModelState);
         }
+
+        // 属性で検証済みのSetupTokenを取得
+        var setupToken = HttpContext.Items["ValidatedSetupToken"]?.ToString();
+        request.SetupToken = setupToken!;
 
         var result = await _roleManagementService.AddPermissionToRoleAsync(tenant, request);
 
@@ -90,6 +123,15 @@ public class RoleSetupController : ControllerBase
     [HttpPost("permissions/delete")]
     public async Task<IActionResult> DeletePermission(string tenant, [FromBody] SetupPermissionDeletionRequest request)
     {
+        if (!ModelState.IsValid)
+        {
+            return ValidationProblem(ModelState);
+        }
+
+        // 属性で検証済みのSetupTokenを取得
+        var setupToken = HttpContext.Items["ValidatedSetupToken"]?.ToString();
+        request.SetupToken = setupToken!;
+
         var result = await _roleManagementService.DeletePermissionFromRoleAsync(tenant, request);
 
         if (result.IsFailure)
@@ -107,6 +149,10 @@ public class RoleSetupController : ControllerBase
         {
             return ValidationProblem(ModelState);
         }
+
+        // 属性で検証済みのSetupTokenを取得
+        var setupToken = HttpContext.Items["ValidatedSetupToken"]?.ToString();
+        request.SetupToken = setupToken!;
 
         var result = await _roleManagementService.SetupDefaultRoleAsync(tenant, request);
 

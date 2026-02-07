@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.SignalR;
 using Microsoft.AspNetCore.Routing;
 using TreeTopic.Dtos;
 using TreeTopic.Models;
+using TreeTopic.Services;
 
 namespace TreeTopic.Hubs;
 
@@ -21,43 +22,96 @@ public interface IRoomTopicHubClient
 public class RoomTopicHub : Hub<IRoomTopicHubClient>
 {
     private readonly IMultiTenantContextAccessor<ApplicationTenantInfo> _tenantAccessor;
+    private readonly IRealtimeAccessService _realtimeAccessService;
+    private readonly ILogger<RoomTopicHub> _logger;
 
-    public RoomTopicHub(IMultiTenantContextAccessor<ApplicationTenantInfo> tenantAccessor)
+    public RoomTopicHub(
+        IMultiTenantContextAccessor<ApplicationTenantInfo> tenantAccessor,
+        IRealtimeAccessService realtimeAccessService,
+        ILogger<RoomTopicHub> logger)
     {
         _tenantAccessor = tenantAccessor;
+        _realtimeAccessService = realtimeAccessService;
+        _logger = logger;
     }
 
-    public Task JoinTenant(string tenantId)
+    public async Task JoinTenant(string tenantId)
     {
-        if (string.IsNullOrWhiteSpace(tenantId))
-            return Task.CompletedTask;
+        try
+        {
+            if (string.IsNullOrWhiteSpace(tenantId))
+                return;
 
-        var groupName = RoomTopicHubGroups.Tenant(tenantId);
-        var logger = Context.GetHttpContext()?.RequestServices.GetService<ILogger<RoomTopicHub>>();
-        logger?.LogInformation("[RoomTopicHub] JoinTenant connection={ConnectionId} tenant={Tenant} group={Group}", Context.ConnectionId, tenantId, groupName);
-        return Groups.AddToGroupAsync(Context.ConnectionId, groupName);
+            var routeTenant = Context.GetHttpContext()?.GetRouteValue("tenant")?.ToString();
+            if (!string.IsNullOrWhiteSpace(routeTenant) &&
+                !string.Equals(routeTenant, tenantId, StringComparison.OrdinalIgnoreCase))
+            {
+                _logger.LogWarning("[RoomTopicHub] JoinTenant denied by tenant mismatch connection={ConnectionId} routeTenant={RouteTenant} requestedTenant={RequestedTenant}",
+                    Context.ConnectionId, routeTenant, tenantId);
+                return;
+            }
+
+            var groupName = RoomTopicHubGroups.Tenant(tenantId);
+            var httpContext = Context.GetHttpContext();
+            if (httpContext != null)
+            {
+                _logger.LogInformation("[RoomTopicHub] JoinTenant connection={ConnectionId} tenant={Tenant} group={Group}", Context.ConnectionId, tenantId, groupName);
+            }
+            await Groups.AddToGroupAsync(Context.ConnectionId, groupName);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[RoomTopicHub] Error in JoinTenant: {Message}", ex.Message);
+        }
     }
 
-    public Task JoinRoom(string roomId)
+    public async Task JoinRoom(string roomId)
     {
-        if (string.IsNullOrWhiteSpace(roomId))
-            return Task.CompletedTask;
+        try
+        {
+            if (string.IsNullOrWhiteSpace(roomId))
+                return;
 
-        var groupName = RoomTopicHubGroups.Room(roomId);
-        var logger = Context.GetHttpContext()?.RequestServices.GetService<ILogger<RoomTopicHub>>();
-        logger?.LogInformation("[RoomTopicHub] JoinRoom connection={ConnectionId} room={Room} group={Group}", Context.ConnectionId, roomId, groupName);
-        return Groups.AddToGroupAsync(Context.ConnectionId, groupName);
+            if (!await _realtimeAccessService.CanJoinRoomAsync(roomId, Context.User, Context.ConnectionAborted))
+            {
+                _logger.LogWarning("[RoomTopicHub] JoinRoom denied connection={ConnectionId} room={RoomId} user={UserId}",
+                    Context.ConnectionId, roomId, Context.UserIdentifier);
+                return;
+            }
+
+            var groupName = RoomTopicHubGroups.Room(roomId);
+            var httpContext = Context.GetHttpContext();
+            if (httpContext != null)
+            {
+                _logger.LogInformation("[RoomTopicHub] JoinRoom connection={ConnectionId} room={Room} group={Group}", Context.ConnectionId, roomId, groupName);
+            }
+            await Groups.AddToGroupAsync(Context.ConnectionId, groupName);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[RoomTopicHub] Error in JoinRoom: {Message}", ex.Message);
+        }
     }
 
-    public Task LeaveRoom(string roomId)
+    public async Task LeaveRoom(string roomId)
     {
-        if (string.IsNullOrWhiteSpace(roomId))
-            return Task.CompletedTask;
+        try
+        {
+            if (string.IsNullOrWhiteSpace(roomId))
+                return;
 
-        var groupName = RoomTopicHubGroups.Room(roomId);
-        var logger = Context.GetHttpContext()?.RequestServices.GetService<ILogger<RoomTopicHub>>();
-        logger?.LogInformation("[RoomTopicHub] LeaveRoom connection={ConnectionId} room={Room} group={Group}", Context.ConnectionId, roomId, groupName);
-        return Groups.RemoveFromGroupAsync(Context.ConnectionId, groupName);
+            var groupName = RoomTopicHubGroups.Room(roomId);
+            var httpContext = Context.GetHttpContext();
+            if (httpContext != null)
+            {
+                _logger.LogInformation("[RoomTopicHub] LeaveRoom connection={ConnectionId} room={Room} group={Group}", Context.ConnectionId, roomId, groupName);
+            }
+            await Groups.RemoveFromGroupAsync(Context.ConnectionId, groupName);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[RoomTopicHub] Error in LeaveRoom: {Message}", ex.Message);
+        }
     }
 
     private string ResolveTenantKey()
@@ -69,5 +123,23 @@ public class RoomTopicHub : Hub<IRoomTopicHubClient>
         }
 
         return RoomTopicHubGroups.ResolveTenantKey(_tenantAccessor.MultiTenantContext?.TenantInfo);
+    }
+
+    public override async Task OnDisconnectedAsync(Exception? exception)
+    {
+        try
+        {
+            _logger.LogInformation("[RoomTopicHub] Client disconnected: {ConnectionId}, Exception: {Exception}",
+                Context.ConnectionId, exception?.Message ?? "None");
+
+            // Note: Groups are automatically cleaned up by SignalR when a connection closes
+            // No manual cleanup needed unless using custom group management
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[RoomTopicHub] Error in OnDisconnectedAsync: {Message}", ex.Message);
+        }
+
+        await base.OnDisconnectedAsync(exception);
     }
 }

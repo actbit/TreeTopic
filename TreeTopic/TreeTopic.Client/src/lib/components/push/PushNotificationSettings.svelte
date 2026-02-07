@@ -13,13 +13,19 @@
     subscription: null
   });
 
-  // Subscribe to push store changes
-  push.subscribe((state) => {
-    pushState = state;
-  });
+  onMount(() => {
+    let unsubscribe: (() => void) | undefined;
 
-  onMount(async () => {
-    await push.init();
+    (async () => {
+      await push.init();
+
+      // Subscribe to push store changes
+      unsubscribe = push.subscribe((state) => {
+        pushState = state;
+      });
+    })();
+
+    return () => unsubscribe?.();
   });
 
   async function handleSubscribe() {

@@ -17,7 +17,7 @@ public class SelectiveRateLimitMiddleware
     {
         _next = next;
         _logger = logger;
-        _rateLimitEndpoint = configuration.GetValue<string>("RateLimit:TenantRegisterEndpoint", "/api/tenant/register") ?? "/api/tenant/register";
+        _rateLimitEndpoint = configuration.GetValue<string>("RateLimit:TenantRegisterEndpoint", "/api/tenants/register") ?? "/api/tenants/register";
         _maxRequestsPerHour = configuration.GetValue<int>("RateLimit:MaxRequestsPerHour", 10);
     }
 

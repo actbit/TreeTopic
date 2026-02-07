@@ -1,6 +1,5 @@
 <script lang="ts">
   import MessageList from './MessageList.svelte';
-  import TimelineView from './TimelineView.svelte';
   import UserView from './UserView.svelte';
   import DocumentView from './DocumentView.svelte';
   import ImageView from './ImageView.svelte';
@@ -16,8 +15,6 @@
 <div class="messages-view">
   {#if currentMode === 'default'}
     <MessageList />
-  {:else if currentMode === 'timeline'}
-    <TimelineView />
   {:else if currentMode === 'user'}
     <UserView />
   {:else if currentMode === 'document'}
@@ -28,7 +25,7 @@
     <SearchView />
   {:else if currentMode === 'topic'}
     <TopicView />
-{:else}
+  {:else}
     <MessageList />
   {/if}
 </div>

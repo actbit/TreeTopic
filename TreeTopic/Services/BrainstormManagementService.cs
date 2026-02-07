@@ -66,11 +66,11 @@ public class BrainstormManagementService : BaseService, IBrainstormManagementSer
                 .Include(b => b.Topic)
                 .Include(b => b.BrainIdeas)
                 .ThenInclude(i => i.RoomUser)
-                .ThenInclude(ru => ru.ApplicationUser)
+                .ThenInclude(ru => ru.ApplicationUser!)
                 .Include(b => b.BrainIdeas)
                 .ThenInclude(i => i.Votes)
                 .ThenInclude(v => v.RoomUser)
-                .ThenInclude(ru => ru.ApplicationUser)
+                .ThenInclude(ru => ru.ApplicationUser!)
                 .ToListAsync(cancellationToken);
 
             var dtos = boards.Select(MapBoardToDto).ToList();
@@ -87,11 +87,11 @@ public class BrainstormManagementService : BaseService, IBrainstormManagementSer
                 .Include(b => b.Topic)
                 .Include(b => b.BrainIdeas)
                 .ThenInclude(i => i.RoomUser)
-                .ThenInclude(ru => ru.ApplicationUser)
+                .ThenInclude(ru => ru.ApplicationUser!)
                 .Include(b => b.BrainIdeas)
                 .ThenInclude(i => i.Votes)
                 .ThenInclude(v => v.RoomUser)
-                .ThenInclude(ru => ru.ApplicationUser)
+                .ThenInclude(ru => ru.ApplicationUser!)
                 .FirstOrDefaultAsync(cancellationToken);
 
             if (board == null)
@@ -165,11 +165,11 @@ public class BrainstormManagementService : BaseService, IBrainstormManagementSer
         {
             var ideas = await _ideaRepository.Query()
                 .Where(i => i.BrainBoardId == boardId)
-                .Include(i => i.RoomUser)
-                .ThenInclude(ru => ru.ApplicationUser)
-                .Include(i => i.Votes)
-                .ThenInclude(v => v.RoomUser)
-                .ThenInclude(ru => ru.ApplicationUser)
+                .Include(i => i.RoomUser!)
+                .ThenInclude(ru => ru.ApplicationUser!)
+                .Include(i => i.Votes!)
+                .ThenInclude(v => v.RoomUser!)
+                .ThenInclude(ru => ru.ApplicationUser!)
                 .ToListAsync(cancellationToken);
 
             var dtos = ideas.Select(MapIdeaToDto).ToList();
@@ -184,10 +184,10 @@ public class BrainstormManagementService : BaseService, IBrainstormManagementSer
             var idea = await _ideaRepository.Query()
                 .Where(i => i.Id == ideaId)
                 .Include(i => i.RoomUser)
-                .ThenInclude(ru => ru.ApplicationUser)
+                .ThenInclude(ru => ru.ApplicationUser!)
                 .Include(i => i.Votes)
                 .ThenInclude(v => v.RoomUser)
-                .ThenInclude(ru => ru.ApplicationUser)
+                .ThenInclude(ru => ru.ApplicationUser!)
                 .FirstOrDefaultAsync(cancellationToken);
 
             if (idea == null)

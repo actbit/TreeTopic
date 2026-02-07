@@ -4,7 +4,7 @@
 
   interface Props {
     onMenuToggle?: () => void;
-    children?: any;
+    children?: Snippet;
   }
 
   let { onMenuToggle, children }: Props = $props();

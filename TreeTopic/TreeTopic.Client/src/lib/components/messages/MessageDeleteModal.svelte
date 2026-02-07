@@ -34,7 +34,7 @@
     isLoading = true;
     try {
       const tenant = api.getCurrentTenant();
-      await api.delete(`/${tenant}/api/Message/${messageId}`);
+      await api.delete(`/${tenant}/api/message/${messageId}`);
       deleteMessage(messageId);
       ui.closeModal(modalId);
     } catch (err: unknown) {

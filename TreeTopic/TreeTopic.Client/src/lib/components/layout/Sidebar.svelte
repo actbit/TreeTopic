@@ -1,8 +1,9 @@
 <script lang="ts">
   import { sidebarCollapsed, responsiveLayout } from '$lib/stores/ui';
+  import type { Snippet } from 'svelte';
 
   interface Props {
-    children?: any;
+    children?: Snippet;
   }
 
   let { children }: Props = $props();
