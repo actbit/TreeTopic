@@ -108,7 +108,7 @@ public class TopicPermissionsController : BaseController
 
         return result.Error?.Type == ErrorType.Conflict
             ? Conflict(new { message = "Permission already assigned" })
-            : result.ToActionResult();
+            : result.ToApiResult();
     }
 
     /// <summary>

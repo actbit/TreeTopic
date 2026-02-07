@@ -61,8 +61,8 @@ public class ShareController : ControllerBase
         return Path.Combine(webRoot, "uploads", tenant, "share", shareItemId.ToString());
     }
 
-    private string BuildShareFileUrl(string tenant, Guid shareItemId, string savedFileName)
-        => $"/{tenant}/api/share/download/{shareItemId}/{savedFileName}".Replace("\\", "/");
+    private string BuildShareFileUrl(string tenant, Guid roomId, Guid shareItemId, string savedFileName)
+        => $"/{tenant}/api/share/room/{roomId}/download/{shareItemId}/{savedFileName}".Replace("\\", "/");
 
     private string BuildBrainstormUrl(string tenant, Guid boardId)
     {
@@ -286,7 +286,7 @@ public class ShareController : ControllerBase
                     size = 0;
                 }
 
-                var url = BuildShareFileUrl(tenant, share.Id, file.SaveFileName);
+                var url = BuildShareFileUrl(tenant, share.RoomId, share.Id, file.SaveFileName);
                 return ToDto(share, tenant, (file, url, size));
             }
 
@@ -459,7 +459,7 @@ public class ShareController : ControllerBase
 
         await _db.SaveChangesAsync(cancellationToken);
 
-        var url = BuildShareFileUrl(tenant, targetShare.Id, fileEntity.SaveFileName);
+        var url = BuildShareFileUrl(tenant, targetShare.RoomId, targetShare.Id, fileEntity.SaveFileName);
         var dto = ToDto(targetShare, tenant, (fileEntity, url, file.Length));
         return Ok(dto);
     }
@@ -530,18 +530,22 @@ public class ShareController : ControllerBase
     /// 認可付き共有ファイルダウンロードエンドポイント
     /// /uploads 静的配信の代わりに使用
     /// </summary>
-    [HttpGet("download/{shareId}/{fileName}")]
+    [HttpGet("room/{roomId}/download/{shareId}/{fileName}")]
     [RequireAny(RoomPermissions.Join, TenantPermissions.RoomRead)]
     public async Task<IActionResult> DownloadShareFile(
+        [FromRoute] MaskedGuid roomId,
         [FromRoute] MaskedGuid shareId,
         [FromRoute] string fileName,
         CancellationToken cancellationToken)
     {
+        var roomGuid = (Guid)roomId;
         var shareGuid = (Guid)shareId;
         var share = await _db.ShareItems
             .AsNoTracking()
             .FirstOrDefaultAsync(s => s.Id == shareGuid, cancellationToken);
         if (share == null)
+            return NotFound(new { message = "Share not found." });
+        if (share.RoomId != roomGuid)
             return NotFound(new { message = "Share not found." });
 
         var safeFileName = Path.GetFileName(fileName);

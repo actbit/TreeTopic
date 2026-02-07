@@ -1,7 +1,9 @@
 using MaskedUUID.AspNetCore.Types;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.Security.Claims;
 using TreeTopic.Common;
 using TreeTopic.Dtos;
 using TreeTopic.Filters;
@@ -20,10 +22,12 @@ namespace TreeTopic.Controllers;
 public class RoomPermissionsController : BaseController
 {
     private readonly IRoomPermissionsService _service;
+    private readonly ApplicationDbContext _db;
 
-    public RoomPermissionsController(IRoomPermissionsService service)
+    public RoomPermissionsController(IRoomPermissionsService service, ApplicationDbContext db)
     {
         _service = service;
+        _db = db;
     }
 
     /// <summary>
@@ -46,6 +50,24 @@ public class RoomPermissionsController : BaseController
         [FromRoute] string roleName,
         CancellationToken cancellationToken)
     {
+        if (!await RoomExistsAsync((Guid)roomId, cancellationToken))
+        {
+            return NotFound(new { message = "Room not found" });
+        }
+
+        var role = await _db.RoomRoles
+            .AsNoTracking()
+            .FirstOrDefaultAsync(r => r.Name == roleName, cancellationToken);
+        if (role == null)
+        {
+            return NotFound(new { message = $"RoomRole '{roleName}' not found" });
+        }
+
+        if (!await CanManageRoleScopeAsync((Guid)roomId, role.Id, cancellationToken))
+        {
+            return Forbid();
+        }
+
         var result = await _service.GetRolePermissionsAsync(roleName, cancellationToken);
         if (result.IsSuccess)
         {
@@ -65,6 +87,24 @@ public class RoomPermissionsController : BaseController
         [FromBody] AddRoomPermissionRequest request,
         CancellationToken cancellationToken)
     {
+        if (!await RoomExistsAsync((Guid)roomId, cancellationToken))
+        {
+            return NotFound(new { message = "Room not found" });
+        }
+
+        var role = await _db.RoomRoles
+            .AsNoTracking()
+            .FirstOrDefaultAsync(r => r.Name == roleName, cancellationToken);
+        if (role == null)
+        {
+            return NotFound(new { message = $"RoomRole '{roleName}' not found" });
+        }
+
+        if (!await CanManageRoleScopeAsync((Guid)roomId, role.Id, cancellationToken))
+        {
+            return Forbid();
+        }
+
         // Validate permission name
         var validRoomPermissions = Permissions.PermissionHelper.GetRoomPermissions();
         if (!validRoomPermissions.Contains(request.PermissionName))
@@ -81,7 +121,7 @@ public class RoomPermissionsController : BaseController
 
         return result.Error?.Type == ErrorType.Conflict
             ? Conflict(new { message = "Permission already assigned" })
-            : result.ToActionResult();
+            : result.ToApiResult();
     }
 
     /// <summary>
@@ -95,6 +135,24 @@ public class RoomPermissionsController : BaseController
         [FromRoute] string permissionName,
         CancellationToken cancellationToken)
     {
+        if (!await RoomExistsAsync((Guid)roomId, cancellationToken))
+        {
+            return NotFound(new { message = "Room not found" });
+        }
+
+        var role = await _db.RoomRoles
+            .AsNoTracking()
+            .FirstOrDefaultAsync(r => r.Name == roleName, cancellationToken);
+        if (role == null)
+        {
+            return NotFound(new { message = $"RoomRole '{roleName}' not found" });
+        }
+
+        if (!await CanManageRoleScopeAsync((Guid)roomId, role.Id, cancellationToken))
+        {
+            return Forbid();
+        }
+
         var result = await _service.RemovePermissionFromRoleAsync(roleName, permissionName, cancellationToken);
         if (result.IsSuccess)
         {
@@ -118,11 +176,100 @@ public class RoomPermissionsController : BaseController
         [FromRoute] string roleName,
         CancellationToken cancellationToken)
     {
+        if (!await RoomExistsAsync((Guid)roomId, cancellationToken))
+        {
+            return NotFound(new { message = "Room not found" });
+        }
+
+        var role = await _db.RoomRoles
+            .AsNoTracking()
+            .FirstOrDefaultAsync(r => r.Name == roleName, cancellationToken);
+        if (role == null)
+        {
+            return NotFound(new { message = $"RoomRole '{roleName}' not found" });
+        }
+
+        if (!await CanManageRoleScopeAsync((Guid)roomId, role.Id, cancellationToken))
+        {
+            return Forbid();
+        }
+
         var result = await _service.ClearRolePermissionsAsync(roleName, cancellationToken);
         if (result.IsSuccess)
         {
             return NoContent();
         }
         return NotFound(new { message = result.Error?.Message });
+    }
+
+    private Task<bool> RoomExistsAsync(Guid roomId, CancellationToken cancellationToken)
+    {
+        return _db.Rooms.AsNoTracking().AnyAsync(r => r.Id == roomId, cancellationToken);
+    }
+
+    private async Task<bool> CanManageRoleScopeAsync(Guid roomId, Guid roleId, CancellationToken cancellationToken)
+    {
+        if (!TryGetCurrentUserId(out var userId))
+        {
+            return false;
+        }
+
+        if (await HasTenantPermissionAsync(userId, TenantPermissions.RoomManage, cancellationToken))
+        {
+            return true;
+        }
+
+        var impactedRoomIds = await GetImpactedRoomIdsAsync(roleId, cancellationToken);
+        return impactedRoomIds.Count == 0 || impactedRoomIds.All(id => id == roomId);
+    }
+
+    private bool TryGetCurrentUserId(out Guid userId)
+    {
+        var userIdValue = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        return Guid.TryParse(userIdValue, out userId);
+    }
+
+    private async Task<bool> HasTenantPermissionAsync(Guid userId, string permissionName, CancellationToken cancellationToken)
+    {
+        var roleIds = await _db.Set<IdentityUserRole<Guid>>()
+            .AsNoTracking()
+            .Where(ur => ur.UserId == userId)
+            .Select(ur => ur.RoleId)
+            .ToListAsync(cancellationToken);
+
+        if (roleIds.Count == 0)
+        {
+            return false;
+        }
+
+        return await _db.Permissions
+            .AsNoTracking()
+            .AnyAsync(p => roleIds.Contains(p.RoleId) && p.Name == permissionName, cancellationToken);
+    }
+
+    private async Task<List<Guid>> GetImpactedRoomIdsAsync(Guid roleId, CancellationToken cancellationToken)
+    {
+        var roomIdsFromRoomUsers = await _db.RoomUserRoomRoles
+            .AsNoTracking()
+            .Where(rur => rur.RoomRoleId == roleId)
+            .Join(_db.RoomUsers.AsNoTracking(),
+                rur => rur.RoomUserId,
+                ru => ru.Id,
+                (_, ru) => ru.RoomId)
+            .ToListAsync(cancellationToken);
+
+        var roomIdsFromTopics = await _db.TopicRolePermissions
+            .AsNoTracking()
+            .Where(trp => trp.RoomRoleId == roleId)
+            .Join(_db.Topics.AsNoTracking(),
+                trp => trp.TopicId,
+                t => t.Id,
+                (_, t) => t.RoomId)
+            .ToListAsync(cancellationToken);
+
+        return roomIdsFromRoomUsers
+            .Concat(roomIdsFromTopics)
+            .Distinct()
+            .ToList();
     }
 }
