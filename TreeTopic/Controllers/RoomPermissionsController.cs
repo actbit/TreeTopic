@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using TreeTopic.Common;
+using TreeTopic.Dtos;
 using TreeTopic.Filters;
 using TreeTopic.Models;
 using TreeTopic.Permissions;
@@ -14,7 +15,7 @@ namespace TreeTopic.Controllers;
 /// Room権限管理
 /// </summary>
 [ApiController]
-[Route("{tenant}/api/roomroles/{roleName}/permissions")]
+[Route("{tenant}/api/rooms/{roomId}/roomroles/{roleName}/permissions")]
 [Authorize]
 public class RoomPermissionsController : BaseController
 {
@@ -41,6 +42,7 @@ public class RoomPermissionsController : BaseController
     [HttpGet]
     [RequireAny(RoomPermissions.ManageRoles, TenantPermissions.RoomManage)]
     public async Task<IActionResult> GetRolePermissions(
+        [FromRoute] MaskedGuid roomId,
         [FromRoute] string roleName,
         CancellationToken cancellationToken)
     {
@@ -58,19 +60,28 @@ public class RoomPermissionsController : BaseController
     [HttpPost]
     [RequireAny(RoomPermissions.ManageRoles, TenantPermissions.RoomManage)]
     public async Task<IActionResult> AddPermissionToRole(
+        [FromRoute] MaskedGuid roomId,
         [FromRoute] string roleName,
         [FromBody] AddRoomPermissionRequest request,
         CancellationToken cancellationToken)
     {
+        // Validate permission name
+        var validRoomPermissions = Permissions.PermissionHelper.GetRoomPermissions();
+        if (!validRoomPermissions.Contains(request.PermissionName))
+        {
+            return BadRequest(new { message = $"Invalid permission name: {request.PermissionName}. Valid permissions: {string.Join(", ", validRoomPermissions)}" });
+        }
+
         var result = await _service.AddPermissionToRoleAsync(roleName, request.PermissionName, cancellationToken);
         if (result.IsSuccess)
         {
             var permission = result.Data;
             return Ok(new { permissionId = new MaskedGuid(permission.Id), name = permission.PermissionName });
         }
-        return result.Error?.Message.Contains("already") == true
-            ? Ok(new { message = "Permission already assigned" })
-            : NotFound(new { message = result.Error?.Message });
+
+        return result.Error?.Type == ErrorType.Conflict
+            ? Conflict(new { message = "Permission already assigned" })
+            : result.ToActionResult();
     }
 
     /// <summary>
@@ -79,6 +90,7 @@ public class RoomPermissionsController : BaseController
     [HttpDelete("{permissionName}")]
     [RequireAny(RoomPermissions.ManageRoles, TenantPermissions.RoomManage)]
     public async Task<IActionResult> RemovePermissionFromRole(
+        [FromRoute] MaskedGuid roomId,
         [FromRoute] string roleName,
         [FromRoute] string permissionName,
         CancellationToken cancellationToken)
@@ -88,9 +100,12 @@ public class RoomPermissionsController : BaseController
         {
             return NoContent();
         }
-        return result.Error?.Message.Contains("not found") == true
-            ? NotFound()
-            : StatusCode(500, new { message = result.Error?.Message });
+
+        return result.Error?.Type switch
+        {
+            ErrorType.NotFound => NotFound(new { message = result.Error.Message }),
+            _ => StatusCode(500, new { message = result.Error?.Message })
+        };
     }
 
     /// <summary>
@@ -99,6 +114,7 @@ public class RoomPermissionsController : BaseController
     [HttpDelete("clear")]
     [RequireAny(RoomPermissions.ManageRoles, TenantPermissions.RoomManage)]
     public async Task<IActionResult> ClearRolePermissions(
+        [FromRoute] MaskedGuid roomId,
         [FromRoute] string roleName,
         CancellationToken cancellationToken)
     {
@@ -110,8 +126,3 @@ public class RoomPermissionsController : BaseController
         return NotFound(new { message = result.Error?.Message });
     }
 }
-
-/// <summary>
-/// Room権限割り当てリクエスト
-/// </summary>
-public record AddRoomPermissionRequest(string PermissionName);

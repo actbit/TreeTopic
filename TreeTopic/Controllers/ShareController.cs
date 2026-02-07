@@ -62,7 +62,7 @@ public class ShareController : ControllerBase
     }
 
     private string BuildShareFileUrl(string tenant, Guid shareItemId, string savedFileName)
-        => $"/uploads/{tenant}/share/{shareItemId}/{savedFileName}".Replace("\\", "/");
+        => $"/{tenant}/api/share/download/{shareItemId}/{savedFileName}".Replace("\\", "/");
 
     private string BuildBrainstormUrl(string tenant, Guid boardId)
     {
@@ -524,5 +524,44 @@ public class ShareController : ControllerBase
         }
 
         return NoContent();
+    }
+
+    /// <summary>
+    /// 認可付き共有ファイルダウンロードエンドポイント
+    /// /uploads 静的配信の代わりに使用
+    /// </summary>
+    [HttpGet("download/{shareId}/{fileName}")]
+    [RequireAny(RoomPermissions.Join, TenantPermissions.RoomRead)]
+    public async Task<IActionResult> DownloadShareFile(
+        [FromRoute] MaskedGuid shareId,
+        [FromRoute] string fileName,
+        CancellationToken cancellationToken)
+    {
+        var shareGuid = (Guid)shareId;
+        var share = await _db.ShareItems
+            .AsNoTracking()
+            .FirstOrDefaultAsync(s => s.Id == shareGuid, cancellationToken);
+        if (share == null)
+            return NotFound(new { message = "Share not found." });
+
+        var safeFileName = Path.GetFileName(fileName);
+        if (!string.Equals(fileName, safeFileName, StringComparison.Ordinal))
+            return BadRequest(new { message = "Invalid file name." });
+
+        var tenant = GetTenantIdentifier();
+        var shareRoot = Path.GetFullPath(GetShareItemFolder(tenant, shareGuid));
+        var filePath = Path.GetFullPath(Path.Combine(shareRoot, safeFileName));
+        if (!filePath.StartsWith(shareRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+            return BadRequest(new { message = "Invalid file path." });
+
+        if (!System.IO.File.Exists(filePath))
+            return NotFound(new { message = "File not found." });
+
+        var contentType = _contentTypeProvider.TryGetContentType(safeFileName, out var providerContentType)
+            ? providerContentType
+            : "application/octet-stream";
+
+        var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+        return File(stream, contentType);
     }
 }

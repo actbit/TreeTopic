@@ -109,6 +109,7 @@ public class TopicController : ControllerBase
     /// 現在のユーザーのトピック権限一覧を取得
     /// </summary>
     [HttpGet("{topicId}/my/permissions")]
+    [Authorize]
     public async Task<IActionResult> GetMyPermissions(
         [FromRoute] MaskedGuid topicId,
         CancellationToken cancellationToken)
@@ -180,12 +181,17 @@ public class TopicController : ControllerBase
         });
     }
 
-    [HttpPost]
-    [RequireAny(TopicPermissions.Write, TenantPermissions.TopicManage)]
-    public async Task<IActionResult> Create([FromBody] CreateTopicRequest request, CancellationToken cancellationToken)
+    [HttpPost("room/{roomId}")]
+    [RequireAny(RoomPermissions.TopicWrite, TenantPermissions.RoomManage, TenantPermissions.TopicManage)]
+    public async Task<IActionResult> Create(
+        [FromRoute] MaskedGuid roomId,
+        [FromBody] CreateTopicRequest request,
+        CancellationToken cancellationToken)
     {
         if (!ModelState.IsValid)
             return ValidationProblem(ModelState);
+
+        request.RoomId = roomId;
 
         var result = await _topicManagementService.CreateTopicAsync(request, cancellationToken);
         return result.ToApiResult();

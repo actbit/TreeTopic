@@ -2,6 +2,7 @@ using MaskedUUID.AspNetCore.Types;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using TreeTopic.Dtos;
 using TreeTopic.Filters;
 using TreeTopic.Models;
 using TreeTopic.Permissions;
@@ -85,6 +86,13 @@ public class TopicPermissionsController : BaseController
         [FromBody] AddTopicPermissionToUserRequest request,
         CancellationToken cancellationToken)
     {
+        // Validate permission name
+        var validTopicPermissions = Permissions.PermissionHelper.GetTopicPermissions();
+        if (!validTopicPermissions.Contains(request.PermissionName))
+        {
+            return BadRequest(new { message = $"Invalid permission name: {request.PermissionName}" });
+        }
+
         var topicGuid = (Guid)topicId;
         var result = await _service.AddPermissionToUserAsync(
             topicGuid,
@@ -97,9 +105,10 @@ public class TopicPermissionsController : BaseController
             var permission = result.Data;
             return Ok(new { permissionId = new MaskedGuid(permission.Id), name = permission.Name });
         }
-        return result.Error?.Message.Contains("already") == true
-            ? Ok(new { message = "Permission already assigned" })
-            : NotFound(new { message = result.Error?.Message });
+
+        return result.Error?.Type == ErrorType.Conflict
+            ? Conflict(new { message = "Permission already assigned" })
+            : result.ToActionResult();
     }
 
     /// <summary>
@@ -126,9 +135,12 @@ public class TopicPermissionsController : BaseController
         {
             return NoContent();
         }
-        return result.Error?.Message.Contains("not found") == true
-            ? NotFound()
-            : StatusCode(500, new { message = result.Error?.Message });
+
+        return result.Error?.Type switch
+        {
+            ErrorType.NotFound => NotFound(new { message = result.Error.Message }),
+            _ => StatusCode(500, new { message = result.Error?.Message })
+        };
     }
 
     /// <summary>
@@ -159,6 +171,13 @@ public class TopicPermissionsController : BaseController
         [FromBody] AddTopicRolePermissionRequest request,
         CancellationToken cancellationToken)
     {
+        // Validate permission name
+        var validTopicPermissions = Permissions.PermissionHelper.GetTopicPermissions();
+        if (!validTopicPermissions.Contains(request.PermissionName))
+        {
+            return BadRequest(new { message = $"Invalid permission name: {request.PermissionName}" });
+        }
+
         var topicGuid = (Guid)topicId;
         var result = await _service.AddTopicRolePermissionAsync(
             topicGuid,
@@ -171,9 +190,14 @@ public class TopicPermissionsController : BaseController
             var permission = result.Data;
             return Ok(new { permissionId = new MaskedGuid(permission.Id), name = permission.Name });
         }
-        return result.Error?.Message.Contains("already") == true
-            ? Ok(new { message = "Permission already assigned to RoomRole" })
-            : NotFound(new { message = result.Error?.Message });
+
+        return result.Error?.Type == ErrorType.Conflict
+            ? StatusCode(409, new { message = "Permission already assigned to RoomRole" })
+            : StatusCode(result.Error?.Type switch
+            {
+                ErrorType.NotFound => 404,
+                _ => 500
+            }, new { message = result.Error?.Message });
     }
 
     /// <summary>
@@ -199,9 +223,12 @@ public class TopicPermissionsController : BaseController
         {
             return NoContent();
         }
-        return result.Error?.Message.Contains("not found") == true
-            ? NotFound()
-            : StatusCode(500, new { message = result.Error?.Message });
+
+        return result.Error?.Type switch
+        {
+            ErrorType.NotFound => NotFound(new { message = result.Error.Message }),
+            _ => StatusCode(500, new { message = result.Error?.Message })
+        };
     }
 
     /// <summary>
@@ -242,13 +269,3 @@ public class TopicPermissionsController : BaseController
         return NotFound(new { message = result.Error?.Message });
     }
 }
-
-/// <summary>
-/// Topicユーザー権限割り当てリクエスト
-/// </summary>
-public record AddTopicPermissionToUserRequest(Guid RoomUserId, string PermissionName, bool ApplyToDescendants = false);
-
-/// <summary>
-/// TopicRolePermission割り当てリクエスト
-/// </summary>
-public record AddTopicRolePermissionRequest(string RoleName, string PermissionName, bool ApplyToDescendants = false);

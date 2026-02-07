@@ -86,7 +86,7 @@
 
     try {
       const tenant = api.getCurrentTenant();
-      const response = (await api.post(`/${tenant}/api/topic`, {
+      const response = (await api.post(`/${tenant}/api/topic/room/${$currentRoom.id}`, {
         roomId: $currentRoom.id,
         title: title.trim(),
         description: description.trim(),

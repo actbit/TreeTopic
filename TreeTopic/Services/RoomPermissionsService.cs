@@ -138,24 +138,18 @@ public class RoomPermissionsService : BaseService, IRoomPermissionsService
                 return Result.NotFound($"RoomRole '{roleName}' not found");
             }
 
-            // 現在の権限をすべて取得
-            var permissions = await _roomRoleManager.GetPermissionNamesAsync(role.Id, cancellationToken);
+            // 一括削除（全トランザクション内で実行）
+            var permissionsToDelete = await _dbContext.RoomRolePermissions
+                .Where(p => p.RoomRoleId == role.Id)
+                .ToListAsync(cancellationToken);
 
-            // 一つずつ削除（トランザクションは各削除で管理）
-            foreach (var permission in permissions)
+            if (permissionsToDelete.Count > 0)
             {
-                await PermissionHelper.RemoveWithTransactionAsync(
-                    _dbContext,
-                    _dbContext.RoomRolePermissions,
-                    async (ctx, ct) => await ctx.RoomRolePermissions
-                        .FirstOrDefaultAsync(p => p.RoomRoleId == role.Id && p.PermissionName == permission, ct),
-                    _logger,
-                    $"Permission cleared from RoomRole: {permission} -> {roleName}",
-                    $"Failed to clear permission from RoomRole: {permission} -> {roleName}",
-                    cancellationToken);
+                _dbContext.RoomRolePermissions.RemoveRange(permissionsToDelete);
+                await _dbContext.SaveChangesAsync(cancellationToken);
             }
 
-            _logger.LogInformation("All permissions cleared from RoomRole: {RoleName}", roleName);
+            _logger.LogInformation("All permissions cleared from RoomRole: {RoleName} ({Count} permissions removed)", roleName, permissionsToDelete.Count);
             return Result.Success();
         }, nameof(ClearRolePermissionsAsync));
     }

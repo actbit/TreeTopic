@@ -7,6 +7,7 @@ using Microsoft.EntityFrameworkCore;
 using MaskedUUID.AspNetCore.Types;
 using System.Security.Claims;
 using Finbuckle.MultiTenant;
+using TreeTopic.Dtos;
 using TreeTopic.Models;
 using TreeTopic.Constants;
 using TreeTopic.Services;
@@ -97,21 +98,11 @@ public class AuthController : ControllerBase
     }
 
     /// <summary>
-    /// ログアウト（GET用レガシーエンドポイント - 非推奨）
-    /// </summary>
-    [HttpGet("logout")]
-    [Authorize]
-    public IActionResult LogoutGet([FromQuery] string? returnUrl)
-    {
-        return PerformLogout(returnUrl);
-    }
-
-    /// <summary>
-    /// ログアウト（POST推奨）
+    /// ログアウト（POST必須）
     /// </summary>
     [HttpPost("logout")]
     [Authorize]
-    public IActionResult LogoutPost([FromBody] LogoutRequest? request)
+    public IActionResult Logout([FromBody] LogoutRequest? request)
     {
         return PerformLogout(request?.returnUrl);
     }
@@ -267,12 +258,4 @@ public class AuthController : ControllerBase
             permissions = userPermissions
         });
     }
-}
-
-/// <summary>
-/// ログアウトリクエスト
-/// </summary>
-public class LogoutRequest
-{
-    public string? returnUrl { get; set; }
 }

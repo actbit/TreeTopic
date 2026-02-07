@@ -2,6 +2,7 @@ using MaskedUUID.AspNetCore.Types;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using TreeTopic.Dtos;
 using TreeTopic.Filters;
 using TreeTopic.Permissions;
 using TreeTopic.Models;
@@ -23,10 +24,10 @@ public class TenantRolePermissionsController : ControllerBase
 
     public TenantRolePermissionsController(
         ApplicationDbContext db,
-        ILogger<TenantRolePermissionsController> _logger)
+        ILogger<TenantRolePermissionsController> logger)
     {
         _db = db;
-        this._logger = _logger;
+        _logger = logger;
     }
 
     /// <summary>
@@ -82,6 +83,13 @@ public class TenantRolePermissionsController : ControllerBase
         [FromBody] AddTenantPermissionRequest request,
         CancellationToken cancellationToken)
     {
+        // Validate permission name
+        var validTenantPermissions = Permissions.PermissionHelper.GetTenantPermissions();
+        if (!validTenantPermissions.Contains(request.PermissionName))
+        {
+            return BadRequest(new { message = $"Invalid permission name: {request.PermissionName}" });
+        }
+
         // ロールの存在確認
         var role = await _db.Roles
             .FirstOrDefaultAsync(r => r.Name == roleName, cancellationToken);
@@ -147,8 +155,3 @@ public class TenantRolePermissionsController : ControllerBase
         return NoContent();
     }
 }
-
-/// <summary>
-/// Tenant権限割り当てリクエスト
-/// </summary>
-public record AddTenantPermissionRequest(string PermissionName);

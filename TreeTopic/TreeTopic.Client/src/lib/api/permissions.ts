@@ -31,17 +31,17 @@ export const permissionsApi = {
 export const userPermissionsApi = {
   /**
    * 現在のユーザーのルーム権限を取得
-   * GET /{tenant}/api/room/{roomId}/my/permissions
+   * GET /{tenant}/api/Room/{roomId}/my/permissions
    */
   getMyRoomPermissions: (tenant: string, roomId: string) =>
-    api.get<RoomPermissionsResponse>(`/${tenant}/api/room/${roomId}/my/permissions`),
+    api.get<RoomPermissionsResponse>(`/${tenant}/api/Room/${roomId}/my/permissions`),
 
   /**
    * 現在のユーザーのトピック権限を取得
-   * GET /{tenant}/api/topic/{topicId}/my/permissions
+   * GET /{tenant}/api/Topic/{topicId}/my/permissions
    */
   getMyTopicPermissions: (tenant: string, topicId: string) =>
-    api.get<TopicPermissionsResponse>(`/${tenant}/api/topic/${topicId}/my/permissions`),
+    api.get<TopicPermissionsResponse>(`/${tenant}/api/Topic/${topicId}/my/permissions`),
 };
 
 /**
@@ -85,9 +85,9 @@ export const roomRolePermissionsApi = {
   /**
    * ルームロールの権限一覧を取得
    */
-  getRolePermissions: (tenant: string, roleName: string) =>
+  getRolePermissions: (tenant: string, roomId: string, roleName: string) =>
     api.get<RolePermissionsResponse>(
-      `/${tenant}/api/roomroles/${roleName}/permissions`
+      `/${tenant}/api/rooms/${roomId}/roomroles/${roleName}/permissions`
     ),
 
   /**
@@ -95,27 +95,28 @@ export const roomRolePermissionsApi = {
    */
   addPermission: (
     tenant: string,
+    roomId: string,
     roleName: string,
     request: AssignPermissionRequest
   ) =>
     api.post<{ permissionId: string; name: string }>(
-      `/${tenant}/api/roomroles/${roleName}/permissions`,
+      `/${tenant}/api/rooms/${roomId}/roomroles/${roleName}/permissions`,
       request
     ),
 
   /**
    * ルームロールから権限を削除
    */
-  removePermission: (tenant: string, roleName: string, permissionName: string) =>
+  removePermission: (tenant: string, roomId: string, roleName: string, permissionName: string) =>
     api.delete(
-      `/${tenant}/api/roomroles/${roleName}/permissions/${encodeURIComponent(permissionName)}`
+      `/${tenant}/api/rooms/${roomId}/roomroles/${roleName}/permissions/${encodeURIComponent(permissionName)}`
     ),
 
   /**
    * ルームロールの権限をすべてクリア
    */
-  clearPermissions: (tenant: string, roleName: string) =>
-    api.delete(`/${tenant}/api/roomroles/${roleName}/permissions/clear`),
+  clearPermissions: (tenant: string, roomId: string, roleName: string) =>
+    api.delete(`/${tenant}/api/rooms/${roomId}/roomroles/${roleName}/permissions/clear`),
 };
 
 /**

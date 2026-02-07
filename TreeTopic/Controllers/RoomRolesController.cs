@@ -10,7 +10,7 @@ using TreeTopic.Services;
 namespace TreeTopic.Controllers;
 
 [ApiController]
-[Route("{tenant}/api/[controller]")]
+[Route("{tenant}/api/rooms/{roomId}/[controller]")]
 public class RoomRolesController : ControllerBase
 {
     private readonly RoomRoleManagementService _roleService;
@@ -29,7 +29,9 @@ public class RoomRolesController : ControllerBase
     /// </summary>
     [HttpGet]
     [RequireAny(RoomPermissions.ManageRoles, TenantPermissions.RoomManage)]
-    public async Task<ActionResult<List<RoomRoleDto>>> List(CancellationToken cancellationToken)
+    public async Task<ActionResult<List<RoomRoleDto>>> List(
+        [FromRoute] MaskedGuid roomId,
+        CancellationToken cancellationToken)
     {
         var result = await _roleService.ListRolesAsync(cancellationToken);
 
@@ -46,7 +48,10 @@ public class RoomRolesController : ControllerBase
     /// </summary>
     [HttpGet("{id}")]
     [RequireAny(RoomPermissions.ManageRoles, TenantPermissions.RoomManage)]
-    public async Task<ActionResult<RoomRoleDto>> GetById([FromRoute] MaskedGuid id, CancellationToken cancellationToken)
+    public async Task<ActionResult<RoomRoleDto>> GetById(
+        [FromRoute] MaskedGuid roomId,
+        [FromRoute] MaskedGuid id,
+        CancellationToken cancellationToken)
     {
         var result = await _roleService.GetRoleByIdAsync((Guid)id, cancellationToken);
 
@@ -63,7 +68,10 @@ public class RoomRolesController : ControllerBase
     /// </summary>
     [HttpPost]
     [RequireAny(RoomPermissions.ManageRoles, TenantPermissions.RoomManage)]
-    public async Task<ActionResult<RoomRoleDto>> Create([FromBody] CreateRoomRoleRequest request, CancellationToken cancellationToken)
+    public async Task<ActionResult<RoomRoleDto>> Create(
+        [FromRoute] MaskedGuid roomId,
+        [FromBody] CreateRoomRoleRequest request,
+        CancellationToken cancellationToken)
     {
         if (!ModelState.IsValid)
         {
@@ -79,7 +87,7 @@ public class RoomRolesController : ControllerBase
 
         return CreatedAtAction(
             nameof(GetById),
-            new { id = result.Data!.Id },
+            new { roomId, id = result.Data!.Id },
             RoomRoleManagementService.ToDto(result.Data));
     }
 
@@ -89,6 +97,7 @@ public class RoomRolesController : ControllerBase
     [HttpPut("{id}")]
     [RequireAny(RoomPermissions.ManageRoles, TenantPermissions.RoomManage)]
     public async Task<ActionResult<RoomRoleDto>> Update(
+        [FromRoute] MaskedGuid roomId,
         [FromRoute] MaskedGuid id,
         [FromBody] UpdateRoomRoleRequest request,
         CancellationToken cancellationToken)
@@ -113,7 +122,10 @@ public class RoomRolesController : ControllerBase
     /// </summary>
     [HttpDelete("{id}")]
     [RequireAny(RoomPermissions.ManageRoles, TenantPermissions.RoomManage)]
-    public async Task<IActionResult> Delete([FromRoute] MaskedGuid id, CancellationToken cancellationToken)
+    public async Task<IActionResult> Delete(
+        [FromRoute] MaskedGuid roomId,
+        [FromRoute] MaskedGuid id,
+        CancellationToken cancellationToken)
     {
         var result = await _roleService.DeleteRoleAsync((Guid)id, cancellationToken);
 

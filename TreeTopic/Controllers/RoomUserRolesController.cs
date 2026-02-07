@@ -2,6 +2,7 @@ using MaskedUUID.AspNetCore.Types;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using TreeTopic.Dtos;
 using TreeTopic.Filters;
 using TreeTopic.Models;
 using TreeTopic.Permissions;
@@ -88,7 +89,7 @@ public class RoomUserRolesController : ControllerBase
         // ロールを追加
         await _roomUserManager.AddRoleAsync(roomUser, role.Id, cancellationToken);
 
-        return Ok(new { message = "Role added to user", roomUserId = roomUserGuid, roleName });
+        return CreatedAtAction(nameof(GetUserRoles), new { roomUserId }, new { message = "Role added to user", roomUserId = roomUserGuid, roleName });
     }
 
     /// <summary>
@@ -121,7 +122,7 @@ public class RoomUserRolesController : ControllerBase
         // ロールを削除
         await _roomUserManager.RemoveRoleAsync(roomUser, role.Id, cancellationToken);
 
-        return Ok(new { message = "Role removed from user", roomUserId = roomUserGuid, roleName });
+        return NoContent();
     }
 
     /// <summary>
@@ -160,8 +161,3 @@ public class RoomUserRolesController : ControllerBase
         return Ok(new { message = "Roles updated", roomUserId = roomUserGuid, roleCount = request.RoleNames.Count });
     }
 }
-
-/// <summary>
-/// ユーザーロール一括設定リクエスト
-/// </summary>
-public record SetUserRolesRequest(List<string> RoleNames);

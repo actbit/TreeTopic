@@ -33,13 +33,13 @@
       isLoading = true;
 
       // Fetch roles
-      const rolesData = await api.get<Role[]>(`/${tenant}/api/roomroles`);
+      const rolesData = await api.get<Role[]>(`/${tenant}/api/rooms/${roomId}/RoomRoles`);
       roles = rolesData;
 
       // Fetch permissions for each role
       const permPromises = roles.map(async (role) => {
         try {
-          const perms = await roomRolePermissionsApi.getRolePermissions(tenant, role.name);
+          const perms = await roomRolePermissionsApi.getRolePermissions(tenant, roomId, role.name);
           return { roleName: role.name, permissions: perms.permissions || [] };
         } catch {
           return { roleName: role.name, permissions: [] };
@@ -70,11 +70,11 @@
 
       if (hasPermission) {
         // Remove permission
-        await roomRolePermissionsApi.removePermission(tenant, roleName, permissionName);
+        await roomRolePermissionsApi.removePermission(tenant, roomId, roleName, permissionName);
         rolePermissions[roleName] = currentPerms.filter((p) => p !== permissionName);
       } else {
         // Add permission
-        await roomRolePermissionsApi.addPermission(tenant, roleName, { permissionName });
+        await roomRolePermissionsApi.addPermission(tenant, roomId, roleName, { permissionName });
         rolePermissions[roleName] = [...currentPerms, permissionName];
       }
     } catch (err) {
@@ -86,7 +86,7 @@
     if (!newRoleName.trim()) return;
 
     try {
-      await api.post(`/${tenant}/api/roomroles`, {
+      await api.post(`/${tenant}/api/rooms/${roomId}/RoomRoles`, {
         name: newRoleName.trim(),
         description: newRoleDescription.trim()
       });
@@ -104,7 +104,7 @@
     if (!confirm('Are you sure you want to delete this role?')) return;
 
     try {
-      await api.delete(`/${tenant}/api/roomroles/${roleId}`);
+      await api.delete(`/${tenant}/api/rooms/${roomId}/RoomRoles/${roleId}`);
       await loadData();
     } catch (err) {
       error = err instanceof Error ? err.message : 'Failed to delete role';

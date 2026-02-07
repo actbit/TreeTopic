@@ -77,6 +77,7 @@ public class RoomController : ControllerBase
     /// 現在のユーザーのルーム権限一覧を取得
     /// </summary>
     [HttpGet("{roomId}/my/permissions")]
+    [Authorize]
     public async Task<IActionResult> GetMyPermissions(
         [FromRoute] MaskedGuid roomId,
         CancellationToken cancellationToken)

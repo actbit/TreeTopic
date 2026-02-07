@@ -17,11 +17,20 @@ export const handle: Handle = async ({ event, resolve }) => {
   // HTMLリクエストのみで認証チェックを実行
   const acceptHeader = event.request.headers.get('accept');
   if (acceptHeader?.includes('text/html')) {
-    // 現在のシステムではCookieベースの認証を使用
-    // バックエンド既定値(TreeTopic.Cookie)と旧名(AuthSession)の両方に対応
+    // 現在のシステムではCookieベースの認証を使用。
+    // 固定名(TreeTopic.Cookie)、旧名(AuthSession)、テナント別Cookie名(TreeTopic.Cookie_<tenant>.Tenant)に対応する。
+    const hasTenantScopedCookie = event.cookies
+      .getAll()
+      .some((cookie) =>
+        cookie.name.startsWith('TreeTopic.Cookie_') &&
+        cookie.name.endsWith('.Tenant') &&
+        Boolean(cookie.value)
+      );
+
     const hasAuthCookie =
       Boolean(event.cookies.get('TreeTopic.Cookie')) ||
-      Boolean(event.cookies.get('AuthSession'));
+      Boolean(event.cookies.get('AuthSession')) ||
+      hasTenantScopedCookie;
 
     if (!hasAuthCookie) {
       // 未認証の場合はリダイレクト

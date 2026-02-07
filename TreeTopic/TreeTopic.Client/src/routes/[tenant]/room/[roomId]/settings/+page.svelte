@@ -68,7 +68,9 @@
       }
 
       if (canManageRoles || canManageUsers) {
-        const rolesData = await api.get<Array<{ id: string; name: string; description?: string | null }>>(`/${tenant}/api/roomroles`);
+        const rolesData = await api.get<Array<{ id: string; name: string; description?: string | null }>>(
+          `/${tenant}/api/rooms/${roomId}/roomroles`
+        );
         roomRoles = rolesData;
       }
 

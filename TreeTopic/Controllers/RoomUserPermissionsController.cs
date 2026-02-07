@@ -2,6 +2,7 @@ using MaskedUUID.AspNetCore.Types;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using TreeTopic.Dtos;
 using TreeTopic.Filters;
 using TreeTopic.Permissions;
 using TreeTopic.Models;
@@ -74,6 +75,13 @@ public class RoomUserPermissionsController : ControllerBase
         [FromBody] AddRoomUserPermissionRequest request,
         CancellationToken cancellationToken)
     {
+        // Validate permission name
+        var validRoomPermissions = Permissions.PermissionHelper.GetRoomPermissions();
+        if (!validRoomPermissions.Contains(request.PermissionName))
+        {
+            return BadRequest(new { message = $"Invalid permission name: {request.PermissionName}" });
+        }
+
         var roomUserGuid = (Guid)roomUserId;
 
         // RoomUserの存在確認
@@ -160,8 +168,3 @@ public class RoomUserPermissionsController : ControllerBase
         return NoContent();
     }
 }
-
-/// <summary>
-/// Roomユーザー権限割り当てリクエスト
-/// </summary>
-public record AddRoomUserPermissionRequest(string PermissionName);

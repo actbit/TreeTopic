@@ -6,6 +6,7 @@ using MaskedUUID.AspNetCore.Services;
 using TreeTopic.Models;
 using TreeTopic.Services;
 using TreeTopic.Permissions;
+using TreeTopic.Extensions;
 using System.Linq;
 
 namespace TreeTopic.Filters;
@@ -67,14 +68,29 @@ public class RequireAllAttribute : Attribute, IAsyncActionFilter
             return;
         }
 
-        var appUser = await userManager.FindByIdAsync(userId.ToString());
+        // 【キャッシュ】ユーザー情報
+        var appUser = await httpContext.GetOrCreateAsync(
+            $"user_{userId}",
+            async () => await userManager.FindByIdAsync(userId.ToString())
+        );
+
         if (appUser == null)
         {
             context.Result = new UnauthorizedResult();
             return;
         }
 
-        var roles = await PermissionFilterHelper.GetMergedRolesAsync(user, userManager, appUser);
+        // 【キャッシュ】マージされたロール
+        var roles = await httpContext.GetOrCreateAsync(
+            $"user_roles_{userId}",
+            async () => await PermissionFilterHelper.GetMergedRolesAsync(user, userManager, appUser)
+        );
+
+        // 【キャッシュ】テナントロール権限（Userレベル）
+        var rolePermissions = await httpContext.GetOrCreateAsync(
+            "role_perms",
+            async () => await GetRolePermissionsFromDbAsync(roles, dbContext, httpContext.RequestAborted)
+        );
 
         var roomId = PermissionFilterHelper.GetId(context, RoomIdKey, maskedUuidService, FallbackToRoute);
         var topicId = PermissionFilterHelper.GetId(context, TopicIdKey, maskedUuidService, FallbackToRoute);
@@ -98,19 +114,40 @@ public class RequireAllAttribute : Attribute, IAsyncActionFilter
             httpContext.RequestAborted);
 
         RoomUser? roomUser = null;
+        HashSet<string>? roomPermissions = null;
+
         if (roomId.HasValue)
         {
-            roomUser = await roomUserManager.FindByRoomAndUserAsync(
-                roomId.Value, userId, httpContext.RequestAborted);
+            // 【キャッシュ】RoomUser情報
+            roomUser = await httpContext.GetOrCreateAsync(
+                $"roomUser_{userId}_{roomId.Value}",
+                async () => await roomUserManager.FindByRoomAndUserAsync(roomId.Value, userId, httpContext.RequestAborted)
+            );
+
+            // 【キャッシュ】Room権限（RoomUserレベル）
+            if (roomUser != null)
+            {
+                roomPermissions = await httpContext.GetOrCreateAsync(
+                    $"room_perms_{userId}_{roomId.Value}",
+                    async () => await roomUserManager.GetPermissionsAsync(roomUser, httpContext.RequestAborted)
+                );
+            }
         }
 
         var missingPermissions = new List<PermissionRequirement>();
 
         foreach (var requirement in _requirements)
         {
-            var hasPermission = await CheckPermissionAsync(
-                requirement, roles, roomUser, roomId, topicId,
-                dbContext, roomUserManager, topicPermissionManager,
+            var hasPermission = await CheckPermissionWithCacheAsync(
+                requirement,
+                rolePermissions,
+                roomUser,
+                roomPermissions,
+                roomId,
+                topicId,
+                httpContext,
+                dbContext,
+                topicPermissionManager,
                 httpContext.RequestAborted);
 
             if (!hasPermission)
@@ -136,54 +173,60 @@ public class RequireAllAttribute : Attribute, IAsyncActionFilter
         await next();
     }
 
-    private static async Task<bool> CheckPermissionAsync(
+    /// <summary>
+    /// HttpContextキャッシュを使用した権限チェック
+    /// </summary>
+    private static async Task<bool> CheckPermissionWithCacheAsync(
         PermissionRequirement requirement,
-        ISet<string> roles,
+        HashSet<string> rolePermissions,
         RoomUser? roomUser,
+        HashSet<string>? roomPermissions,
         Guid? roomId,
         Guid? topicId,
+        HttpContext httpContext,
         ApplicationDbContext dbContext,
-        RoomUserManager roomUserManager,
         TopicPermissionManager topicPermissionManager,
         CancellationToken cancellationToken)
     {
         switch (requirement.Scope)
         {
             case PermissionScope.Role:
+                // テナントトピック権限の場合はRoomアクセス権も確認
                 if (requirement.Name.StartsWith("tenant.topic.", StringComparison.OrdinalIgnoreCase) && roomId.HasValue)
                 {
-                    var hasRoomRead = await HasRoomReadPrerequisiteAsync(roles, roomUser, dbContext, cancellationToken);
-                    if (!hasRoomRead)
-                    {
-                        return false;
-                    }
-                }
-                return await CheckRolePermissionAsync(requirement.Name, roles, dbContext, cancellationToken);
+                    // Room権限でチェック
+                    if (roomPermissions != null && roomPermissions.Contains(RoomPermissions.Member))
+                        return rolePermissions.Contains(requirement.Name);
 
-            case PermissionScope.Room:
-                if (roomUser == null)
-                {
+                    // テナント権限でチェック
+                    if (rolePermissions.Contains(TenantPermissions.RoomRead) ||
+                        rolePermissions.Contains(TenantPermissions.RoomManage))
+                        return rolePermissions.Contains(requirement.Name);
+
                     return false;
                 }
+                // キャッシュ済みのロール権限を使用
+                return rolePermissions.Contains(requirement.Name);
+
+            case PermissionScope.Room:
+                if (roomUser == null || roomPermissions == null)
+                    return false;
+
                 if (string.Equals(requirement.Name, RoomPermissions.Member, StringComparison.OrdinalIgnoreCase))
-                {
                     return true;
-                }
-                var roomPermissions = await roomUserManager.GetPermissionsAsync(roomUser, cancellationToken);
+
+                // キャッシュ済みのRoom権限を使用
                 return roomPermissions.Contains(requirement.Name);
 
             case PermissionScope.Topic:
-                if (roomUser == null)
-                {
+                if (roomUser == null || !roomId.HasValue)
                     return false;
-                }
 
-                var hasReadPrerequisite = await HasRoomReadPrerequisiteAsync(roles, roomUser, dbContext, cancellationToken);
-                if (!hasReadPrerequisite)
-                {
-                    return false;
-                }
+                // 【最適化】まずRoom権限でチェック可能か確認（DBアクセスなし）
+                if (CanSatisfyTopicPermissionViaRoomPermission(requirement.Name, roomPermissions))
+                    return true;
 
+                // Room権限で満たせない場合のみ、Topic権限を取得（キャッシュしない）
                 if (topicId.HasValue)
                 {
                     return await topicPermissionManager.HasPermissionAsync(
@@ -202,43 +245,36 @@ public class RequireAllAttribute : Attribute, IAsyncActionFilter
         }
     }
 
-    private static async Task<bool> HasRoomReadPrerequisiteAsync(
-        ISet<string> roles,
-        RoomUser? roomUser,
-        ApplicationDbContext dbContext,
-        CancellationToken cancellationToken)
+    /// <summary>
+    /// Room権限でTopic権限を満たせるか判定（DBアクセスなし）
+    /// </summary>
+    private static bool CanSatisfyTopicPermissionViaRoomPermission(
+        string topicPermission,
+        HashSet<string>? roomPermissions)
     {
-        if (roomUser != null)
+        if (roomPermissions == null) return false;
+
+        return topicPermission switch
         {
-            var roomPermissions = await dbContext.RoomUserRoomRoles
-                .Where(rur => rur.RoomUserId == roomUser.Id)
-                .Join(
-                    dbContext.RoomRolePermissions,
-                    rur => rur.RoomRoleId,
-                    rp => rp.RoomRoleId,
-                    (_, rp) => rp.PermissionName)
-                .Concat(dbContext.RoomPermissions
-                    .Where(rp => rp.RoomUserId == roomUser.Id)
-                    .Select(rp => rp.Name))
-                .Distinct()
-                .ToListAsync(cancellationToken);
+            // room.topic.read → topic.read, topic.readMessages
+            TopicPermissions.Read or TopicPermissions.ReadMessages
+                when roomPermissions.Contains(RoomPermissions.TopicRead) => true,
 
-            if (roomPermissions.Contains(RoomPermissions.Member, StringComparer.OrdinalIgnoreCase))
-            {
-                return true;
-            }
-        }
+            // room.topic.write → topic.write, topic.writeMessages
+            TopicPermissions.Write or TopicPermissions.WriteMessages
+                when roomPermissions.Contains(RoomPermissions.TopicWrite) => true,
 
-        return await dbContext.Permissions
-            .AsNoTracking()
-            .Include(p => p.Role)
-            .AnyAsync(p => p.Role != null &&
-                           p.Role.Name != null &&
-                           roles.Contains(p.Role.Name) &&
-                           (p.Name == TenantPermissions.RoomRead || p.Name == TenantPermissions.RoomManage),
-                cancellationToken);
+            // room.topic.manage → topic.delete, topic.manage
+            TopicPermissions.Delete or TopicPermissions.Manage
+                when roomPermissions.Contains(RoomPermissions.TopicManage) => true,
+
+            _ => false
+        };
     }
 
+    /// <summary>
+    /// Room内のトピック権限チェック（ロールベース）
+    /// </summary>
     private static async Task<bool> HasTopicPermissionInRoomAsync(
         RoomUser roomUser,
         Guid roomId,
@@ -277,19 +313,22 @@ public class RequireAllAttribute : Attribute, IAsyncActionFilter
             .AnyAsync(rId => rId == roomId, cancellationToken);
     }
 
-    private static async Task<bool> CheckRolePermissionAsync(
-        string permissionName,
+    /// <summary>
+    /// テナントロール権限をDBから取得
+    /// </summary>
+    private static async Task<HashSet<string>> GetRolePermissionsFromDbAsync(
         ISet<string> roles,
         ApplicationDbContext dbContext,
         CancellationToken cancellationToken)
     {
-        return await dbContext.Permissions
+        var permissions = await dbContext.Permissions
             .AsNoTracking()
             .Include(p => p.Role)
-            .AnyAsync(p => p.Role != null &&
-                          p.Role.Name != null &&
-                          roles.Contains(p.Role.Name) &&
-                          p.Name == permissionName,
-                      cancellationToken);
+            .Where(p => p.Role != null && p.Role.Name != null && roles.Contains(p.Role.Name))
+            .Select(p => p.Name)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
+        return new HashSet<string>(permissions, StringComparer.OrdinalIgnoreCase);
     }
 }
