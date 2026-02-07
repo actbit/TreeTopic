@@ -61,7 +61,7 @@
     try {
       const tenant = api.getCurrentTenant();
       const strategy = deleteMode === 'reparent' ? 'ReparentToParent' : 'Cascade';
-      await api.delete(`/${tenant}/api/Topic/${topicId}?strategy=${strategy}`);
+      await api.delete(`/${tenant}/api/topic/${topicId}?strategy=${strategy}`);
 
       const topicsById = new Map($topicList.map((t) => [t.id, t]));
       const parentId = topic.parentId;
@@ -107,7 +107,7 @@
         // If children existed but weren't loaded, fetch and merge to keep UI consistent
         if (topic.hasChildren && loadedChildIds.length === 0) {
           if (parentId) {
-            const childrenResponse = await api.get<any[]>(`/${tenant}/api/Topic/parent/${parentId}`);
+            const childrenResponse = await api.get<any[]>(`/${tenant}/api/topic/room/${topic.roomId}/parent/${parentId}`);
             const normalized = Array.isArray(childrenResponse)
               ? childrenResponse.map((raw) => ({
                   id: raw?.id ?? raw?.Id ?? '',
@@ -133,7 +133,7 @@
               if (!$topicList.find((x) => x.id === t.id)) addTopic(t);
             });
           } else {
-            const rootsResponse = await api.get<any[]>(`/${tenant}/api/Topic/room/${topic.roomId}/root`);
+            const rootsResponse = await api.get<any[]>(`/${tenant}/api/topic/room/${topic.roomId}/root`);
             const normalized = Array.isArray(rootsResponse)
               ? rootsResponse.map((raw) => ({
                   id: raw?.id ?? raw?.Id ?? '',

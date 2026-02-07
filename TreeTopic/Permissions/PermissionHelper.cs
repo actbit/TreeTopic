@@ -28,9 +28,9 @@ public static class PermissionHelper
     }
 
     /// <summary>
-    /// IdentityPermissionsのすべての権限名を取得
+    /// TenantPermissionsのすべての権限名を取得
     /// </summary>
-    public static string[] GetIdentityPermissions() => GetAllPermissions(typeof(IdentityPermissions));
+    public static string[] GetTenantPermissions() => GetAllPermissions(typeof(TenantPermissions));
 
     /// <summary>
     /// RoomPermissionsのすべての権限名を取得
@@ -43,13 +43,13 @@ public static class PermissionHelper
     public static string[] GetTopicPermissions() => GetAllPermissions(typeof(TopicPermissions));
 
     /// <summary>
-    /// すべての権限名を取得（Identity + Room + Topic）
+    /// すべての権限名を取得（Tenant + Room + Topic）
     /// </summary>
     public static string[] GetAllPermissions()
     {
         return
         [
-            .. GetIdentityPermissions(),
+            .. GetTenantPermissions(),
             .. GetRoomPermissions(),
             .. GetTopicPermissions()
         ];
@@ -71,10 +71,10 @@ public static class PermissionHelper
     }
 
     /// <summary>
-    /// IdentityPermissionsの権限定数名と値のディクショナリを取得
+    /// TenantPermissionsの権限定数名と値のディクショナリを取得
     /// </summary>
-    public static Dictionary<string, string> GetIdentityPermissionNameValuePairs() =>
-        GetPermissionNameValuePairs(typeof(IdentityPermissions));
+    public static Dictionary<string, string> GetTenantPermissionNameValuePairs() =>
+        GetPermissionNameValuePairs(typeof(TenantPermissions));
 
     /// <summary>
     /// RoomPermissionsの権限定数名と値のディクショナリを取得

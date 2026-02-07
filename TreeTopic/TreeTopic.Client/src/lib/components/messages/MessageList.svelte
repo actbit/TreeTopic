@@ -60,16 +60,17 @@
     didScrollToAnchor = false;
     if (!targetAnchorId) return;
     if ($messagesLoading) return;
-    setTimeout(() => {
+    const timer = setTimeout(() => {
       tryScrollToTarget('auto');
     }, 0);
+    return () => clearTimeout(timer);
   });
 </script>
 
-    <div
-      bind:this={messagesContainer}
-      class="flex-1 overflow-y-auto padding-md spacing-md bg-surface message-list"
-    >
+<div
+  bind:this={messagesContainer}
+  class="flex-1 overflow-y-auto padding-md spacing-md bg-surface message-list"
+>
   {#if $messagesLoading}
     <div class="flex items-center justify-center h-full">
       <LoadingSpinner message="Loading messages..." />

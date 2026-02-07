@@ -37,36 +37,6 @@ public class TopicDetailDto : TopicBasicDto
     public DateTime UpdatedAt { get; set; }
 }
 
-/// <summary>
-/// 互換性のために残す古いDTO（新規コードでは使用禁止）
-/// TODO: 移行完了後に削除
-/// </summary>
-[Obsolete("Use TopicBasicDto, TopicTreeDto, or TopicDetailDto instead")]
-public class TopicDto : BaseDto
-{
-    public MaskedGuid RoomId { get; set; }
-
-    public MaskedGuid? ParentId { get; set; }
-
-    public MaskedGuid? SourceMessageId { get; set; }
-
-    public string Title { get; set; } = string.Empty;
-
-    public string? Description { get; set; }
-
-    public bool HasChildren { get; set; }
-
-    /// <summary>
-    /// 子トピックのIDリスト
-    /// </summary>
-    public List<MaskedGuid> ChildIds { get; set; } = new();
-
-    /// <summary>
-    /// 未読メッセージ数
-    /// </summary>
-    public int UnreadCount { get; set; }
-}
-
 public class CreateTopicRequest : BaseCreateRequest
 {
     [Required]
@@ -81,6 +51,11 @@ public class CreateTopicRequest : BaseCreateRequest
     public string? Description { get; set; }
 
     public MaskedGuid? SourceMessageId { get; set; }
+
+    /// <summary>
+    /// 親トピックの権限を継承するかどうか（デフォルト: true）
+    /// </summary>
+    public bool InheritPermissions { get; set; } = true;
 }
 
 public class UpdateTopicRequest : BaseUpdateRequest
@@ -102,7 +77,7 @@ public enum TopicDeleteStrategy
 /// 未読数などの統計情報を含むトピックDTO
 /// N+1問題を解決するために使用
 /// </summary>
-public class TopicWithStatsDto : TopicDto
+public class TopicWithStatsDto : TopicDetailDto
 {
     /// <summary>
     /// トピック内の全メッセージ数

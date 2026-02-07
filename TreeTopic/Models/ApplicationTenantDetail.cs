@@ -53,4 +53,52 @@ namespace TreeTopic.Models
         public ulong TenantObfuscationKeyK0 { get; set; }
         public ulong TenantObfuscationKeyK1 { get; set; }
     }
+
+    public static class ApplicationTenantDetailExtensions
+    {
+        /// <summary>
+        /// OIDC設定が有効かどうかを判定
+        /// MetadataAddress または Authority、および ClientId が設定されている場合に true
+        /// </summary>
+        public static bool HasOidcSettings(this ApplicationTenantDetail? detail)
+        {
+            if (detail == null) return false;
+
+            var hasMetadataOrAuthority =
+                !string.IsNullOrWhiteSpace(detail.OpenIdConnectMetadataAddress) ||
+                !string.IsNullOrWhiteSpace(detail.OpenIdConnectAuthority);
+
+            var hasClientId = !string.IsNullOrWhiteSpace(detail.OpenIdConnectClientId);
+
+            return hasMetadataOrAuthority && hasClientId;
+        }
+
+        /// <summary>
+        /// OIDCロール同期が有効かどうかを判定
+        /// OIDC設定があり、かつ RoleClaimName が設定されている場合に true
+        /// </summary>
+        public static bool HasOidcRoleSync(this ApplicationTenantDetail? detail)
+        {
+            if (!detail.HasOidcSettings()) return false;
+            return !string.IsNullOrWhiteSpace(detail.RoleClaimName);
+        }
+
+        /// <summary>
+        /// ユーザー作成が許可されているかどうかを判定
+        /// OIDC設定がある場合はユーザー作成を禁止
+        /// </summary>
+        public static bool CanCreateUsers(this ApplicationTenantDetail? detail)
+        {
+            return !detail.HasOidcSettings();
+        }
+
+        /// <summary>
+        /// ユーザーへのロール割り当てが許可されているかどうかを判定
+        /// OIDCロール同期が有効な場合はユーザーへのロール割り当てを禁止
+        /// </summary>
+        public static bool CanAssignRolesToUsers(this ApplicationTenantDetail? detail)
+        {
+            return !detail.HasOidcRoleSync();
+        }
+    }
 }

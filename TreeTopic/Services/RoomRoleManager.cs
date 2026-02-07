@@ -4,8 +4,7 @@ using TreeTopic.Models;
 namespace TreeTopic.Services;
 
 /// <summary>
-/// RoomRoleとRoomRolePermissionの管理を行うマネージャー
-/// RoleManager/UserManagerと同様のパターンで実装
+/// ルームロール管理
 /// </summary>
 public class RoomRoleManager
 {
@@ -122,6 +121,13 @@ public class RoomRoleManager
         string permissionName,
         CancellationToken cancellationToken = default)
     {
+        // ロールの存在確認（ヘルパー使用前に検証）
+        var role = await _context.RoomRoles.FindAsync(new object[] { roleId }, cancellationToken);
+        if (role == null)
+        {
+            throw new InvalidOperationException($"RoomRole with ID '{roleId}' not found.");
+        }
+
         var permission = new RoomRolePermission
         {
             Id = Guid.CreateVersion7(),
@@ -129,11 +135,16 @@ public class RoomRoleManager
             PermissionName = permissionName
         };
 
-        _context.RoomRolePermissions.Add(permission);
-        await _context.SaveChangesAsync(cancellationToken);
-
-        _logger.LogInformation("Permission added to RoomRole: {Permission} -> {RoleId}", permissionName, roleId);
-        return permission;
+        return await PermissionHelper.AddWithTransactionAsync(
+            _context,
+            _context.RoomRolePermissions,
+            permission,
+            async (ctx, ct) => await ctx.RoomRolePermissions
+                .FirstOrDefaultAsync(p => p.RoomRoleId == roleId && p.PermissionName == permissionName, ct),
+            _logger,
+            $"Permission added to RoomRole: {permissionName} -> {roleId}",
+            $"Failed to add permission to RoomRole: {permissionName} -> {roleId}",
+            cancellationToken);
     }
 
     /// <summary>
@@ -143,19 +154,15 @@ public class RoomRoleManager
         Guid permissionId,
         CancellationToken cancellationToken = default)
     {
-        var permission = await _context.RoomRolePermissions
-            .FindAsync(new object[] { permissionId }, cancellationToken);
-
-        if (permission == null)
-        {
-            return false;
-        }
-
-        _context.RoomRolePermissions.Remove(permission);
-        await _context.SaveChangesAsync(cancellationToken);
-
-        _logger.LogInformation("Permission removed from RoomRole: {PermissionId}", permissionId);
-        return true;
+        return await PermissionHelper.RemoveWithTransactionAsync(
+            _context,
+            _context.RoomRolePermissions,
+            async (ctx, ct) => await ctx.RoomRolePermissions
+                .FindAsync(new object[] { permissionId }, ct),
+            _logger,
+            $"Permission removed from RoomRole: {permissionId}",
+            $"Failed to remove permission from RoomRole: {permissionId}",
+            cancellationToken);
     }
 
     /// <summary>

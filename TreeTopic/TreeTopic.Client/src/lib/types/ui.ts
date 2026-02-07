@@ -4,13 +4,12 @@
  * Available view modes for displaying messages and topics
  */
 export type ViewMode =
-  | 'default'      // Topic tree with messages
-  | 'timeline'     // Chronological message view
+  | 'default'      // Standard chronological message view
   | 'user'         // Grouped by user
   | 'document'     // Grouped by document/attachment
   | 'image'        // Gallery view of images
-  | 'search'       // Search results
-  | 'topic';       // Messages by topic
+  | 'topic'        // Messages by topic
+  | 'search';      // Search results
 
 /**
  * UI state management
@@ -45,7 +44,7 @@ export interface ModalConfig {
   title: string;
   type: 'alert' | 'confirm' | 'prompt' | 'custom';
   message?: string;
-  data?: Record<string, any>;
+  data?: Record<string, unknown>;
   onConfirm?: () => void | Promise<void>;
   onCancel?: () => void | Promise<void>;
   isLoading?: boolean;

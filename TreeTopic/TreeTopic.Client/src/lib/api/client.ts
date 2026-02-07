@@ -16,6 +16,7 @@ import type { User, AuthContext } from '$lib/stores/auth';
 import { get as getStore } from 'svelte/store';
 import { goto } from '$app/navigation';
 import * as cacheManager from './cache';
+import { activeModals, ui } from '$lib/stores/ui';
 
 /**
  * API Error
@@ -25,7 +26,7 @@ export class ApiError extends Error {
     public status: number,
     public statusText: string,
     message: string,
-    public data?: any
+    public data?: unknown
   ) {
     super(message);
     this.name = 'ApiError';
@@ -88,6 +89,7 @@ function inferTenantFromPathname(pathname: string): string {
 }
 
 let isRedirectingToLogin = false;
+const forbiddenModalId = 'forbidden-access';
 
 function redirectToTenantOidc(tenant: string): void {
   if (!tenant) return;
@@ -105,12 +107,32 @@ function redirectToTenantOidc(tenant: string): void {
   }
 }
 
+function showForbiddenModal(data?: unknown): void {
+  if (typeof window === 'undefined') return;
+
+  const modals = getStore(activeModals);
+  if (modals.some((modal) => modal.id === forbiddenModalId)) {
+    return;
+  }
+
+  const message =
+    (data as { message?: string } | undefined)?.message ??
+    'You do not have permission to perform this action.';
+
+  ui.openModal({
+    id: forbiddenModalId,
+    title: 'Access Denied',
+    type: 'custom',
+    data: { message },
+  });
+}
+
 /**
  * Handle API response
  */
 async function handleResponse<T>(response: Response): Promise<T> {
   const contentType = response.headers.get('content-type');
-  let data: any;
+  let data: unknown;
 
   if (contentType?.includes('application/json')) {
     data = await response.json();
@@ -122,7 +144,9 @@ async function handleResponse<T>(response: Response): Promise<T> {
     const error = new ApiError(
       response.status,
       response.statusText,
-      data?.error?.message || data?.message || 'An error occurred',
+      (data as { error?: { message?: string }; message?: string })?.error?.message
+        || (data as { message?: string })?.message
+        || 'An error occurred',
       data
     );
 
@@ -136,17 +160,24 @@ async function handleResponse<T>(response: Response): Promise<T> {
     }
 
     const currentPath = typeof window !== 'undefined' ? window.location.pathname : '';
+    const tenantFromConfig = apiClientConfig.tenant || '';
     const tenant =
-      apiClientConfig.tenant ||
+      tenantFromConfig ||
       (typeof window !== 'undefined' ? inferTenantFromPathname(currentPath) : '');
 
     const isAuthMeRequest = requestPath.toLowerCase().endsWith('/auth/me');
+    const isSetupRequest = requestPath.includes('/api/setup/');
+    const isPublicTenantRegistrationRequest =
+      requestPath === '/api/tenants/register' ||
+      requestPath === '/api/tenants/captcha';
     const isOnLoginPage =
       Boolean(tenant) &&
       (currentPath === `/${tenant}/login` || currentPath === `/${tenant}/auth/login`);
 
     if (
       !isOnLoginPage &&
+      !isSetupRequest &&
+      !isPublicTenantRegistrationRequest &&
       (response.status === 401 || (response.status === 404 && isAuthMeRequest))
     ) {
       // Clear all caches on authentication error
@@ -159,6 +190,10 @@ async function handleResponse<T>(response: Response): Promise<T> {
         // If no tenant in context, redirect to home
         goto('/');
       }
+    }
+
+    if (response.status === 403) {
+      showForbiddenModal(data);
     }
 
     throw error;
@@ -242,7 +277,7 @@ export async function get<T>(
  */
 export async function post<T>(
   path: string,
-  data?: any,
+  data?: FormData | object,
   options?: {
     headers?: Record<string, string>;
   }
@@ -280,7 +315,7 @@ export async function post<T>(
  */
 export async function put<T>(
   path: string,
-  data?: any,
+  data?: object,
   options?: {
     headers?: Record<string, string>;
   }
@@ -311,7 +346,7 @@ export async function put<T>(
  */
 export async function patch<T>(
   path: string,
-  data?: any,
+  data?: object,
   options?: {
     headers?: Record<string, string>;
   }
@@ -455,6 +490,9 @@ export async function uploadFile(
           (currentPath === `/${tenant}/login` || currentPath === `/${tenant}/auth/login`);
         if (tenant && !isOnLoginPage) redirectToTenantOidc(tenant);
         reject(new ApiError(xhr.status, xhr.statusText, 'Unauthorized'));
+      } else if (xhr.status === 403) {
+        showForbiddenModal();
+        reject(new ApiError(xhr.status, xhr.statusText, 'Forbidden'));
       } else {
         reject(
           new ApiError(
@@ -534,5 +572,136 @@ export const api = {
   retryWithBackoff,
   ApiError,
 };
+
+// Setup APIs with token
+export async function getRolesWithSetupToken(tenant: string, setupToken: string) {
+  return api.get(`/${tenant}/api/setup/rolesetup`, {
+    headers: { 'Authorization': `Bearer ${setupToken}` }
+  });
+}
+
+export async function createRoleWithSetupToken(
+  tenant: string,
+  setupToken: string,
+  roleName: string
+) {
+  return api.post(`/${tenant}/api/setup/rolesetup/create`, {
+    name: roleName
+  }, {
+    headers: { 'Authorization': `Bearer ${setupToken}` }
+  });
+}
+
+export async function addPermissionWithSetupToken(
+  tenant: string,
+  setupToken: string,
+  roleName: string,
+  permissionName: string
+) {
+  return api.post(`/${tenant}/api/setup/rolesetup/permissions/add`, {
+    roleName,
+    permissionName
+  }, {
+    headers: { 'Authorization': `Bearer ${setupToken}` }
+  });
+}
+
+export async function getTenantDetail(tenant: string) {
+  return api.get(`/${tenant}/api/tenant/detail`);
+}
+
+export async function createUserWithSetupToken(tenant: string, email: string, setupToken: string) {
+  return api.post(`/${tenant}/api/setup/defaultuser`, { email }, {
+    headers: { 'Authorization': `Bearer ${setupToken}` }
+  });
+}
+
+export async function assignUserRoleWithSetupToken(
+  tenant: string,
+  userId: string,
+  roleName: string,
+  setupToken: string
+) {
+  if (!userId || userId === 'undefined' || userId === 'null') {
+    throw new Error('Invalid userId for setup role assignment');
+  }
+  return api.post(
+    `/${tenant}/api/setup/users/${userId}/roles`,
+    { roleName },
+    { headers: { 'Authorization': `Bearer ${setupToken}` } }
+  );
+}
+
+export async function removeUserRoleWithSetupToken(
+  tenant: string,
+  userId: string,
+  roleName: string,
+  setupToken: string
+) {
+  if (!userId || userId === 'undefined' || userId === 'null') {
+    throw new Error('Invalid userId for setup role removal');
+  }
+  const url = apiClientConfig.baseUrl ? `${apiClientConfig.baseUrl}/${tenant}/api/setup/users/${userId}/roles` : `/${tenant}/api/setup/users/${userId}/roles`;
+
+  const response = await fetch(url, {
+    method: 'DELETE',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      'Authorization': `Bearer ${setupToken}`
+    },
+    body: JSON.stringify({ roleName }),
+    credentials: 'include',
+  });
+
+  return handleResponse(response);
+}
+
+export async function invalidateSetupToken(tenant: string, setupToken: string) {
+  return api.post(`/${tenant}/api/setup/token/invalidate`, {}, {
+    headers: { 'Authorization': `Bearer ${setupToken}` }
+  });
+}
+
+export async function getCurrentUser(tenant: string) {
+  return api.get(`/${tenant}/auth/me`);
+}
+
+export async function checkUserPermissions(tenant: string) {
+  return api.get(`/${tenant}/auth/me/permissions`);
+}
+
+// User management functions
+export async function createUser(tenant: string, email: string) {
+  return api.post(`/${tenant}/api/users`, { email });
+}
+
+export async function banUser(tenant: string, userId: string, reason: string) {
+  return api.post(`/${tenant}/api/users/${userId}/ban`, { reason });
+}
+
+export async function unbanUser(tenant: string, userId: string) {
+  return api.del(`/${tenant}/api/users/${userId}/ban`);
+}
+
+export async function assignUserRole(tenant: string, userId: string, roleName: string) {
+  return api.post(`/${tenant}/api/users/${userId}/roles`, { roleName });
+}
+
+export async function removeUserRole(tenant: string, userId: string, roleName: string) {
+  const url = apiClientConfig.baseUrl ? `${apiClientConfig.baseUrl}/${tenant}/api/users/${userId}/roles` : `/${tenant}/api/users/${userId}/roles`;
+
+  const response = await fetch(url, {
+    method: 'DELETE',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json'
+    },
+    body: JSON.stringify({ roleName }),
+    credentials: 'include',
+  });
+
+  return handleResponse(response);
+}
 
 export default api;

@@ -14,7 +14,7 @@
 
   let name = $state('');
   let description = $state('');
-  let isPublic = $state(false);
+  let joinPolicy = $state(0);
   let isLoading = $state(false);
   let error = $state<string | null>(null);
   let nameError = $state<string | null>(null);
@@ -40,12 +40,10 @@
 
     try {
       const tenant = api.getCurrentTenant();
-      const response = (await api.post(`/${tenant}/api/Room`, {
+      const response = (await api.post(`/${tenant}/api/room`, {
         name: name.trim(),
         description: description.trim(),
-        settings: {
-          isPublic,
-        },
+        joinPolicy: Number(joinPolicy),
       })) as Room;
 
       addRoom(response);
@@ -61,7 +59,7 @@
   function resetForm() {
     name = '';
     description = '';
-    isPublic = false;
+    joinPolicy = 0;
   }
 
   function handleClose() {
@@ -98,17 +96,17 @@
       ></textarea>
     </div>
 
-    <div class="flex items-center form-checkbox-group">
-      <input
-        type="checkbox"
-        id="isPublic"
-        bind:checked={isPublic}
+    <div class="form-group">
+      <label for="room-join-policy" class="form-label">Join Policy</label>
+      <select
+        id="room-join-policy"
+        bind:value={joinPolicy}
         disabled={isLoading}
-        class="form-checkbox cursor-pointer"
-      />
-      <label for="isPublic" class="form-label cursor-pointer">
-        Make this room public
-      </label>
+        class="form-input"
+      >
+        <option value={0}>Public (any authenticated user can join)</option>
+        <option value={1}>Invite Only (only allowed users/roles can join)</option>
+      </select>
     </div>
 
     <div class="flex form-actions">
@@ -137,15 +135,6 @@
 </Modal>
 
 <style>
-  .form-checkbox-group {
-    gap: var(--spacing-sm);
-  }
-
-  .form-checkbox {
-    width: 16px;
-    height: 16px;
-  }
-
   .form-actions {
     gap: var(--spacing-sm);
     padding-top: var(--spacing-md);

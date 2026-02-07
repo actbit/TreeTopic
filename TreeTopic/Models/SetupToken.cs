@@ -37,6 +37,7 @@ public class SetupToken
 
     /// <summary>
     /// トークンが有効かどうかをチェック
+    /// 有効期限内なら true、期限切れなら false を返す
     /// </summary>
     public bool IsValid => DateTime.UtcNow <= ExpiresAt;
 

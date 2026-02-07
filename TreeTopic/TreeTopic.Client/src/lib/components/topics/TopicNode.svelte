@@ -1,13 +1,13 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
-  import { onMount } from 'svelte';
-  import { topicList, addTopic, toggleTopicExpansion, setSelectedTopic, createTopicParentId, moveTopicParent, updateTopic, expandedTopics } from '$lib/stores/topics';
+  import { topicList, addTopic, toggleTopicExpansion, setSelectedTopic, createTopicParentId, moveTopicParent, updateTopic } from '$lib/stores/topics';
   import { currentRoom } from '$lib/stores/rooms';
   import { ui } from '$lib/stores/ui';
   import { api, getCurrentTenant } from '$lib/api/client';
   import type { TopicTreeNode } from '$lib/types/ui';
   import type { ModalConfig } from '$lib/types/ui';
+  import type { Topic } from '$lib/stores/topics';
   import ContextMenu from '../common/ContextMenu.svelte';
   import type { ContextMenuItem } from '../common/ContextMenu.svelte';
   import { clearDragData, getDragData, preventDragDefaults, setDragData } from '$lib/utils/dragdrop';
@@ -24,60 +24,62 @@
   let contextMenuX = $state(0);
   let contextMenuY = $state(0);
   let isLoadingChildren = $state(false);
+  let childrenFetchPromise: Promise<void> | null = null;
+  let latestChildFetchSucceeded = $state(false);
+  let hasFetchedChildrenForCurrentExpansion = $state(false);
+  let nextChildrenFetchRetryAt = $state(0);
+  const CHILD_FETCH_RETRY_COOLDOWN_MS = 5000;
   let isDragOver = $state(false);
   let isDraggingSelf = $state(false);
   let hasUnreadChildrenState = $state(false);
 
-  // 未読チェック完了フラグ（常にtrue: 全トピックがAPIでロードされているため）
-  let hasCheckedUnread = $derived(true);
+  let descendantsUnreadCount = $derived.by(() => {
+    const childrenByParent = new Map<string, string[]>();
+    const unreadByTopic = new Map<string, number>();
 
-  // 子孫を含む全未読数を計算
-  function calculateTotalUnreadDescendants(topicId: string): number {
-    let total = 0;
-
-    // 直近の子トピックを取得
-    const children = $topicList.filter(t => t.parentId === topicId);
-
-    for (const child of children) {
-      // 子の自未読を加算
-      total += child.unreadCount;
-      // 子の子孫の未読を再帰的に加算
-      total += calculateTotalUnreadDescendants(child.id);
+    for (const topic of $topicList) {
+      unreadByTopic.set(topic.id, topic.unreadCount ?? 0);
+      if (!topic.parentId) continue;
+      const existing = childrenByParent.get(topic.parentId) ?? [];
+      existing.push(topic.id);
+      childrenByParent.set(topic.parentId, existing);
     }
 
-    return total;
-  }
+    const memo = new Map<string, number>();
+    const compute = (topicId: string): number => {
+      const cached = memo.get(topicId);
+      if (cached !== undefined) return cached;
 
-  // 子孫の未読数（派生ステート）
-  // $derivedはSvelte 4ストア($topicList)の変更を追跡できないため、$stateで管理
-  let descendantsUnreadCount = $state(0);
+      const children = childrenByParent.get(topicId) ?? [];
+      let total = 0;
+      for (const childId of children) {
+        total += unreadByTopic.get(childId) ?? 0;
+        total += compute(childId);
+      }
+      memo.set(topicId, total);
+      return total;
+    };
 
-  function updateDescendantsUnreadCount() {
-    const count = calculateTotalUnreadDescendants(node.id);
-    descendantsUnreadCount = count;
-    hasUnreadChildrenState = count > 0;
-    console.log(`[TopicNode ${node.id}] Updated descendantsUnreadCount:`, {
-      count,
-      hasUnread: hasUnreadChildrenState,
-      topicListSize: $topicList.length
-    });
-  }
+    return compute(node.id);
+  });
+
+  let hasCheckedUnread = $derived(true);
 
 
-  function normalizeTopic(raw: any) {
+  function normalizeTopic(raw: Record<string, unknown>) {
     const id = raw?.id ?? raw?.Id ?? '';
     const createdAt = raw?.createdAt ?? raw?.CreatedAt ?? null;
     const updatedAt = raw?.updatedAt ?? raw?.UpdatedAt ?? null;
 
     return {
-      id,
+      id: id as string,
       roomId: raw?.roomId ?? raw?.RoomId ?? '',
       title: raw?.title ?? raw?.Title ?? '',
       description: raw?.description ?? raw?.Description,
       parentId: raw?.parentId ?? raw?.ParentId ?? null,
       childIds: raw?.childIds ?? raw?.ChildIds ?? [],
-      createdAt: createdAt ? new Date(createdAt) : new Date(),
-      updatedAt: updatedAt ? new Date(updatedAt) : new Date(),
+      createdAt: createdAt ? new Date(createdAt as string) : new Date(),
+      updatedAt: updatedAt ? new Date(updatedAt as string) : new Date(),
       creatorId: raw?.creatorId ?? raw?.CreatorId ?? '',
       messageCount: raw?.messageCount ?? raw?.MessageCount ?? 0,
       unreadCount: raw?.unreadCount ?? raw?.UnreadCount ?? 0,
@@ -108,7 +110,7 @@
   async function refreshHasChildren(topicId: string) {
     try {
       const tenant = getCurrentTenant();
-      const updated = await api.get<any>(`/${tenant}/api/Topic/${topicId}`);
+      const updated = await api.get<Record<string, unknown>>(`/${tenant}/api/topic/${topicId}`);
       const hasChildren = updated?.hasChildren ?? updated?.HasChildren ?? undefined;
       if (typeof hasChildren === 'boolean') {
         updateTopic(topicId, { hasChildren });
@@ -127,7 +129,7 @@
     const tenant = getCurrentTenant();
     const oldParentId = dragged.parentId;
 
-    await api.put(`/${tenant}/api/Topic/${draggedTopicId}`, {
+    await api.put(`/${tenant}/api/topic/${draggedTopicId}`, {
       parentId: newParentId,
     });
 
@@ -139,12 +141,13 @@
 
   // 指定したトピックIDの子トピックを取得
   async function fetchChildrenByParentId(parentId: string): Promise<any[]> {
+    if (!$currentRoom?.id) return [];
     const tenant = getCurrentTenant();
-    const response = await api.get<any[]>(`/${tenant}/api/Topic/parent/${parentId}`);
+    const response = await api.get<Record<string, unknown>[]>(`/${tenant}/api/topic/room/${$currentRoom.id}/parent/${parentId}`);
     const childTopics = Array.isArray(response) ? response.map(normalizeTopic) : [];
 
     // 子トピックをストアに追加または更新
-    childTopics.forEach((topic) => {
+    childTopics.forEach((topic: any) => {
       const existing = $topicList.find((t) => t.id === topic.id);
       if (!existing) {
         addTopic(topic);
@@ -161,63 +164,100 @@
     return childTopics;
   }
 
-  async function fetchChildTopics() {
-    if (!$currentRoom || isLoadingChildren) return;
+  async function fetchChildTopics(force = false): Promise<boolean> {
+    if (childrenFetchPromise) {
+      await childrenFetchPromise;
+      return latestChildFetchSucceeded;
+    }
+    if (!$currentRoom || isLoadingChildren) return false;
+    if (!force && Date.now() < nextChildrenFetchRetryAt) return false;
 
-    isLoadingChildren = true;
+    childrenFetchPromise = (async () => {
+      isLoadingChildren = true;
+      latestChildFetchSucceeded = false;
+      try {
+        const childTopics = await fetchChildrenByParentId(node.id);
+        if (childTopics.length > 0) {
+          updateTopic(node.id, { hasChildren: true });
+        }
+        latestChildFetchSucceeded = true;
+        nextChildrenFetchRetryAt = 0;
+      } catch (err) {
+        console.error('Failed to fetch child topics:', err);
+        nextChildrenFetchRetryAt = Date.now() + CHILD_FETCH_RETRY_COOLDOWN_MS;
+      } finally {
+        isLoadingChildren = false;
+      }
+    })();
+
     try {
-      // 子トピックを取得
-      const childTopics = await fetchChildrenByParentId(node.id);
-
-      // 子がいたらhasChildrenをtrueに更新
-      if (childTopics.length > 0) {
-        updateTopic(node.id, { hasChildren: true });
-      }
-
-      // 未読状態をログ出力（$effectで自動更新される）
-      if (node.hasChildren) {
-        console.log(`[TopicNode ${node.id}] After fetching children:`, {
-          childTopics: childTopics.map(c => ({ id: c.id, title: c.title, unreadCount: c.unreadCount })),
-          totalDescendantsUnread: descendantsUnreadCount
-        });
-      }
-    } catch (err) {
-      console.error('Failed to fetch child topics:', err);
+      await childrenFetchPromise;
     } finally {
-      isLoadingChildren = false;
+      childrenFetchPromise = null;
+    }
+    return latestChildFetchSucceeded;
+  }
+
+  async function ensureChildrenLoadedIfExpanded() {
+    if (!node.isExpanded || !node.hasChildren) return;
+    if (hasFetchedChildrenForCurrentExpansion) return;
+    const loaded = await fetchChildTopics();
+    if (loaded) {
+      hasFetchedChildrenForCurrentExpansion = true;
     }
   }
 
   async function toggleExpand() {
     if (!node.isExpanded) {
-      // Expanding - always load child topics from backend
-      await fetchChildTopics();
+      const loaded = await fetchChildTopics(true);
+      if (loaded) {
+        hasFetchedChildrenForCurrentExpansion = true;
+      }
+    } else {
+      hasFetchedChildrenForCurrentExpansion = false;
     }
-
     toggleTopicExpansion(node.id);
   }
 
   async function selectTopic() {
     if (!$currentRoom) return;
 
-    const tenant = ($page.params as any)?.tenant ?? getCurrentTenant();
+    const tenant = ($page.params as Record<string, string>)?.tenant ?? getCurrentTenant();
     if (!tenant) return;
 
-    // If already selected, keep selection (don't toggle off).
     if (selectedTopicId === node.id) return;
 
-    // 子トピックを持っている場合、子トピックを読み込んでおく
-    if (node.hasChildren) {
-      // topicListから子トピックをチェック
-      const childTopicsInList = $topicList.filter(t => t.parentId === node.id);
-      const needsLoad = childTopicsInList.length === 0 && !isLoadingChildren;
-
-      if (needsLoad) {
-        await fetchChildTopics();
-      }
-    }
-
     goto(`/${tenant}/room/${$currentRoom.id}/topic/${node.id}`, { keepFocus: true, noScroll: true });
+  }
+
+  $effect(() => {
+    hasUnreadChildrenState = descendantsUnreadCount > 0;
+  });
+
+  $effect(() => {
+    void ensureChildrenLoadedIfExpanded();
+  });
+
+  $effect(() => {
+    if (!node.isExpanded) {
+      hasFetchedChildrenForCurrentExpansion = false;
+    }
+  });
+
+  function getContextMenuItems(): ContextMenuItem[] {
+    return [
+      {
+        id: 'edit',
+        label: 'Edit',
+        action: openEditModal,
+      },
+      {
+        id: 'delete',
+        label: 'Delete',
+        action: openDeleteModal,
+        isDangerous: true,
+      }
+    ];
   }
 
   function handleContextMenu(e: MouseEvent) {
@@ -272,7 +312,7 @@
 
   function openEditModal() {
     // Ensure the topic to edit is selected
-    const topic = $topicList.find((t) => t.id === node.id);
+    const topic = $topicList.find((t): t is Topic => t.id === node.id);
     if (topic) setSelectedTopic(topic);
     const modal: ModalConfig = {
       id: 'topic-edit',
@@ -285,7 +325,7 @@
   }
 
   function openDeleteModal() {
-    const topic = $topicList.find((t) => t.id === node.id);
+    const topic = $topicList.find((t): t is Topic => t.id === node.id);
     if (topic) setSelectedTopic(topic);
     const modal: ModalConfig = {
       id: 'topic-delete',
@@ -307,60 +347,7 @@
     ui.openModal(modal);
   }
 
-  // コンポーネントマウント時に子トピックの未読状態をチェック
-  onMount(async () => {
-    // 子トピックがまだロードされていない場合はロード
-    if (node.hasChildren && !isLoadingChildren) {
-      const childTopics = $topicList.filter(t => t.parentId === node.id);
-      if (childTopics.length === 0) {
-        await fetchChildTopics();
-      } else {
-        // 既に子トピックがロードされている場合は未読状態をチェック
-        console.log(`[TopicNode ${node.id}] Initial unread check on mount (children already loaded):`, {
-          childTopics: childTopics.map(c => ({ id: c.id, title: c.title, unreadCount: c.unreadCount })),
-          totalDescendantsUnread: descendantsUnreadCount
-        });
-      }
-    }
-
-    // $effectが自動的に未読状態を更新するため、手動の更新は不要
-  });
-
-  // ノードが展開状態のときに子トピックをロード
-  $effect(() => {
-    if (node.isExpanded && node.hasChildren) {
-      // 子トピックがロードされているかチェック
-      const childTopics = $topicList.filter(t => t.parentId === node.id);
-      if (childTopics.length === 0 && !isLoadingChildren) {
-        // 子トピックをロード（非同期処理はawaitせずに実行）
-        fetchChildTopics();
-      }
-    }
-  });
-
-  // $topicListの変更を監視して子孫の未読数を更新
-  // Svelte 5の$derivedはSvelte 4ストア($topicList)の変更を追跡できないため、$effectで監視
-  $effect(() => {
-    // $topicListを参照して変更を監視
-    const topicListSnapshot = $topicList;
-    updateDescendantsUnreadCount();
-  });
-
-  function getContextMenuItems(): ContextMenuItem[] {
-    return [
-      {
-        id: 'edit',
-        label: 'Edit',
-        action: openEditModal,
-      },
-      {
-        id: 'delete',
-        label: 'Delete',
-        action: openDeleteModal,
-        isDangerous: true,
-      },
-    ];
-  }
+  
 </script>
 
 <div class="topic-node">
@@ -484,8 +471,8 @@
     transition: background-color var(--transition-fast);
     border-radius: var(--border-radius-sm);
     user-select: none;
-    width: 180px;  /* 固定幅 */
-    max-width: 180px;
+    width: 100%;
+    min-width: 180px;
   }
 
   .topic-header:hover {
@@ -562,7 +549,7 @@
     background-color: transparent;
     border: none;
     color: var(--color-text-light);
-    opacity: 0;
+    opacity: 1;
     transition: opacity var(--transition-fast);
     font-weight: 600;
   }
@@ -581,12 +568,31 @@
     background-color: transparent;
     border: none;
     color: var(--color-text-light);
-    opacity: 0;
+    opacity: 1;
     transition: opacity var(--transition-fast);
   }
 
   .topic-header:hover .topic-options-button {
     opacity: 1;
+  }
+
+  .topic-header:focus-within .topic-add-button,
+  .topic-header:focus-within .topic-options-button {
+    opacity: 1;
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    .topic-add-button,
+    .topic-options-button {
+      opacity: 0;
+    }
+
+    .topic-header:hover .topic-add-button,
+    .topic-header:hover .topic-options-button,
+    .topic-header:focus-within .topic-add-button,
+    .topic-header:focus-within .topic-options-button {
+      opacity: 1;
+    }
   }
 
   .topic-options-button:hover {

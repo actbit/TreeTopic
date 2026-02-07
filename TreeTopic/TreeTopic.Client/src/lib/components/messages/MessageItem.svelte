@@ -8,6 +8,7 @@
   import Modal from '../common/Modal.svelte';
   import LoadingSpinner from '../common/LoadingSpinner.svelte';
   import { childTopicsBySourceMessage, type Topic } from '$lib/stores/topics';
+  import { currentRoomUser } from '$lib/stores/rooms';
   import type { ContextMenuItem } from '../common/ContextMenu.svelte';
   import type { Message } from '$lib/stores/messages';
   import { messageList, startReply } from '$lib/stores/messages';
@@ -31,6 +32,12 @@
 
   let replyTo = $derived(
     !message.replyToId ? null : ($messageList.find((m) => m.id === message.replyToId) ?? null)
+  );
+  let canEditMessage = $derived.by(() =>
+    Boolean(message.canEdit || message.isOwner || ($currentRoomUser && message.userId === $currentRoomUser.id))
+  );
+  let canDeleteMessage = $derived.by(() =>
+    Boolean(message.canDelete || message.isOwner || ($currentRoomUser && message.userId === $currentRoomUser.id))
   );
 
   interface PreviewMessage {
@@ -173,7 +180,7 @@
       const tenant = ($page.params as any)?.tenant ?? getCurrentTenant();
       if (!tenant) throw new Error('Tenant not found');
 
-      const response = await api.get<any[]>(`/${tenant}/api/Message/topic/${child.id}`);
+      const response = await api.get<any[]>(`/${tenant}/api/message/topic/${child.id}`);
       const normalized =
         Array.isArray(response) && response.length > 0
           ? response
@@ -236,7 +243,7 @@
     }
   }
 
-  const contextMenuItems: ContextMenuItem[] = [
+  let contextMenuItems = $derived.by<ContextMenuItem[]>(() => [
     {
       id: 'reply',
       label: 'Reply',
@@ -254,22 +261,20 @@
       label: 'Copy URL',
       action: copyMessageUrl,
     },
-    {
+    ...(canEditMessage ? [{
       id: 'edit',
       label: 'Edit',
       icon: '✏️',
       action: openEditModal,
-
-    },
-    {
+    } as ContextMenuItem] : []),
+    ...(canDeleteMessage ? [{
       id: 'delete',
       label: 'Delete',
       icon: '🗑️',
       action: openDeleteModal,
       isDangerous: true,
-
-    },
-  ];
+    } as ContextMenuItem] : []),
+  ]);
 
   function linkifyMessageContent(content: string): MessageContentPart[] {
     const text = content ?? '';

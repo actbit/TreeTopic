@@ -166,7 +166,7 @@
 
     try {
       const tenant = api.getCurrentTenant();
-      const raw = await api.get<any[]>(`/${tenant}/api/Topic/room/${$currentRoom.id}`);
+      const raw = await api.get<any[]>(`/${tenant}/api/topic/room/${$currentRoom.id}`);
       const list = Array.isArray(raw) ? raw : [];
 
       const normalized = list
@@ -280,7 +280,7 @@
           title: title.trim() || undefined,
         };
 
-        const created = await api.post<any>(`/${tenant}/api/Share/room/${$currentRoom.id}/brainstorm`, payload);
+        const created = await api.post<any>(`/${tenant}/api/share/room/${$currentRoom.id}/brainstorm`, payload);
         shares.addShare(denormalizeShareForAdd(created));
         await refreshSharesAfterMutation();
         ui.closeModal(modalId);
@@ -307,7 +307,7 @@
         form.append('updateShare', updateExistingShare ? 'true' : 'false');
       }
 
-      const created = await api.post<any>(`/${tenant}/api/Share/room/${$currentRoom.id}`, form);
+      const created = await api.post<any>(`/${tenant}/api/share/room/${$currentRoom.id}`, form);
       shares.addShare(denormalizeShareForAdd(created));
       await refreshSharesAfterMutation();
       ui.closeModal(modalId);

@@ -7,7 +7,7 @@
   import { currentRoom } from '$lib/stores/rooms';
   import { selectedTopic } from '$lib/stores/topics';
   import { api } from '$lib/api/client';
-  import { shareItems, sharesLoading, sharesError, shares, loadShares } from '$lib/stores/shares';
+  import { shareItems, sharesLoading, sharesError, shares, loadShares, type ShareItem } from '$lib/stores/shares';
 
   interface Props {
     variant?: 'panel' | 'content';
@@ -61,7 +61,7 @@
     if (!confirm('Delete this shared item?')) return;
     try {
       const tenant = api.getCurrentTenant();
-      await api.delete(`/${tenant}/api/Share/room/${$currentRoom.id}/${shareId}`);
+      await api.delete(`/${tenant}/api/share/room/${$currentRoom.id}/${shareId}`);
       shares.removeShare(shareId);
     } catch (err) {
       console.error(err);
@@ -81,7 +81,8 @@
     window.open(url, '_blank');
   }
 
-  function formatWhen(value: any): string {
+  function formatWhen(value: Date | string | null | undefined): string {
+    if (!value) return '';
     const date = value instanceof Date ? value : new Date(value);
     if (Number.isNaN(date.getTime())) return '';
     return date.toLocaleString(undefined, {
@@ -124,7 +125,7 @@
     return `/${api.getCurrentTenant()}/brainstorm/${boardId}`;
   }
 
-  function openMenuForShare(s: any, e: MouseEvent) {
+  function openMenuForShare(s: ShareItem, e: MouseEvent) {
     e.preventDefault();
     e.stopPropagation();
 

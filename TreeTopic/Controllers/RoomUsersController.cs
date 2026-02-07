@@ -1,4 +1,4 @@
-﻿using Finbuckle.MultiTenant;
+using Finbuckle.MultiTenant;
 using Finbuckle.MultiTenant.Abstractions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
@@ -22,30 +22,48 @@ namespace TreeTopic.Controllers;
 
 [ApiController]
 [Route("{tenant}/api/[controller]")]
+[Authorize]
 public class RoomUsersController : ControllerBase
 {
     private readonly IRoomUserRepository _roomUserRepository;
     private readonly IMultiTenantContextAccessor<ApplicationTenantInfo> _tenantAccessor;
     private readonly IconService _iconService;
     private readonly UserManager<ApplicationUser> _userManager;
+    private readonly RoomUserManager _roomUserManager;
+    private readonly ApplicationDbContext _dbContext;
 
     public RoomUsersController(
         IRoomUserRepository roomUserRepository,
         IMultiTenantContextAccessor<ApplicationTenantInfo> tenantAccessor,
         IconService iconService,
-        UserManager<ApplicationUser> userManager)
+        UserManager<ApplicationUser> userManager,
+        RoomUserManager roomUserManager,
+        ApplicationDbContext dbContext)
     {
         _roomUserRepository = roomUserRepository;
         _tenantAccessor = tenantAccessor;
         _iconService = iconService;
         _userManager = userManager;
+        _roomUserManager = roomUserManager;
+        _dbContext = dbContext;
     }
 
     private string? CurrentTenantId => _tenantAccessor.MultiTenantContext?.TenantInfo?.Id;
-    private Guid CurrentUserId => Guid.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? Guid.Empty.ToString());
+    private Guid CurrentUserId
+    {
+        get
+        {
+            var userIdValue = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (!Guid.TryParse(userIdValue, out var userId))
+            {
+                throw new UnauthorizedAccessException("User is not authenticated or has invalid user ID.");
+            }
+            return userId;
+        }
+    }
 
     [HttpGet("room/{roomId}")]
-    [RequirePermission(RoomPermissions.ManageUsers)]
+    [RequireAny(RoomPermissions.ManageUsers, TenantPermissions.RoomManage)]
     public async Task<IActionResult> ListByRoom([FromRoute] MaskedGuid roomId, CancellationToken cancellationToken)
     {
         var entities = await _roomUserRepository.GetByRoomIdAsync((Guid)roomId, cancellationToken);
@@ -74,7 +92,7 @@ public class RoomUsersController : ControllerBase
     }
 
     [HttpGet("user/{userId}")]
-    [RequirePermission(RoomPermissions.ManageUsers)]
+    [RequireAny(RoomPermissions.ManageUsers, TenantPermissions.RoomManage)]
     public async Task<IActionResult> ListByUser([FromRoute] MaskedGuid userId, CancellationToken cancellationToken)
     {
         var entities = await _roomUserRepository.GetByUserIdAsync((Guid)userId, cancellationToken);
@@ -83,6 +101,7 @@ public class RoomUsersController : ControllerBase
     }
 
     [HttpPost("room/{roomId}/join")]
+    [RequireRoomJoinAccess]
     public async Task<IActionResult> Join([FromRoute] MaskedGuid roomId, [FromBody] JoinRoomUserRequest request, CancellationToken cancellationToken)
     {
         if (!ModelState.IsValid)
@@ -184,7 +203,7 @@ public class RoomUsersController : ControllerBase
     }
 
     [HttpPost("room/{roomId}")]
-    [RequirePermission(RoomPermissions.ManageUsers)]
+    [RequireAny(RoomPermissions.ManageUsers, TenantPermissions.RoomManage)]
     public async Task<IActionResult> Create([FromRoute] MaskedGuid roomId, [FromBody] CreateRoomUserRequest request)
     {
         if (!ModelState.IsValid)
@@ -208,7 +227,7 @@ public class RoomUsersController : ControllerBase
     }
 
     [HttpGet("{id}")]
-    [RequirePermission(RoomPermissions.ManageUsers)]
+    [RequireAny(RoomPermissions.ManageUsers, TenantPermissions.RoomManage)]
     public async Task<IActionResult> GetById([FromRoute] MaskedGuid id, CancellationToken cancellationToken)
     {
         var entity = await _roomUserRepository.Query()
@@ -232,16 +251,7 @@ public class RoomUsersController : ControllerBase
         var roomUser = await _roomUserRepository.GetByRoomAndUserAsync((Guid)roomId, CurrentUserId, cancellationToken);
         if (roomUser == null)
         {
-            roomUser = new RoomUser
-            {
-                ApplicationUserId = CurrentUserId,
-                RoomId = (Guid)roomId,
-                Name = RoomUserNameHelper.DefaultUserToken,
-                UseMainName = true,
-                UseMainIcon = false
-            };
-            await _roomUserRepository.AddAsync(roomUser, cancellationToken);
-            await _roomUserRepository.SaveChangesAsync(cancellationToken);
+            return Forbid();
         }
 
         var fileName = await _iconService.SaveRoomUserIconAsync(roomUser, file, cancellationToken);
@@ -322,7 +332,7 @@ public class RoomUsersController : ControllerBase
     }
 
     [HttpDelete("{id}")]
-    [RequirePermission(RoomPermissions.ManageUsers)]
+    [RequireAny(RoomPermissions.ManageUsers, TenantPermissions.RoomManage)]
     public async Task<IActionResult> Delete([FromRoute] MaskedGuid id)
     {
         var entity = await _roomUserRepository.GetByIdAsync(id);
@@ -404,6 +414,50 @@ public class RoomUsersController : ControllerBase
             if (useMainIcon.Value)
                 target.IconFileName = null;
         }
+    }
+
+    /// <summary>
+    /// RoomUserのRoomRoleを設定（既存のロールをすべて置き換え）
+    /// </summary>
+    [HttpPut("{roomUserId}/role")]
+    [RequireAny(RoomPermissions.ManageUsers, TenantPermissions.RoomManage)]
+    public async Task<IActionResult> SetUserRole(
+        [FromRoute] MaskedGuid roomUserId,
+        [FromBody] SetRoomUserRoleRequest request,
+        CancellationToken cancellationToken)
+    {
+        var roomUserGuid = (Guid)roomUserId;
+
+        // RoomUserの存在確認
+        var roomUser = await _roomUserRepository.Query()
+            .Include(ru => ru.ApplicationUser)
+            .FirstOrDefaultAsync(ru => ru.Id == roomUserGuid, cancellationToken);
+        if (roomUser == null)
+        {
+            return NotFound(new { message = "RoomUser not found" });
+        }
+
+        // RoleIdがnullの場合は、全てのロールを削除
+        if (request.RoleId.HasValue)
+        {
+            var roleId = (Guid)request.RoleId.Value;
+            var role = await _dbContext.RoomRoles
+                .FirstOrDefaultAsync(r => r.Id == roleId, cancellationToken);
+            if (role == null)
+            {
+                return NotFound(new { message = $"RoomRole '{request.RoleId}' not found" });
+            }
+
+            // RoomUserManagerを使ってロールを設定（既存のロールを置き換え）
+            await _roomUserManager.SetRolesAsync(roomUser, new List<Guid> { roleId }, cancellationToken);
+        }
+        else
+        {
+            // roleIdが空の場合は、全てのロールを削除
+            await _roomUserManager.SetRolesAsync(roomUser, new List<Guid>(), cancellationToken);
+        }
+
+        return Ok(MapToDto(roomUser));
     }
 }
 

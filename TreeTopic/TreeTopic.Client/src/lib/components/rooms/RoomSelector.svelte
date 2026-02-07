@@ -27,6 +27,10 @@
   function selectRoom(roomId: string) {
     const room = get(roomList).find((r) => r.id === roomId);
     if (room) {
+      if (room.canJoin === false) {
+        isOpen = false;
+        return;
+      }
       setCurrentRoom(room);
       if (navigateOnSelect) {
         syncRoomToUrl(room.id);
@@ -58,6 +62,43 @@
     e.stopPropagation();
     modals.open('user-setting', 'User Settings', { roomId });
   }
+
+  function resolveIconUrl(url?: string): string {
+    const raw = (url ?? '').trim();
+    if (!raw) return '';
+    if (
+      raw.startsWith('http://') ||
+      raw.startsWith('https://') ||
+      raw.startsWith('data:') ||
+      raw.startsWith('blob:')
+    ) {
+      return raw;
+    }
+    return raw.startsWith('/') ? raw : `/${raw}`;
+  }
+
+  let roomAvatarLoadFailed = $state(false);
+  let appAvatarLoadFailed = $state(false);
+
+  let displayUserIconUrl = $derived.by(() => {
+    const roomIcon = resolveIconUrl($currentRoomUser?.iconUrl);
+    if (roomIcon) return roomIcon;
+    return resolveIconUrl($currentUser?.iconUrl ?? $currentUser?.avatar);
+  });
+
+  let currentUserIconUrl = $derived.by(() =>
+    resolveIconUrl($currentUser?.iconUrl ?? $currentUser?.avatar)
+  );
+
+  $effect(() => {
+    displayUserIconUrl;
+    roomAvatarLoadFailed = false;
+  });
+
+  $effect(() => {
+    currentUserIconUrl;
+    appAvatarLoadFailed = false;
+  });
 </script>
 
 <div class="flex items-center gap-md room-selector-container">
@@ -91,6 +132,7 @@
           {#each ($roomList || []).filter(r => r?.id) as room (room.id)}
             <div
               class="list-item clickable hoverable"
+              class:disabled={room.canJoin === false}
               role="button"
               tabindex="0"
               onclick={() => selectRoom(room.id)}
@@ -106,6 +148,9 @@
                 {#if room.description}
                   <div class="text-small text-light">{room.description}</div>
                 {/if}
+                {#if room.canJoin === false}
+                  <div class="text-small text-light">You cannot join this room</div>
+                {/if}
                 <div class="text-small text-light margin-top-xs">
                   {room.memberCount} member{room.memberCount !== 1 ? 's' : ''}
                   {#if room.unreadCount > 0}
@@ -114,7 +159,7 @@
                 </div>
               </div>
 
-              {#if room.canEdit}
+              {#if room.canEdit !== false}
                 <a
                   href="/{$page.params.tenant}/room/{room.id}/settings"
                   onclick={(e) => e.stopPropagation()}
@@ -127,7 +172,7 @@
             </div>
           {/each}
 
-          {#if $currentRoom}
+          {#if $currentRoom && $currentRoom.canEdit !== false}
             <div class="border-t border-border mt-2 pt-2">
               <a
                 href="/{$page.params.tenant}/room/{$currentRoom.id}/settings"
@@ -159,15 +204,18 @@
       title="User Settings"
       aria-label="Open User Settings"
     >
-      {#if $currentRoomUser.iconUrl}
+      {#if displayUserIconUrl && !roomAvatarLoadFailed}
         <img
-          src={$currentRoomUser.iconUrl}
+          src={displayUserIconUrl}
           alt={$currentRoomUser.displayName}
           class="user-avatar"
+          onerror={() => {
+            roomAvatarLoadFailed = true;
+          }}
         />
       {:else}
         <div class="user-avatar-placeholder">
-          {$currentRoomUser.displayName?.charAt(0) ?? 'U'}
+          {$currentRoomUser.displayName?.charAt(0) || $currentUser?.displayName?.charAt(0) || 'U'}
         </div>
       {/if}
       <span class="user-display-name">{$currentRoomUser.displayName}</span>
@@ -186,15 +234,18 @@
       title="User Settings"
       aria-label="Open User Settings"
     >
-      {#if $currentUser.avatar}
+      {#if currentUserIconUrl && !appAvatarLoadFailed}
         <img
-          src={$currentUser.avatar}
+          src={currentUserIconUrl}
           alt={$currentUser.displayName}
           class="user-avatar"
+          onerror={() => {
+            appAvatarLoadFailed = true;
+          }}
         />
       {:else}
         <div class="user-avatar-placeholder">
-          {$currentUser.displayName?.charAt(0) ?? 'U'}
+          {$currentUser.displayName?.charAt(0) || 'U'}
         </div>
       {/if}
       <span class="user-display-name">{$currentUser.displayName}</span>

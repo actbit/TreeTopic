@@ -11,6 +11,13 @@ namespace TreeTopic.Models
         public string? IconFileName { get; set; }
         public string? Sub { get; set; }
         public string? TenantId { get; set; }
+
+        // Ban related properties
+        public bool IsBanned { get; set; }
+        public DateTime? BannedAt { get; set; }
+        public string? BannedBy { get; set; }
+        public string? BanReason { get; set; }
+
         public ApplicationUser() : base()
         {
             Id = Guid.CreateVersion7();

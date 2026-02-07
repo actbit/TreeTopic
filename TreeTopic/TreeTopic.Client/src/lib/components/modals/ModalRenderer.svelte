@@ -1,6 +1,13 @@
 <script lang="ts">
   import { activeModals, ui } from '$lib/stores/ui';
   import UserSettingModal from '../user/UserSettingModal.svelte';
+  import RoomRolePermissionModal from './RoomRolePermissionModal.svelte';
+  import TopicUserPermissionModal from './TopicUserPermissionModal.svelte';
+  import RoomUserPermissionModal from './RoomUserPermissionModal.svelte';
+  import RoomJoinPermissionModal from './RoomJoinPermissionModal.svelte';
+  import TenantRolePermissionModal from './TenantRolePermissionModal.svelte';
+  import TenantCreateModal from './TenantCreateModal.svelte';
+  import ForbiddenAccessModal from './ForbiddenAccessModal.svelte';
 
   let activeModalsList = $derived.by(() => $activeModals);
 </script>
@@ -10,9 +17,37 @@
     {#if modal.id === 'user-setting' && modal.data}
       <UserSettingModal
         {...modal.data}
-        roomId={modal.data.roomId}
+        roomId={(modal.data as { roomId?: string }).roomId ?? ''}
         onclose={() => ui.closeModal(modal.id)}
       />
+    {/if}
+
+    {#if modal.id === 'room-role-permission'}
+      <RoomRolePermissionModal />
+    {/if}
+
+    {#if modal.id === 'topic-user-permission'}
+      <TopicUserPermissionModal />
+    {/if}
+
+    {#if modal.id === 'room-user-permission'}
+      <RoomUserPermissionModal />
+    {/if}
+
+    {#if modal.id === 'room-join-permission'}
+      <RoomJoinPermissionModal />
+    {/if}
+
+    {#if modal.id === 'tenant-role-permission'}
+      <TenantRolePermissionModal />
+    {/if}
+
+    {#if modal.id === 'tenant-create'}
+      <TenantCreateModal />
+    {/if}
+
+    {#if modal.id === 'forbidden-access'}
+      <ForbiddenAccessModal />
     {/if}
   </div>
 {/each}

@@ -1,4 +1,5 @@
 import { writable, derived } from 'svelte/store';
+import { api } from '$lib/api/client';
 
 /**
  * File version information
@@ -30,9 +31,6 @@ export interface Material {
   uploadedBy: string;
   uploadedByName: string;
   versions: FileVersion[];
-  isArchived: boolean;
-  tags?: string[];
-  description?: string;
 }
 
 /**
@@ -88,10 +86,19 @@ function createFilesStore() {
      * Add a new file
      */
     addFile: (file: Material) => {
-      update((state) => ({
-        ...state,
-        files: [file, ...state.files],
-      }));
+      update((state) => {
+        // Check if file already exists to prevent duplicates
+        const existingFile = state.files.find((f) => f.id === file.id);
+        if (existingFile) {
+          console.warn(`File with ID ${file.id} already exists, skipping duplicate`);
+          return state;
+        }
+
+        return {
+          ...state,
+          files: [file, ...state.files],
+        };
+      });
     },
     /**
      * Update file
@@ -123,17 +130,6 @@ function createFilesStore() {
           f.id === fileId
             ? { ...f, versions: [...f.versions, version], url: version.url }
             : f
-        ),
-      }));
-    },
-    /**
-     * Update file tags
-     */
-    updateFileTags: (fileId: string, tags: string[]) => {
-      update((state) => ({
-        ...state,
-        files: state.files.map((f) =>
-          f.id === fileId ? { ...f, tags } : f
         ),
       }));
     },
@@ -303,12 +299,45 @@ export function addFile(file: Material) {
   files.addFile(file);
 }
 
-export function updateFile(fileId: string, updates: Partial<Material>) {
-  files.updateFile(fileId, updates);
+/**
+ * Update file metadata via API
+ * @param fileId File ID to update
+ * @param updates Partial file data to update
+ * @param tenant Tenant identifier
+ */
+export async function updateFile(fileId: string, updates: Partial<Material>, tenant: string) {
+  try {
+    // Call backend API to update file
+    // Note: Backend UpdateFileRequest only supports FileName and FileType
+    await api.put(`/${tenant}/api/file/${fileId}`, {
+      fileName: updates.fileName,
+      fileType: updates.mimeType
+    });
+
+    // Update local store after successful API call
+    files.updateFile(fileId, updates);
+  } catch (error) {
+    console.error('Failed to update file:', error);
+    throw error;
+  }
 }
 
-export function deleteFile(fileId: string) {
-  files.deleteFile(fileId);
+/**
+ * Delete file via API
+ * @param fileId File ID to delete
+ * @param tenant Tenant identifier
+ */
+export async function deleteFile(fileId: string, tenant: string) {
+  try {
+    // Call backend API to delete file
+    await api.del(`/${tenant}/api/File/${fileId}`);
+
+    // Update local store after successful API call
+    files.deleteFile(fileId);
+  } catch (error) {
+    console.error('Failed to delete file:', error);
+    throw error;
+  }
 }
 
 export function setFiles(filesList: Material[]) {

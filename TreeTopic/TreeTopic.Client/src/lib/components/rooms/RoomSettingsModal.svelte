@@ -3,7 +3,7 @@
   import Button from '../common/Button.svelte';
   import Input from '../common/Input.svelte';
   import ErrorMessage from '../common/ErrorMessage.svelte';
-  import { ui, activeModals } from '$lib/stores/ui';
+  import { ui, activeModals, modals } from '$lib/stores/ui';
   import { currentRoom, updateRoom, deleteRoom as deleteRoomStore } from '$lib/stores/rooms';
   import { isRequired } from '$lib/utils/validation';
   import { api } from '$lib/api/client';
@@ -15,17 +15,49 @@
 
   let name = $state($currentRoom?.name ?? '');
   let description = $state($currentRoom?.description ?? '');
+  let joinPolicy = $state<number>($currentRoom?.joinPolicy ?? 0);
   let isLoading = $state(false);
   let isDeleting = $state(false);
   let error = $state<string | null>(null);
   let nameError = $state<string | null>(null);
+  let canManageRoom = $state(false);
+  let canManageRoles = $state(false);
+  let canManageUsers = $state(false);
+  let canManageJoinPermissions = $state(false);
 
   $effect(() => {
     if ($currentRoom) {
       name = $currentRoom.name;
       description = $currentRoom.description ?? '';
+      joinPolicy = $currentRoom.joinPolicy ?? 0;
+      void loadCapabilities();
     }
   });
+
+  async function loadCapabilities() {
+    if (!$currentRoom) return;
+    try {
+      const tenant = api.getCurrentTenant();
+      const [roomPermRes, tenantPermRes] = await Promise.all([
+        api.get<{ permissions?: string[] }>(`/${tenant}/api/room/${$currentRoom.id}/my/permissions`),
+        api.get<{ permissions?: string[] }>(`/${tenant}/auth/me/permissions`)
+      ]);
+
+      const roomPerms = new Set(roomPermRes?.permissions ?? []);
+      const tenantPerms = new Set(tenantPermRes?.permissions ?? []);
+      const isTenantRoomManage = tenantPerms.has('tenant.room.manage');
+
+      canManageRoom = isTenantRoomManage || roomPerms.has('room.manage');
+      canManageRoles = isTenantRoomManage || roomPerms.has('room.manageRoles');
+      canManageUsers = isTenantRoomManage || roomPerms.has('room.manageUsers');
+      canManageJoinPermissions = isTenantRoomManage || roomPerms.has('room.manage');
+    } catch {
+      canManageRoom = false;
+      canManageRoles = false;
+      canManageUsers = false;
+      canManageJoinPermissions = false;
+    }
+  }
 
   async function handleSave(e: Event) {
     e.preventDefault();
@@ -37,26 +69,32 @@
       nameError = 'Room name is required';
       return;
     }
+    if (!canManageRoom) {
+      error = 'You do not have permission to manage this room';
+      return;
+    }
 
     isLoading = true;
 
     try {
       if ($currentRoom) {
         const tenant = api.getCurrentTenant();
-        await api.put(`/${tenant}/api/Room/${$currentRoom.id}`, {
+        await api.put(`/${tenant}/api/room/${$currentRoom.id}`, {
           name: name.trim(),
           description: description.trim(),
+          joinPolicy: Number(joinPolicy),
         });
 
         updateRoom($currentRoom.id, {
           name,
           description,
+          joinPolicy: Number(joinPolicy),
         });
       }
 
       ui.closeModal(modalId);
-    } catch (err: any) {
-      error = err.message || 'Failed to update room';
+    } catch (err) {
+      error = err instanceof Error ? err.message : 'Failed to update room';
     } finally {
       isLoading = false;
     }
@@ -73,12 +111,12 @@
     try {
       if ($currentRoom) {
         const tenant = api.getCurrentTenant();
-        await api.del(`/${tenant}/api/Room/${$currentRoom.id}`);
+        await api.del(`/${tenant}/api/room/${$currentRoom.id}`);
         deleteRoomStore($currentRoom.id);
         ui.closeModal(modalId);
       }
-    } catch (err: any) {
-      error = err.message || 'Failed to delete room';
+    } catch (err) {
+      error = err instanceof Error ? err.message : 'Failed to delete room';
     } finally {
       isDeleting = false;
     }
@@ -101,7 +139,7 @@
       bind:value={name}
       placeholder="Enter room name"
       error={nameError}
-      disabled={isLoading || isDeleting}
+      disabled={isLoading || isDeleting || !canManageRoom}
       required
     />
 
@@ -111,8 +149,20 @@
         id="room-settings-description"
         bind:value={description}
         placeholder="Enter room description (optional)"
-        disabled={isLoading || isDeleting}
+        disabled={isLoading || isDeleting || !canManageRoom}
       ></textarea>
+    </div>
+
+    <div class="flex flex-col gap-1">
+      <label for="room-settings-join-policy" class="text-sm font-semibold text-text">Join Policy</label>
+      <select
+        id="room-settings-join-policy"
+        bind:value={joinPolicy}
+        disabled={isLoading || isDeleting || !canManageRoom}
+      >
+        <option value={0}>Public (any authenticated user can join)</option>
+        <option value={1}>Invite Only (only allowed users/roles can join)</option>
+      </select>
     </div>
 
     {#if $currentRoom?.memberCount}
@@ -131,7 +181,7 @@
         size="base"
         fullWidth
         loading={isLoading}
-        disabled={isLoading || isDeleting}
+        disabled={isLoading || isDeleting || !canManageRoom}
       >
         {#if isLoading}
           Saving...
@@ -151,15 +201,48 @@
       </Button>
     </div>
 
-    <div class="border-t border-border pt-8">
-      <a
-        href="/{$page.params.tenant}/room/{$currentRoom?.id}/settings"
-        class="block w-full text-center px-4 py-3 border border-primary text-primary rounded-lg hover:bg-primary hover:bg-opacity-10 transition-colors font-medium"
-        onclick={() => ui.closeModal(modalId)}
-      >
-        詳細設定（ロール・権限管理）
-      </a>
-    </div>
+    {#if canManageRoles || canManageUsers || canManageJoinPermissions}
+      <div class="border-t border-border pt-8">
+        <div class="flex gap-4 flex-wrap">
+          {#if canManageRoles}
+            <button
+              type="button"
+              class="flex-1 px-4 py-3 border border-primary text-primary rounded-lg hover:bg-primary hover:bg-opacity-10 transition-colors font-medium"
+              onclick={() => modals.open('room-role-permission', 'Room Role Permissions', {
+                tenant: $page.params.tenant,
+                roomId: $currentRoom?.id
+              })}
+            >
+              ロール権限管理
+            </button>
+          {/if}
+          {#if canManageUsers}
+            <button
+              type="button"
+              class="flex-1 px-4 py-3 border border-primary text-primary rounded-lg hover:bg-primary hover:bg-opacity-10 transition-colors font-medium"
+              onclick={() => modals.open('room-user-permission', 'Room User Permissions', {
+                tenant: $page.params.tenant,
+                roomId: $currentRoom?.id
+              })}
+            >
+              ユーザー権限管理
+            </button>
+          {/if}
+          {#if canManageJoinPermissions}
+            <button
+              type="button"
+              class="flex-1 px-4 py-3 border border-primary text-primary rounded-lg hover:bg-primary hover:bg-opacity-10 transition-colors font-medium"
+              onclick={() => modals.open('room-join-permission', 'Room Join Permissions', {
+                tenant: $page.params.tenant,
+                roomId: $currentRoom?.id
+              })}
+            >
+              参加権限管理
+            </button>
+          {/if}
+        </div>
+      </div>
+    {/if}
 
     {#if $currentRoom?.canDelete}
       <div class="border-t border-border pt-8">

@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using TreeTopic.Dtos;
 using TreeTopic.Filters;
 using TreeTopic.Permissions;
@@ -20,15 +21,19 @@ public class RolesController : ControllerBase
     }
 
     [HttpGet]
-    [RequirePermission(IdentityPermissions.RoleRead)]
-    public ActionResult<List<RoleDto>> List()
+    [Authorize]
+    [RequireAny(TenantPermissions.RoleRead, TenantPermissions.UserManagement)]
+    public async Task<ActionResult<List<RoleDto>>> List()
     {
-        var roles = _roleManager.Roles.ToList();
-        return Ok(roles.Select(r => new RoleDto { Id = r.Id, Name = r.Name }).ToList());
+        var roles = await _roleManager.Roles
+            .Include(r => r.Authorities)
+            .ToListAsync();
+
+        return Ok(roles.Select(MapRoleToDto).ToList());
     }
 
     [HttpPost]
-    [RequirePermission(IdentityPermissions.RoleManage)]
+    [RequireAny(TenantPermissions.RoleManage)]
     public async Task<ActionResult<RoleDto>> Create([FromBody] RoleCreationRequest request)
     {
         if (!ModelState.IsValid)
@@ -49,11 +54,11 @@ public class RolesController : ControllerBase
             return ValidationProblem(new ValidationProblemDetails(result.Errors.ToDictionary(e => e.Code, e => new[] { e.Description })));
         }
 
-        return CreatedAtAction(nameof(List), new { id = role.Id }, new RoleDto { Id = role.Id, Name = role.Name });
+        return CreatedAtAction(nameof(List), new { id = role.Id }, MapRoleToDto(role));
     }
 
     [HttpDelete("{roleName}")]
-    [RequirePermission(IdentityPermissions.RoleManage)]
+    [RequireAny(TenantPermissions.RoleManage)]
     public async Task<IActionResult> Delete(string roleName)
     {
         if (string.IsNullOrWhiteSpace(roleName))
@@ -74,5 +79,15 @@ public class RolesController : ControllerBase
         }
 
         return NoContent();
+    }
+
+    private static RoleDto MapRoleToDto(ApplicationRole role)
+    {
+        return new RoleDto
+        {
+            Id = role.Id,
+            Name = role.Name,
+            Permissions = role.Authorities?.Select(a => a.Name).ToList()
+        };
     }
 }

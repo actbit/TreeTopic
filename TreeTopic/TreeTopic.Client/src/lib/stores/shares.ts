@@ -3,6 +3,66 @@ import { api } from '$lib/api/client';
 
 export type ShareKind = 'document' | 'image' | 'brainstorm';
 
+export interface RawShareItem {
+  id?: string;
+  Id?: string;
+  roomId?: string;
+  RoomId?: string;
+  topicId?: string | null;
+  TopicId?: string | null;
+  kind?: ShareKind;
+  Kind?: ShareKind;
+  boardId?: string | null;
+  BoardId?: string | null;
+  title?: string;
+  Title?: string;
+  fileName?: string;
+  FileName?: string;
+  mimeType?: string;
+  MimeType?: string;
+  size?: number;
+  Size?: number;
+  url?: string;
+  Url?: string;
+  createdAt?: string | Date;
+  CreatedAt?: string | Date;
+  createdByUser?: {
+    id: string;
+    displayName?: string | null;
+  } | null;
+  CreatedByUser?: {
+    id: string;
+    DisplayName?: string | null;
+  } | null;
+  createdByName?: string;
+  CreatedByName?: string;
+  sourceMessage?: {
+    id: string;
+    header: string;
+  } | null;
+  SourceMessage?: {
+    id: string;
+    header: string;
+  } | null;
+  sourceFile?: {
+    id: string;
+    fileName: string;
+  } | null;
+  SourceFile?: {
+    id: string;
+    fileName: string;
+  } | null;
+  sourceShareItem?: {
+    id: string;
+    title: string;
+  } | null;
+  SourceShareItem?: {
+    id: string;
+    title: string;
+  } | null;
+  [key: string]: unknown;
+}
+
 export interface ShareItem {
   id: string;
   roomId: string;
@@ -42,7 +102,7 @@ export interface SharesState {
   lastUpdated: number | null;
 }
 
-function normalizeShare(raw: any): ShareItem {
+function normalizeShare(raw: RawShareItem): ShareItem {
   const createdAt = raw?.createdAt ?? raw?.CreatedAt ?? null;
   const kind = (raw?.kind ?? raw?.Kind ?? 'document') as ShareKind;
 
@@ -107,7 +167,7 @@ export async function loadShares(params: { tenant: string; roomId: string; topic
   shares.setError(null);
 
   try {
-    const list = await api.get<any[]>(`/${params.tenant}/api/Share/room/${params.roomId}`, {
+    const list = await api.get<any[]>(`/${params.tenant}/api/share/room/${params.roomId}`, {
       params: {
         topicId: params.topicId || undefined,
       },
@@ -122,6 +182,6 @@ export async function loadShares(params: { tenant: string; roomId: string; topic
   }
 }
 
-export function denormalizeShareForAdd(raw: any): ShareItem {
+export function denormalizeShareForAdd(raw: RawShareItem): ShareItem {
   return normalizeShare(raw);
 }

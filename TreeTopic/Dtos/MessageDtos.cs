@@ -66,6 +66,11 @@ public class CreateChildTopicRequest : BaseCreateRequest
     public string? Description { get; set; }
 
     public List<MaskedGuid>? SelectedMessageIds { get; set; }
+
+    /// <summary>
+    /// 親トピックの権限を継承するかどうか（デフォルト: true）
+    /// </summary>
+    public bool InheritPermissions { get; set; } = true;
 }
 
 public class MoveMessagesRequest : BaseCreateRequest

@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 using TreeTopic.Common;
 using TreeTopic.Common.Helpers;
 using TreeTopic.Dtos;
@@ -10,14 +11,30 @@ public class RoleManagementService : BaseService
 {
     private readonly RoleManager<ApplicationRole> _roleManager;
     private readonly SetupTokenValidationService _setupTokenValidator;
+    private readonly ApplicationDbContext _context;
 
     public RoleManagementService(
         RoleManager<ApplicationRole> roleManager,
         SetupTokenValidationService setupTokenValidator,
+        ApplicationDbContext context,
         ILogger<RoleManagementService> logger) : base(logger)
     {
         _roleManager = roleManager;
         _setupTokenValidator = setupTokenValidator;
+        _context = context;
+    }
+
+    public async Task<Result<IEnumerable<ApplicationRole>>> GetAllRolesAsync(string tenant)
+    {
+        return await ExecuteAsync(async () =>
+        {
+            // すべてのロールとそのパーミッションを取得
+            var allRoles = await _roleManager.Roles
+                .Include(r => r.Authorities)
+                .ToListAsync();
+
+            return Result<IEnumerable<ApplicationRole>>.Success(allRoles);
+        }, nameof(GetAllRolesAsync));
     }
 
     public async Task<Result<ApplicationRole>> CreateRoleAsync(
@@ -25,12 +42,6 @@ public class RoleManagementService : BaseService
     {
         return await ExecuteAsync(async () =>
         {
-            // SetupToken の検証
-            if (!await _setupTokenValidator.ValidateSetupTokenAsync(tenant, request.SetupToken))
-            {
-                return Result<ApplicationRole>.Unauthorized("Invalid or expired setup token");
-            }
-
             // Validate role name is not empty
             var nameValidation = ValidationHelper.ValidateRequired(request.Name, "Role name");
             if (nameValidation.IsFailure)
@@ -64,12 +75,6 @@ public class RoleManagementService : BaseService
     {
         return await ExecuteAsync(async () =>
         {
-            // SetupToken の検証
-            if (!await _setupTokenValidator.ValidateSetupTokenAsync(tenant, request.SetupToken))
-            {
-                return Result.Unauthorized("Invalid or expired setup token");
-            }
-
             // ロール名を検証
             var roleNameValidation = ValidationHelper.ValidateRequired(request.RoleName, "Role name");
             if (roleNameValidation.IsFailure)
@@ -101,24 +106,11 @@ public class RoleManagementService : BaseService
     {
         return await ExecuteAsync(async () =>
         {
-            // SetupToken の検証
-            if (!await _setupTokenValidator.ValidateSetupTokenAsync(tenant, request.SetupToken))
-            {
-                return Result<Permission>.Unauthorized("Invalid or expired setup token");
-            }
-
             // ロール名を検証
             var roleNameValidation = ValidationHelper.ValidateRequired(request.RoleName, "Role name");
             if (roleNameValidation.IsFailure)
             {
                 return Result<Permission>.BadRequest(roleNameValidation.Error!.Message);
-            }
-
-            // ロール名で検索
-            var role = await _roleManager.FindByNameAsync(request.RoleName.Trim());
-            if (role == null)
-            {
-                return Result<Permission>.NotFound($"Role '{request.RoleName}' not found");
             }
 
             // Validate permission name is not empty
@@ -128,8 +120,27 @@ public class RoleManagementService : BaseService
                 return Result<Permission>.BadRequest(permissionNameValidation.Error!.Message);
             }
 
+            // DbContextを使用して操作
+
+            // ロール名を正規化
+            var normalizedName = _roleManager.NormalizeKey(request.RoleName.Trim());
+
+            // ロール名で検索（AsNoTrackingを使用して追跡を回避）
+            var role = await _context.Roles
+                .AsNoTracking()
+                .FirstOrDefaultAsync(r => r.NormalizedName == normalizedName);
+
+            if (role == null)
+            {
+                return Result<Permission>.NotFound($"Role '{request.RoleName}' not found");
+            }
+
             // Check if permission already exists for this role
-            if (role.Authorities?.Any(a => a.Name == request.PermissionName) ?? false)
+            var existingPermission = await _context.Permissions
+                .AsNoTracking()
+                .FirstOrDefaultAsync(p => p.RoleId == role.Id && p.Name == request.PermissionName);
+
+            if (existingPermission != null)
             {
                 return Result<Permission>.Conflict($"Permission '{request.PermissionName}' already exists for this role");
             }
@@ -142,18 +153,8 @@ public class RoleManagementService : BaseService
                 CreatedAt = DateTime.UtcNow
             };
 
-            if (role.Authorities == null)
-            {
-                role.Authorities = new List<Permission>();
-            }
-            role.Authorities.Add(permission);
-            var result = await _roleManager.UpdateAsync(role);
-
-            var identityResult = result.ToResult(permission);
-            if (identityResult.IsFailure)
-            {
-                return Result<Permission>.BadRequest(identityResult.Error!.Message);
-            }
+            _context.Permissions.Add(permission);
+            await _context.SaveChangesAsync();
 
             return Result<Permission>.Success(permission, 201);
         }, nameof(AddPermissionToRoleAsync));
@@ -164,24 +165,11 @@ public class RoleManagementService : BaseService
     {
         return await ExecuteAsync(async () =>
         {
-            // SetupToken の検証
-            if (!await _setupTokenValidator.ValidateSetupTokenAsync(tenant, request.SetupToken))
-            {
-                return Result.Unauthorized("Invalid or expired setup token");
-            }
-
             // ロール名を検証
             var roleNameValidation = ValidationHelper.ValidateRequired(request.RoleName, "Role name");
             if (roleNameValidation.IsFailure)
             {
                 return Result.BadRequest(roleNameValidation.Error!.Message);
-            }
-
-            // ロール名で検索
-            var role = await _roleManager.FindByNameAsync(request.RoleName.Trim());
-            if (role == null)
-            {
-                return Result.NotFound($"Role '{request.RoleName}' not found");
             }
 
             // パーミッション名を検証
@@ -191,19 +179,30 @@ public class RoleManagementService : BaseService
                 return Result.BadRequest(permissionNameValidation.Error!.Message);
             }
 
-            // ロールからパーミッションを削除
-            var permission = role.Authorities?.FirstOrDefault(a => a.Name == request.PermissionName.Trim());
+            // ロール名を正規化
+            var normalizedName = _roleManager.NormalizeKey(request.RoleName.Trim());
+
+            // ロール名で検索
+            var role = await _context.Roles
+                .AsNoTracking()
+                .FirstOrDefaultAsync(r => r.NormalizedName == normalizedName);
+
+            if (role == null)
+            {
+                return Result.NotFound($"Role '{request.RoleName}' not found");
+            }
+
+            // パーミッションを検索して削除
+            var permission = await _context.Permissions
+                .FirstOrDefaultAsync(p => p.RoleId == role.Id && p.Name == request.PermissionName.Trim());
+
             if (permission == null)
             {
                 return Result.NotFound($"Permission '{request.PermissionName}' not found for role '{request.RoleName}'");
             }
 
-            role.Authorities!.Remove(permission);
-            var result = await _roleManager.UpdateAsync(role);
-            if (!result.Succeeded)
-            {
-                return Result.BadRequest("Failed to delete permission from role");
-            }
+            _context.Permissions.Remove(permission);
+            await _context.SaveChangesAsync();
 
             return Result.NoContent();
         }, nameof(DeletePermissionFromRoleAsync));
@@ -214,12 +213,6 @@ public class RoleManagementService : BaseService
     {
         return await ExecuteAsync(async () =>
         {
-            // SetupToken の検証
-            if (!await _setupTokenValidator.ValidateSetupTokenAsync(tenant, request.SetupToken))
-            {
-                return Result<RoleSetupCompletionResponse>.Unauthorized("Invalid or expired setup token");
-            }
-
             // Validate role name is not empty
             var nameValidation = ValidationHelper.ValidateRequired(request.DefaultRoleName, "Default role name");
             if (nameValidation.IsFailure)
@@ -245,7 +238,7 @@ public class RoleManagementService : BaseService
                 return Result<RoleSetupCompletionResponse>.BadRequest(identityResult.Error!.Message);
             }
 
-            // Add default permissions
+            // Add default permissions using DbContext directly
             int permissionsAdded = 0;
             if (request.DefaultPermissions?.Count > 0)
             {
@@ -262,17 +255,13 @@ public class RoleManagementService : BaseService
                         CreatedAt = DateTime.UtcNow
                     };
 
-                    role.Authorities.Add(permission);
+                    _context.Permissions.Add(permission);
                     permissionsAdded++;
                 }
 
                 if (permissionsAdded > 0)
                 {
-                    var updateResult = await _roleManager.UpdateAsync(role);
-                    if (!updateResult.Succeeded)
-                    {
-                        // Log warning but continue - permissions may have been partially added
-                    }
+                    await _context.SaveChangesAsync();
                 }
             }
 

@@ -33,8 +33,18 @@ public class ShareController : ControllerBase
         _maskedUuidService = maskedUuidService;
     }
 
-    private Guid CurrentUserId =>
-        Guid.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? Guid.Empty.ToString());
+    private Guid CurrentUserId
+    {
+        get
+        {
+            var userIdValue = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (!Guid.TryParse(userIdValue, out var userId))
+            {
+                throw new UnauthorizedAccessException("User is not authenticated or has invalid user ID.");
+            }
+            return userId;
+        }
+    }
 
     private string CurrentUserName =>
         User.FindFirst(ClaimTypes.Name)?.Value
@@ -51,8 +61,8 @@ public class ShareController : ControllerBase
         return Path.Combine(webRoot, "uploads", tenant, "share", shareItemId.ToString());
     }
 
-    private string BuildShareFileUrl(string tenant, Guid shareItemId, string savedFileName)
-        => $"/uploads/{tenant}/share/{shareItemId}/{savedFileName}".Replace("\\", "/");
+    private string BuildShareFileUrl(string tenant, Guid roomId, Guid shareItemId, string savedFileName)
+        => $"/{tenant}/api/share/room/{roomId}/download/{shareItemId}/{savedFileName}".Replace("\\", "/");
 
     private string BuildBrainstormUrl(string tenant, Guid boardId)
     {
@@ -218,7 +228,7 @@ public class ShareController : ControllerBase
     }
 
     [HttpGet("room/{roomId}")]
-    [RequirePermission(RoomPermissions.Join)]
+    [RequireAny(RoomPermissions.Join, TenantPermissions.RoomRead)]
     public async Task<IActionResult> GetByRoom(
         [FromRoute] MaskedGuid roomId,
         [FromQuery] MaskedGuid? topicId,
@@ -276,7 +286,7 @@ public class ShareController : ControllerBase
                     size = 0;
                 }
 
-                var url = BuildShareFileUrl(tenant, share.Id, file.SaveFileName);
+                var url = BuildShareFileUrl(tenant, share.RoomId, share.Id, file.SaveFileName);
                 return ToDto(share, tenant, (file, url, size));
             }
 
@@ -288,7 +298,7 @@ public class ShareController : ControllerBase
 
     [HttpPost("room/{roomId}")]
     [Consumes("multipart/form-data")]
-    [RequirePermission(RoomPermissions.Write)]
+    [RequireAny(RoomPermissions.Write, TenantPermissions.RoomManage)]
     public async Task<IActionResult> UploadToRoom(
         [FromRoute] MaskedGuid roomId,
         [FromForm] IFormFile file,
@@ -441,21 +451,21 @@ public class ShareController : ControllerBase
         {
             ShareItemId = targetShare.Id,
             FileId = fileEntity.Id,
-            ShareItem = null,
-            File = null,
+            ShareItem = null!,
+            File = null!,
             IsCurrent = true
         };
         _db.ShareItemFiles.Add(linkEntity);
 
         await _db.SaveChangesAsync(cancellationToken);
 
-        var url = BuildShareFileUrl(tenant, targetShare.Id, fileEntity.SaveFileName);
+        var url = BuildShareFileUrl(tenant, targetShare.RoomId, targetShare.Id, fileEntity.SaveFileName);
         var dto = ToDto(targetShare, tenant, (fileEntity, url, file.Length));
         return Ok(dto);
     }
 
     [HttpPost("room/{roomId}/brainstorm")]
-    [RequirePermission(RoomPermissions.Write)]
+    [RequireAny(RoomPermissions.Write, TenantPermissions.RoomManage)]
     public async Task<IActionResult> ShareBrainstorm(
         [FromRoute] MaskedGuid roomId,
         [FromBody] CreateBrainstormShareRequest request,
@@ -484,7 +494,7 @@ public class ShareController : ControllerBase
     }
 
     [HttpDelete("room/{roomId}/{shareId}")]
-    [RequirePermission(RoomPermissions.Delete)]
+    [RequireAny(RoomPermissions.Delete, TenantPermissions.RoomManage)]
     public async Task<IActionResult> DeleteShare(
         [FromRoute] MaskedGuid roomId,
         [FromRoute] MaskedGuid shareId,
@@ -514,5 +524,48 @@ public class ShareController : ControllerBase
         }
 
         return NoContent();
+    }
+
+    /// <summary>
+    /// 認可付き共有ファイルダウンロードエンドポイント
+    /// /uploads 静的配信の代わりに使用
+    /// </summary>
+    [HttpGet("room/{roomId}/download/{shareId}/{fileName}")]
+    [RequireAny(RoomPermissions.Join, TenantPermissions.RoomRead)]
+    public async Task<IActionResult> DownloadShareFile(
+        [FromRoute] MaskedGuid roomId,
+        [FromRoute] MaskedGuid shareId,
+        [FromRoute] string fileName,
+        CancellationToken cancellationToken)
+    {
+        var roomGuid = (Guid)roomId;
+        var shareGuid = (Guid)shareId;
+        var share = await _db.ShareItems
+            .AsNoTracking()
+            .FirstOrDefaultAsync(s => s.Id == shareGuid, cancellationToken);
+        if (share == null)
+            return NotFound(new { message = "Share not found." });
+        if (share.RoomId != roomGuid)
+            return NotFound(new { message = "Share not found." });
+
+        var safeFileName = Path.GetFileName(fileName);
+        if (!string.Equals(fileName, safeFileName, StringComparison.Ordinal))
+            return BadRequest(new { message = "Invalid file name." });
+
+        var tenant = GetTenantIdentifier();
+        var shareRoot = Path.GetFullPath(GetShareItemFolder(tenant, shareGuid));
+        var filePath = Path.GetFullPath(Path.Combine(shareRoot, safeFileName));
+        if (!filePath.StartsWith(shareRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+            return BadRequest(new { message = "Invalid file path." });
+
+        if (!System.IO.File.Exists(filePath))
+            return NotFound(new { message = "File not found." });
+
+        var contentType = _contentTypeProvider.TryGetContentType(safeFileName, out var providerContentType)
+            ? providerContentType
+            : "application/octet-stream";
+
+        var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+        return File(stream, contentType);
     }
 }

@@ -1,11 +1,13 @@
-﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using MaskedUUID.AspNetCore.Types;
 using TreeTopic.Common;
 using TreeTopic.Dtos;
 using TreeTopic.Services;
 using TreeTopic.Filters;
 using TreeTopic.Permissions;
+using TreeTopic.Models;
 using System.Security.Claims;
 
 namespace TreeTopic.Controllers;
@@ -15,11 +17,17 @@ namespace TreeTopic.Controllers;
 public class TopicController : ControllerBase
 {
     private readonly ITopicManagementService _topicManagementService;
+    private readonly ApplicationDbContext _db;
+    private readonly TopicPermissionManager _topicPermissionManager;
 
     public TopicController(
-        ITopicManagementService topicManagementService)
+        ITopicManagementService topicManagementService,
+        ApplicationDbContext db,
+        TopicPermissionManager topicPermissionManager)
     {
         _topicManagementService = topicManagementService;
+        _db = db;
+        _topicPermissionManager = topicPermissionManager;
     }
 
     private Guid? CurrentUserId
@@ -34,7 +42,7 @@ public class TopicController : ControllerBase
     }
 
     [HttpGet]
-    [RequirePermission(TopicPermissions.Read)]
+    [RequireAny(RoomPermissions.TopicRead, TenantPermissions.RoomRead, TenantPermissions.RoomManage)]
     public async Task<IActionResult> GetAll([FromQuery] MaskedGuid? roomId, CancellationToken cancellationToken)
     {
         if (!roomId.HasValue)
@@ -47,7 +55,7 @@ public class TopicController : ControllerBase
     }
 
     [HttpGet("room/{roomId}")]
-    [RequirePermission(TopicPermissions.Read)]
+    [RequireAny(RoomPermissions.TopicRead, TenantPermissions.RoomRead, TenantPermissions.RoomManage)]
     public async Task<IActionResult> GetByRoom([FromRoute] MaskedGuid roomId, CancellationToken cancellationToken)
     {
         var result = await _topicManagementService.GetTopicsByRoomAsync((Guid)roomId, CurrentUserId, cancellationToken);
@@ -55,42 +63,142 @@ public class TopicController : ControllerBase
     }
 
     [HttpGet("room/{roomId}/root")]
-    [RequirePermission(TopicPermissions.Read)]
+    [RequireAny(RoomPermissions.TopicRead, TenantPermissions.RoomRead, TenantPermissions.RoomManage)]
     public async Task<IActionResult> GetRootByRoom([FromRoute] MaskedGuid roomId, CancellationToken cancellationToken)
     {
         var result = await _topicManagementService.GetRootTopicsByRoomAsync((Guid)roomId, CurrentUserId, cancellationToken);
         return result.ToApiResult();
     }
 
-    [HttpGet("parent/{parentId}")]
-    [RequirePermission(TopicPermissions.Read)]
-    public async Task<IActionResult> GetByParent([FromRoute] MaskedGuid parentId, CancellationToken cancellationToken)
+    [HttpGet("room/{roomId}/parent/{parentId}")]
+    [RequireAny(RoomPermissions.TopicRead, TenantPermissions.RoomRead, TenantPermissions.RoomManage)]
+    public async Task<IActionResult> GetByParent(
+        [FromRoute] MaskedGuid roomId,
+        [FromRoute] MaskedGuid parentId,
+        CancellationToken cancellationToken)
     {
+        var parent = await _db.Topics
+            .AsNoTracking()
+            .Where(t => t.Id == (Guid)parentId)
+            .Select(t => new { t.Id, t.RoomId })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (parent == null)
+        {
+            return NotFound(new { message = "Parent topic not found" });
+        }
+
+        if (parent.RoomId != (Guid)roomId)
+        {
+            return BadRequest(new { message = "parentId does not belong to the specified roomId" });
+        }
+
         var result = await _topicManagementService.GetTopicsByParentAsync((Guid)parentId, CurrentUserId, cancellationToken);
         return result.ToApiResult();
     }
 
     [HttpGet("{topicId}")]
-    [RequirePermission(TopicPermissions.Read)]
+    [RequireAny(TopicPermissions.Read, TenantPermissions.TopicRead)]
     public async Task<IActionResult> GetById([FromRoute] MaskedGuid topicId, CancellationToken cancellationToken)
     {
         var result = await _topicManagementService.GetTopicByIdAsync((Guid)topicId, CurrentUserId, cancellationToken);
         return result.ToApiResult();
     }
 
-    [HttpPost]
-    [RequirePermission(TopicPermissions.Write)]
-    public async Task<IActionResult> Create([FromBody] CreateTopicRequest request, CancellationToken cancellationToken)
+    /// <summary>
+    /// 現在のユーザーのトピック権限一覧を取得
+    /// </summary>
+    [HttpGet("{topicId}/my/permissions")]
+    [Authorize]
+    public async Task<IActionResult> GetMyPermissions(
+        [FromRoute] MaskedGuid topicId,
+        CancellationToken cancellationToken)
+    {
+        var topicGuid = (Guid)topicId;
+        var userId = CurrentUserId;
+        if (!userId.HasValue)
+        {
+            return Unauthorized();
+        }
+
+        // トピックのルームIDを取得
+        var topic = await _db.Topics
+            .AsNoTracking()
+            .FirstOrDefaultAsync(t => t.Id == topicGuid, cancellationToken);
+
+        if (topic == null)
+        {
+            return NotFound(new { message = "Topic not found" });
+        }
+
+        // RoomUserを取得
+        var roomUser = await _db.RoomUsers
+            .Include(ru => ru.RoomUserRoomRoles)
+                .ThenInclude(rur => rur.RoomRole)
+                    .ThenInclude(rr => rr!.Permissions)
+            .Include(ru => ru.RoomPermission)
+            .FirstOrDefaultAsync(ru => ru.RoomId == topic.RoomId && ru.ApplicationUserId == userId.Value, cancellationToken);
+
+        if (roomUser == null)
+        {
+            return Ok(new TopicPermissionsResponse
+            {
+                Permissions = new List<string>()
+            });
+        }
+
+        var permissions = new List<string>();
+
+        // RoomRoleの権限を収集
+        foreach (var userRole in roomUser.RoomUserRoomRoles)
+        {
+            if (userRole.RoomRole?.Permissions != null)
+            {
+                foreach (var permission in userRole.RoomRole.Permissions)
+                {
+                    permissions.Add(permission.PermissionName);
+                }
+            }
+        }
+
+        // 直接付与されたRoom権限を追加
+        if (roomUser.RoomPermission != null && roomUser.RoomPermission.Count > 0)
+        {
+            foreach (var perm in roomUser.RoomPermission)
+            {
+                permissions.Add(perm.Name);
+            }
+        }
+
+        // Topicレベルでの直接権限を追加
+        var topicPermissions = await _topicPermissionManager.GetUserPermissionsAsync(
+            topicGuid, roomUser.Id, cancellationToken);
+        permissions.AddRange(topicPermissions.Select(p => p.Name));
+
+        return Ok(new TopicPermissionsResponse
+        {
+            Permissions = permissions.Distinct().ToList()
+        });
+    }
+
+    [HttpPost("room/{roomId}")]
+    [RequireAny(RoomPermissions.TopicWrite, TenantPermissions.RoomManage, TenantPermissions.TopicManage)]
+    public async Task<IActionResult> Create(
+        [FromRoute] MaskedGuid roomId,
+        [FromBody] CreateTopicRequest request,
+        CancellationToken cancellationToken)
     {
         if (!ModelState.IsValid)
             return ValidationProblem(ModelState);
 
-        var result = await _topicManagementService.CreateTopicAsync(request, cancellationToken);
+        request.RoomId = roomId;
+
+        var result = await _topicManagementService.CreateTopicAsync(request, CurrentUserId, cancellationToken);
         return result.ToApiResult();
     }
 
     [HttpPut("{topicId}")]
-    [RequirePermission(TopicPermissions.Write)]
+    [RequireAny(TopicPermissions.Write, TenantPermissions.TopicManage)]
     public async Task<IActionResult> Update([FromRoute] MaskedGuid topicId, [FromBody] UpdateTopicRequest request, CancellationToken cancellationToken)
     {
         if (!ModelState.IsValid)
@@ -101,7 +209,7 @@ public class TopicController : ControllerBase
     }
 
     [HttpDelete("{topicId}")]
-    [RequirePermission(TopicPermissions.Delete)]
+    [RequireAny(TopicPermissions.Delete, TenantPermissions.TopicManage)]
     public async Task<IActionResult> Delete(
         [FromRoute] MaskedGuid topicId,
         [FromQuery] string? strategy,
@@ -122,10 +230,10 @@ public class TopicController : ControllerBase
     }
 
     /// <summary>
-    /// 複数トピックの統計情報を一括取得（N+1問題を解決）
+    /// 複数トピックの統計情報を一括取得
     /// </summary>
     [HttpGet("room/{roomId}/stats")]
-    [RequirePermission(TopicPermissions.Read)]
+    [RequireAny(RoomPermissions.TopicRead, TenantPermissions.RoomRead, TenantPermissions.RoomManage)]
     public async Task<IActionResult> GetTopicsWithStats(
         [FromRoute] MaskedGuid roomId,
         CancellationToken cancellationToken)
@@ -139,10 +247,10 @@ public class TopicController : ControllerBase
     }
 
     /// <summary>
-    /// 単一トピックの統計情報を取得（N+1問題を解決）
+    /// 単一トピックの統計情報を取得
     /// </summary>
     [HttpGet("{topicId}/stats")]
-    [RequirePermission(TopicPermissions.Read)]
+    [RequireAny(TopicPermissions.Read, TenantPermissions.TopicRead)]
     public async Task<IActionResult> GetTopicWithStats(
         [FromRoute] MaskedGuid topicId,
         CancellationToken cancellationToken)
@@ -156,34 +264,30 @@ public class TopicController : ControllerBase
     }
 
     /// <summary>
-    /// ルームのルートトピックに未読カウントを含めて取得（N+1問題を解決）
+    /// ルームのルートトピックを未読カウント付きで取得
     /// </summary>
     [HttpGet("room/{roomId}/root-with-unread")]
-    [RequirePermission(TopicPermissions.Read)]
+    [RequireAny(RoomPermissions.TopicRead, TenantPermissions.RoomRead, TenantPermissions.RoomManage)]
     public async Task<IActionResult> GetRootTopicsWithUnread(
         [FromRoute] MaskedGuid roomId,
         CancellationToken cancellationToken)
     {
-        Console.WriteLine($"[TopicController] GetRootTopicsWithUnread START - roomId: {roomId}");
         var userId = CurrentUserId;
-        Console.WriteLine($"[TopicController] GetRootTopicsWithUnread - userId: {userId}");
 
         if (!userId.HasValue)
         {
-            Console.WriteLine($"[TopicController] GetRootTopicsWithUnread - userId is null, returning Unauthorized");
             return Unauthorized();
         }
 
         var result = await _topicManagementService.GetRootTopicsWithUnreadAsync((Guid)roomId, userId.Value, cancellationToken);
-        Console.WriteLine($"[TopicController] GetRootTopicsWithUnread END - result: {result.IsSuccess}, count: {result.Data?.Count ?? 0}");
         return result.ToApiResult();
     }
 
     /// <summary>
-    /// ルーム内の全トピックを未読カウント付きで一括取得（N+1問題を解決）
+    /// ルーム内の全トピックを未読カウント付きで取得
     /// </summary>
     [HttpGet("room/{roomId}/all-with-unread")]
-    [RequirePermission(TopicPermissions.Read)]
+    [RequireAny(RoomPermissions.TopicRead, TenantPermissions.RoomRead, TenantPermissions.RoomManage)]
     public async Task<IActionResult> GetAllTopicsWithUnread(
         [FromRoute] MaskedGuid roomId,
         CancellationToken cancellationToken)
@@ -195,9 +299,4 @@ public class TopicController : ControllerBase
         var result = await _topicManagementService.GetAllTopicsWithUnreadAsync((Guid)roomId, userId.Value, cancellationToken);
         return result.ToApiResult();
     }
-
 }
-
-
-
-

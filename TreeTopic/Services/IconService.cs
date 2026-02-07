@@ -142,13 +142,22 @@ public class IconService
 
     private string BuildUserIconUrl(string tenantFolder, string fileName)
     {
-        return $"/uploads/{tenantFolder}/icons/users/{fileName}".Replace("\\", "/");
+        var tenantRoute = GetTenantRouteIdentifier();
+        return $"/{tenantRoute}/api/icons/users/{fileName}".Replace("\\", "/");
     }
 
     private string BuildRoomUserIconUrl(string fileName)
     {
-        var folder = GetTenantUploadsFolderName();
-        return $"/uploads/{folder}/icons/room-users/{fileName}".Replace("\\", "/");
+        var tenantRoute = GetTenantRouteIdentifier();
+        return $"/{tenantRoute}/api/icons/room-users/{fileName}".Replace("\\", "/");
+    }
+
+    private string GetTenantRouteIdentifier()
+    {
+        var tenantInfo = _tenantAccessor.MultiTenantContext?.TenantInfo;
+        return tenantInfo?.Identifier
+               ?? tenantInfo?.Id
+               ?? DefaultTenantFolder;
     }
 
     private static string GetInitials(string name)

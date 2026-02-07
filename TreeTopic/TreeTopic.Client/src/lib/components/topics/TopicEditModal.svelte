@@ -3,10 +3,11 @@
   import Button from '../common/Button.svelte';
   import Input from '../common/Input.svelte';
   import ErrorMessage from '../common/ErrorMessage.svelte';
-  import { ui, activeModals } from '$lib/stores/ui';
+  import { ui, activeModals, modals } from '$lib/stores/ui';
   import { topicList, updateTopic } from '$lib/stores/topics';
   import { isRequired, minLength } from '$lib/utils/validation';
   import { api } from '$lib/api/client';
+  import { page } from '$app/stores';
 
   const modalId = 'topic-edit';
 
@@ -64,7 +65,7 @@
       const trimmedTitle = title.trim();
       const trimmedDescription = description.trim();
 
-      await api.put(`/${tenant}/api/Topic/${topicId}`, {
+      await api.put(`/${tenant}/api/topic/${topicId}`, {
         parentId: topic.parentId,
         title: trimmedTitle,
         description: trimmedDescription || null,
@@ -139,6 +140,22 @@
         Cancel
       </Button>
     </div>
+
+    {#if topic && topic.roomId}
+      <div class="border-t border-gray-200 pt-8 mt-4">
+        <button
+          type="button"
+          class="w-full px-4 py-3 border border-blue-500 text-blue-500 rounded-lg hover:bg-blue-50 hover:bg-opacity-10 transition-colors font-medium"
+          onclick={() => modals.open('topic-user-permission', 'Topic User Permissions', {
+            tenant: $page.params.tenant,
+            roomId: topic.roomId,
+            topicId: topicId
+          })}
+        >
+          トピック権限管理
+        </button>
+      </div>
+    {/if}
   </form>
 </Modal>
 

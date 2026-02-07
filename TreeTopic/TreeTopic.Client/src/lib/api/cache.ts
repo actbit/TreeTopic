@@ -33,15 +33,15 @@ const cache = new Map<string, CacheEntry<any>>();
  */
 const CACHE_TTL_BY_PATTERN: Array<{ pattern: RegExp; ttl: number }> = [
 	// User-related endpoints - short cache
-	{ pattern: /\/auth\/(me|check)/, ttl: CACHE_CONFIG.short },
+	{ pattern: /\/auth\/(me|check)/i, ttl: CACHE_CONFIG.short },
 	// Topics - medium cache
-	{ pattern: /\/api\/Topic/, ttl: CACHE_CONFIG.medium },
+	{ pattern: /\/api\/Topic/i, ttl: CACHE_CONFIG.medium },
 	// Rooms - medium cache
-	{ pattern: /\/api\/Room/, ttl: CACHE_CONFIG.medium },
+	{ pattern: /\/api\/Room/i, ttl: CACHE_CONFIG.medium },
 	// Messages - short cache (frequently updated)
-	{ pattern: /\/api\/Message/, ttl: CACHE_CONFIG.short },
+	{ pattern: /\/api\/Message/i, ttl: CACHE_CONFIG.short },
 	// Files - long cache
-	{ pattern: /\/api\/File/, ttl: CACHE_CONFIG.long }
+	{ pattern: /\/api\/File/i, ttl: CACHE_CONFIG.long }
 ];
 
 /**
@@ -133,18 +133,20 @@ export function invalidate(pattern: RegExp): void {
  * @param path - Path of the mutated resource
  */
 export function invalidateByResource(method: string, path: string): void {
+	const normalizedPath = path.toLowerCase();
+
 	// Invalidate related cache entries based on the mutated resource
-	if (path.includes('/api/Topic')) {
-		invalidate(/^GET:.*\/api\/Topic/);
+	if (normalizedPath.includes('/api/topic')) {
+		invalidate(/^GET:.*\/api\/Topic/i);
 	}
-	if (path.includes('/api/Room')) {
-		invalidate(/^GET:.*\/api\/Room/);
+	if (normalizedPath.includes('/api/room')) {
+		invalidate(/^GET:.*\/api\/Room/i);
 	}
-	if (path.includes('/api/Message')) {
-		invalidate(/^GET:.*\/api\/Message/);
+	if (normalizedPath.includes('/api/message')) {
+		invalidate(/^GET:.*\/api\/Message/i);
 	}
-	if (path.includes('/api/File')) {
-		invalidate(/^GET:.*\/api\/File/);
+	if (normalizedPath.includes('/api/file')) {
+		invalidate(/^GET:.*\/api\/File/i);
 	}
 }
 

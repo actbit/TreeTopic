@@ -47,7 +47,7 @@
         payload.name = trimmed;
       }
 
-      const response = await api.post<any>(`/${tenant}/api/RoomUsers/room/${roomId}/join`, payload);
+      const response = await api.post<any>(`/${tenant}/api/roomusers/room/${roomId}/join`, payload);
 
       // Update currentRoomUser with the response (DisplayName and IconUrl are already resolved by backend)
       if (response) {
