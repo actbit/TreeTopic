@@ -7,8 +7,6 @@ using TreeTopic.Filters;
 using TreeTopic.Permissions;
 using System.Security.Claims;
 using MaskedUUID.AspNetCore.Types;
-using MaskedUUID.AspNetCore.Services;
-
 namespace TreeTopic.Controllers;
 
 [ApiController]
@@ -17,14 +15,11 @@ namespace TreeTopic.Controllers;
 public class BrainstormController : ControllerBase
 {
     private readonly IBrainstormManagementService _brainstormManagementService;
-    private readonly IMaskedUUIDService _maskedUuidService;
 
     public BrainstormController(
-        IBrainstormManagementService brainstormManagementService,
-        IMaskedUUIDService maskedUuidService)
+        IBrainstormManagementService brainstormManagementService)
     {
         _brainstormManagementService = brainstormManagementService;
-        _maskedUuidService = maskedUuidService;
     }
 
     private Guid CurrentUserId
@@ -63,13 +58,6 @@ public class BrainstormController : ControllerBase
     {
         var result = await _brainstormManagementService.GetBoardByIdAsync((Guid)boardId, cancellationToken);
         return result.ToApiResult();
-    }
-
-    [HttpGet("encode/{rawId:guid}")]
-    public IActionResult EncodeBoardId([FromRoute] Guid rawId)
-    {
-        var masked = _maskedUuidService.EncodeSynchronous(rawId);
-        return Ok(new { maskedId = masked });
     }
 
     [HttpPost]
