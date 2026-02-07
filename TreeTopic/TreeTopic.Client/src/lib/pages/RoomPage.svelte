@@ -1418,8 +1418,8 @@
           return;
         }
         if (err.status === 404) {
-          // 未登録: 参加モーダルを表示
-          void handleRoomUserNotFound(tenant, roomId);
+          // RoomUser is created lazily by write operations.
+          rooms.setCurrentRoomUser(null);
           return;
         }
       }
@@ -1495,26 +1495,6 @@
     if (!tenant || typeof window === 'undefined') return;
     const returnUrl = buildReturnUrl();
     window.location.href = `/${tenant}/auth/login?returnUrl=${encodeURIComponent(returnUrl)}`;
-  }
-
-  async function handleRoomUserNotFound(tenant: string, roomId: string): Promise<void> {
-    try {
-      await auth.fetchCurrentUser(tenant);
-      ui.openModal({
-        id: 'room-user-join',
-        title: 'Set your name',
-        type: 'custom',
-        data: { roomId },
-      });
-    } catch (error: unknown) {
-      if (error instanceof api.ApiError && error.status === 404) {
-        await auth.logout(tenant);
-        redirectToTenantLogin(tenant);
-        return;
-      }
-
-      console.error('Failed to refresh ApplicationUser after missing RoomUser:', error);
-    }
   }
 
   // If URL changes (back/forward) reflect it into selected topic.
@@ -1618,6 +1598,13 @@
       return;
     }
     void startRoomUserSyncHub(tenant, roomId, userId);
+  });
+
+  $effect(() => {
+    const tenant = $page.params.tenant ?? getCurrentTenant();
+    const roomId = $currentRoom?.id ?? null;
+    if (!tenant || !roomId || isLoading) return;
+    void loadRoomUser(tenant, roomId);
   });
 
   // document.visibilitychangeイベントを監視

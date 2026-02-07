@@ -128,6 +128,7 @@ public class RoomUsersController : ControllerBase
             }
             _roomUserRepository.Update(existing);
             await _roomUserRepository.SaveChangesAsync(cancellationToken);
+            await EnsureDefaultJoinPermissionsAsync(existing, cancellationToken);
 
             // Ensure ApplicationUser has icon if using main icon
             if (existing.UseMainIcon && existing.ApplicationUser != null)
@@ -160,6 +161,7 @@ public class RoomUsersController : ControllerBase
 
         await _roomUserRepository.AddAsync(toCreate, cancellationToken);
         await _roomUserRepository.SaveChangesAsync(cancellationToken);
+        await EnsureDefaultJoinPermissionsAsync(toCreate, cancellationToken);
 
         // Ensure ApplicationUser has icon
         if (toCreate.UseMainIcon)
@@ -173,6 +175,22 @@ public class RoomUsersController : ControllerBase
         }
 
         return Ok(MapToDto(toCreate));
+    }
+
+    private async Task EnsureDefaultJoinPermissionsAsync(RoomUser roomUser, CancellationToken cancellationToken)
+    {
+        var permissions = new[]
+        {
+            RoomPermissions.Join,
+            RoomPermissions.TopicRead,
+            RoomPermissions.TopicWrite,
+            RoomPermissions.Write
+        };
+
+        foreach (var permission in permissions)
+        {
+            await _roomUserManager.AddPermissionAsync(roomUser, permission, cancellationToken);
+        }
     }
 
     private async Task<ApplicationUser?> GetCurrentApplicationUserAsync()

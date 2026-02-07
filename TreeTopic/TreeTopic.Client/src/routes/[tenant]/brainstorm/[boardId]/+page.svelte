@@ -5,9 +5,7 @@
   import BrainstormBoard from '$lib/components/brainstorming/BrainstormBoard.svelte';
   import LoadingSpinner from '$lib/components/common/LoadingSpinner.svelte';
   import Button from '$lib/components/common/Button.svelte';
-  import RoomUserJoinModal from '$lib/components/rooms/RoomUserJoinModal.svelte';
   import { rooms } from '$lib/stores/rooms';
-  import { ui } from '$lib/stores/ui';
   import { api } from '$lib/api/client';
   import { page } from '$app/stores';
 
@@ -126,30 +124,6 @@
     return false;
   }
 
-  async function handleRoomUserNotFound(tenant: string, roomId: string): Promise<void> {
-    try {
-      await auth.fetchCurrentUser(tenant);
-      ui.openModal({
-        id: 'room-user-join',
-        title: 'Set your name',
-        type: 'custom',
-        data: { roomId },
-      });
-    } catch (error: unknown) {
-      if (await handleUnauthorizedError(error, tenant)) {
-        return;
-      }
-
-      if (error instanceof api.ApiError && error.status === 404) {
-        await auth.logout(tenant);
-        redirectToTenantLogin(tenant);
-        return;
-      }
-
-      console.error('Failed to refresh ApplicationUser after missing RoomUser:', error);
-    }
-  }
-
   async function ensureRoomUserForTopic(tenant: string, topicId: string): Promise<void> {
     if (!tenant || !topicId) return;
     let roomId = '';
@@ -183,7 +157,8 @@
       }
 
       if (error instanceof api.ApiError && error.status === 404) {
-        await handleRoomUserNotFound(tenant, roomId);
+        // RoomUser is created lazily by write operations.
+        rooms.setCurrentRoomUser(null);
         return;
       }
 
@@ -250,8 +225,6 @@
     {/if}
   </div>
 </div>
-
-<RoomUserJoinModal />
 
 <style>
   :global(body) {
