@@ -17,6 +17,10 @@ public class RoomDto : BaseDto
     public MaskedGuid CreatedUserId { get; set; }
 
     public string? CreatedUserName { get; set; }
+
+    public bool IsJoined { get; set; }
+
+    public bool CanJoin { get; set; }
 }
 
 public class CreateRoomRequest : BaseCreateRequest

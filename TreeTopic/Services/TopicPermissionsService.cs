@@ -96,6 +96,7 @@ public class TopicPermissionsService : BaseService, ITopicPermissionsService
         Guid topicId,
         Guid roomUserId,
         string permissionName,
+        bool applyToDescendants = false,
         CancellationToken cancellationToken = default)
     {
         return await ExecuteAsync(async () =>
@@ -119,17 +120,35 @@ public class TopicPermissionsService : BaseService, ITopicPermissionsService
                 return Result<TopicUserPermissionDto>.BadRequest("RoomUser does not belong to topic's room");
             }
 
-            // 権限を追加
-            var permission = await _topicPermissionManager.AddUserPermissionAsync(topicId, roomUserId, permissionName, cancellationToken);
+            var targetTopicIds = new List<Guid> { topicId };
+            if (applyToDescendants)
+            {
+                var descendants = await GetDescendantTopicIdsAsync(topicId, topic.RoomId, cancellationToken);
+                targetTopicIds.AddRange(descendants);
+            }
+
+            TopicUserPermission? rootPermission = null;
+            foreach (var targetTopicId in targetTopicIds)
+            {
+                var added = await _topicPermissionManager.AddUserPermissionAsync(
+                    targetTopicId,
+                    roomUserId,
+                    permissionName,
+                    cancellationToken);
+                if (targetTopicId == topicId)
+                {
+                    rootPermission = added;
+                }
+            }
 
             // DTOに変換
             var dto = new TopicUserPermissionDto(
-                permission.Id,
-                permission.TopicId,
-                permission.RoomUserId,
-                permission.RoomUser?.ApplicationUser?.UserName,
-                RoomUserNameHelper.ResolveDisplayName(permission.RoomUser),
-                permission.Name);
+                rootPermission?.Id ?? Guid.CreateVersion7(),
+                topicId,
+                roomUserId,
+                roomUser.ApplicationUser?.UserName,
+                RoomUserNameHelper.ResolveDisplayName(roomUser),
+                permissionName);
 
             return Result<TopicUserPermissionDto>.Success(dto);
         }, nameof(AddPermissionToUserAsync));
@@ -142,6 +161,7 @@ public class TopicPermissionsService : BaseService, ITopicPermissionsService
         Guid topicId,
         Guid roomUserId,
         string permissionName,
+        bool applyToDescendants = false,
         CancellationToken cancellationToken = default)
     {
         return await ExecuteAsync(async () =>
@@ -165,10 +185,28 @@ public class TopicPermissionsService : BaseService, ITopicPermissionsService
                 return Result.BadRequest("RoomUser does not belong to topic's room");
             }
 
-            // 権限を削除
-            var success = await _topicPermissionManager.RemoveUserPermissionAsync(topicId, roomUserId, permissionName, cancellationToken);
+            var targetTopicIds = new List<Guid> { topicId };
+            if (applyToDescendants)
+            {
+                var descendants = await GetDescendantTopicIdsAsync(topicId, topic.RoomId, cancellationToken);
+                targetTopicIds.AddRange(descendants);
+            }
 
-            return success ? Result.Success() : Result.NotFound("Permission not found");
+            bool rootSuccess = false;
+            foreach (var targetTopicId in targetTopicIds)
+            {
+                var removed = await _topicPermissionManager.RemoveUserPermissionAsync(
+                    targetTopicId,
+                    roomUserId,
+                    permissionName,
+                    cancellationToken);
+                if (targetTopicId == topicId)
+                {
+                    rootSuccess = removed;
+                }
+            }
+
+            return rootSuccess ? Result.Success() : Result.NotFound("Permission not found");
         }, nameof(RemovePermissionFromUserAsync));
     }
 
@@ -238,6 +276,7 @@ public class TopicPermissionsService : BaseService, ITopicPermissionsService
         Guid topicId,
         string roleName,
         string permissionName,
+        bool applyToDescendants = false,
         CancellationToken cancellationToken = default)
     {
         return await ExecuteAsync(async () =>
@@ -249,17 +288,43 @@ public class TopicPermissionsService : BaseService, ITopicPermissionsService
                 return Result<TopicRolePermissionDto>.NotFound($"RoomRole '{roleName}' not found");
             }
 
-            // 権限を追加
-            var permission = await _topicPermissionManager.AddRolePermissionAsync(topicId, roomRole.Id, permissionName, cancellationToken);
+            var topic = await _dbContext.Topics
+                .AsNoTracking()
+                .FirstOrDefaultAsync(t => t.Id == topicId, cancellationToken);
+            if (topic == null)
+            {
+                return Result<TopicRolePermissionDto>.NotFound("Topic not found");
+            }
+
+            var targetTopicIds = new List<Guid> { topicId };
+            if (applyToDescendants)
+            {
+                var descendants = await GetDescendantTopicIdsAsync(topicId, topic.RoomId, cancellationToken);
+                targetTopicIds.AddRange(descendants);
+            }
+
+            TopicRolePermission? rootPermission = null;
+            foreach (var targetTopicId in targetTopicIds)
+            {
+                var added = await _topicPermissionManager.AddRolePermissionAsync(
+                    targetTopicId,
+                    roomRole.Id,
+                    permissionName,
+                    cancellationToken);
+                if (targetTopicId == topicId)
+                {
+                    rootPermission = added;
+                }
+            }
 
             // DTOに変換
             var dto = new TopicRolePermissionDto(
-                permission.Id,
-                permission.TopicId,
-                permission.RoomRoleId,
-                permission.RoomRole?.Name,
-                permission.RoomRole?.Description,
-                permission.Name);
+                rootPermission?.Id ?? Guid.CreateVersion7(),
+                topicId,
+                roomRole.Id,
+                roomRole.Name,
+                roomRole.Description,
+                permissionName);
 
             return Result<TopicRolePermissionDto>.Success(dto);
         }, nameof(AddTopicRolePermissionAsync));
@@ -272,6 +337,7 @@ public class TopicPermissionsService : BaseService, ITopicPermissionsService
         Guid topicId,
         string roleName,
         string permissionName,
+        bool applyToDescendants = false,
         CancellationToken cancellationToken = default)
     {
         return await ExecuteAsync(async () =>
@@ -283,10 +349,36 @@ public class TopicPermissionsService : BaseService, ITopicPermissionsService
                 return Result.NotFound($"RoomRole '{roleName}' not found");
             }
 
-            // 権限を削除
-            var success = await _topicPermissionManager.RemoveRolePermissionAsync(topicId, roomRole.Id, permissionName, cancellationToken);
+            var topic = await _dbContext.Topics
+                .AsNoTracking()
+                .FirstOrDefaultAsync(t => t.Id == topicId, cancellationToken);
+            if (topic == null)
+            {
+                return Result.NotFound("Topic not found");
+            }
 
-            return success ? Result.Success() : Result.NotFound("Permission not found");
+            var targetTopicIds = new List<Guid> { topicId };
+            if (applyToDescendants)
+            {
+                var descendants = await GetDescendantTopicIdsAsync(topicId, topic.RoomId, cancellationToken);
+                targetTopicIds.AddRange(descendants);
+            }
+
+            bool rootSuccess = false;
+            foreach (var targetTopicId in targetTopicIds)
+            {
+                var removed = await _topicPermissionManager.RemoveRolePermissionAsync(
+                    targetTopicId,
+                    roomRole.Id,
+                    permissionName,
+                    cancellationToken);
+                if (targetTopicId == topicId)
+                {
+                    rootSuccess = removed;
+                }
+            }
+
+            return rootSuccess ? Result.Success() : Result.NotFound("Permission not found");
         }, nameof(RemoveTopicRolePermissionAsync));
     }
 
@@ -320,5 +412,40 @@ public class TopicPermissionsService : BaseService, ITopicPermissionsService
             _logger.LogInformation("All Role permissions cleared from Topic: {TopicId}", topicId);
             return Result.Success();
         }, nameof(ClearRolePermissionsAsync));
+    }
+
+    private async Task<List<Guid>> GetDescendantTopicIdsAsync(
+        Guid rootTopicId,
+        Guid roomId,
+        CancellationToken cancellationToken)
+    {
+        var descendants = new List<Guid>();
+        var visited = new HashSet<Guid> { rootTopicId };
+        var frontier = new List<Guid> { rootTopicId };
+
+        while (frontier.Count > 0)
+        {
+            var currentFrontier = frontier;
+            var children = await _dbContext.Topics
+                .AsNoTracking()
+                .Where(t =>
+                    t.RoomId == roomId &&
+                    t.ParentId.HasValue &&
+                    currentFrontier.Contains(t.ParentId.Value))
+                .Select(t => t.Id)
+                .ToListAsync(cancellationToken);
+
+            frontier = new List<Guid>();
+            foreach (var childId in children)
+            {
+                if (visited.Add(childId))
+                {
+                    descendants.Add(childId);
+                    frontier.Add(childId);
+                }
+            }
+        }
+
+        return descendants;
     }
 }

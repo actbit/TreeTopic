@@ -68,4 +68,11 @@ public class RegisterTenantRequest
     /// </summary>
     [StringLength(500)]
     public string? OpenIdConnectClientSecret { get; set; }
+
+    /// <summary>
+    /// ALTCHA payload (base64)
+    /// </summary>
+    [Required(ErrorMessage = "Altcha is required")]
+    [StringLength(4096, MinimumLength = 32)]
+    public required string Altcha { get; set; }
 }

@@ -118,7 +118,7 @@ public class RequireRoomJoinAccessAttribute : Attribute, IAsyncActionFilter
             .AnyAsync(p => p.Role != null &&
                            !string.IsNullOrWhiteSpace(p.Role.Name) &&
                            roleNames.Contains(p.Role.Name) &&
-                           p.Name == TenantPermissions.RoomManage,
+                           (p.Name == TenantPermissions.RoomManage || p.Name == TenantPermissions.RoomRead),
                 httpContext.RequestAborted);
         if (hasTenantRoomManage)
         {

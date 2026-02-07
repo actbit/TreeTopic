@@ -54,7 +54,7 @@
   async function handleCreate(e: Event) {
     e.preventDefault();
 
-    const activeParentId = parentId ?? null;
+    let activeParentId = parentId ?? null;
 
     titleError = undefined;
     error = null;
@@ -72,6 +72,14 @@
     if (!$currentRoom) {
       error = 'Please select a room first';
       return;
+    }
+
+    if (activeParentId) {
+      const activeParentTopic = $topicList.find((topic) => topic.id === activeParentId);
+      if (!activeParentTopic || activeParentTopic.roomId !== $currentRoom.id) {
+        // If room changed while modal is open, avoid sending stale cross-room parent id.
+        activeParentId = null;
+      }
     }
 
     isLoading = true;

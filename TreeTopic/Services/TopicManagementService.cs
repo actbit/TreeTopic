@@ -43,6 +43,7 @@ public class TopicManagementService : BaseService, ITopicManagementService
     private readonly IHubContext<RoomTopicHub, IRoomTopicHubClient> _roomTopicHub;
     private readonly IMaskedUUIDService _maskedUuidService;
     private readonly ApplicationDbContext _dbContext;
+    private readonly ILogger<TopicDtoBuilder> _topicDtoBuilderLogger;
 
     public TopicManagementService(
         ITopicRepository topicRepository,
@@ -50,6 +51,7 @@ public class TopicManagementService : BaseService, ITopicManagementService
         IHubContext<RoomTopicHub, IRoomTopicHubClient> roomTopicHub,
         IMaskedUUIDService maskedUuidService,
         ApplicationDbContext dbContext,
+        ILogger<TopicDtoBuilder> topicDtoBuilderLogger,
         ILogger<TopicManagementService> logger) : base(logger)
     {
         _topicRepository = topicRepository;
@@ -57,6 +59,7 @@ public class TopicManagementService : BaseService, ITopicManagementService
         _roomTopicHub = roomTopicHub;
         _maskedUuidService = maskedUuidService;
         _dbContext = dbContext;
+        _topicDtoBuilderLogger = topicDtoBuilderLogger;
     }
 
     public async Task<Result<List<TopicBasicDto>>> GetAllTopicsAsync(Guid? userId = null, CancellationToken cancellationToken = default)
@@ -160,6 +163,9 @@ public class TopicManagementService : BaseService, ITopicManagementService
                 var parent = await _topicRepository.GetByIdAsync(parentId.Value, cancellationToken);
                 if (parent == null)
                     return Result<TopicDetailDto>.NotFound("Parent topic not found");
+
+                if (parent.RoomId != (Guid)request.RoomId)
+                    return Result<TopicDetailDto>.BadRequest("Parent topic must be in the same room");
             }
 
             Guid? sourceMessageId = request.SourceMessageId.HasValue ? (Guid)request.SourceMessageId.Value : null;
@@ -298,14 +304,15 @@ public class TopicManagementService : BaseService, ITopicManagementService
                 return Result.NotFound("Topic not found");
 
             var oldParentId = topic.ParentId;
+            List<Topic> reparentedChildren = new();
 
             if (strategy == TopicDeleteStrategy.ReparentToParent)
             {
-                var children = await _topicRepository.Query()
+                reparentedChildren = await _topicRepository.Query()
                     .Where(t => t.ParentId == topic.Id)
                     .ToListAsync(cancellationToken);
 
-                foreach (var child in children)
+                foreach (var child in reparentedChildren)
                 {
                     child.ParentId = topic.ParentId;
                     child.UpdatedAt = DateTime.UtcNow;
@@ -319,6 +326,15 @@ public class TopicManagementService : BaseService, ITopicManagementService
             await _topicRepository.SaveChangesAsync(cancellationToken);
 
             await BroadcastTopicDeletedAsync(topic);
+
+            if (reparentedChildren.Count > 0)
+            {
+                foreach (var child in reparentedChildren)
+                {
+                    var childDto = await MapToTopicDetailDtoAsync(child, null, cancellationToken);
+                    await BroadcastTopicUpdatedAsync(child.Id, childDto, cancellationToken);
+                }
+            }
 
             // 親トピックのhasChildrenを更新してブロードキャスト
             if (oldParentId.HasValue)
@@ -401,7 +417,7 @@ public class TopicManagementService : BaseService, ITopicManagementService
     /// </summary>
     private TopicDtoBuilder MapToDtosBuilder(List<Topic> topics)
     {
-        return new TopicDtoBuilder(topics, _dbContext, _topicRepository);
+        return new TopicDtoBuilder(topics, _dbContext, _topicRepository, _topicDtoBuilderLogger);
     }
 
     /// <summary>
@@ -444,11 +460,7 @@ public class TopicManagementService : BaseService, ITopicManagementService
 
                 if (userTopic != null)
                 {
-                    if (userTopic.LastReadMessageId.HasValue)
-                    {
-                        unreadCount = await _dbContext.Messages
-                            .CountAsync(m => m.TopicId == topic.Id && m.Id > userTopic.LastReadMessageId.Value, cancellationToken);
-                    }
+                    unreadCount = await CountUnreadMessagesAsync(topic.Id, userTopic.LastReadMessageId, cancellationToken);
                 }
                 else
                 {
@@ -528,12 +540,12 @@ public class TopicManagementService : BaseService, ITopicManagementService
 
             var messageStatsMap = messageStats.ToDictionary(x => x.TopicId, x => x);
 
-            // 4. 未読数を一括計算
-            Dictionary<Guid, int> unreadCountsMap = new();
-            foreach (var topic in topics)
-            {
-                unreadCountsMap[topic.Id] = CalculateUnreadCount(topic.Id, userTopicsMap.GetValueOrDefault(topic.Id), messageStatsMap.GetValueOrDefault(topic.Id));
-            }
+            // 4. 未読数を一括計算（DB集約: CreatedAt + Id で判定）
+            var unreadCountsMap = await UnreadCountQueryHelper.GetUnreadCountsByTopicAsync(
+                _dbContext,
+                topicIds,
+                userId,
+                cancellationToken);
 
             // 5. DTOを作成
             var dtos = topics.Select(topic => new TopicWithStatsDto
@@ -593,7 +605,9 @@ public class TopicManagementService : BaseService, ITopicManagementService
                 .FirstOrDefaultAsync(cancellationToken);
 
             // 未読数計算
-            var unreadCount = CalculateUnreadCount(topicId, userTopic, messageStats);
+            var unreadCount = userTopic?.LastReadMessageId.HasValue == true
+                ? await CountUnreadMessagesAsync(topicId, userTopic.LastReadMessageId, cancellationToken)
+                : messageStats?.TotalCount ?? 0;
 
             var dto = new TopicWithStatsDto
             {
@@ -645,36 +659,9 @@ public class TopicManagementService : BaseService, ITopicManagementService
     /// <summary>
     /// 未読数を計算するヘルパーメソッド
     /// </summary>
-    private int CalculateUnreadCount(Guid topicId, UserTopic? userTopic, dynamic? messageStats)
+    private async Task<int> CountUnreadMessagesAsync(Guid topicId, Guid? lastReadMessageId, CancellationToken cancellationToken)
     {
-        if (userTopic?.LastReadMessageId.HasValue == true)
-        {
-            if (messageStats != null)
-            {
-                // 一括取得した統計情報から未読数を計算
-                var totalMessages = (int)messageStats.TotalCount;
-                if (totalMessages > 0)
-                {
-                    // 最新メッセージIDを取得（※注意：この簡略化版では完全ではありません）
-                    var latestMessageId = _dbContext.Messages
-                        .Where(m => m.TopicId == topicId)
-                        .Max(m => m.Id);
-
-                    var readMessages = _dbContext.Messages
-                        .Count(m => m.TopicId == topicId && m.Id <= userTopic.LastReadMessageId.Value);
-
-                    return Math.Max(0, totalMessages - readMessages);
-                }
-            }
-            return 0;
-        }
-        else if (userTopic == null)
-        {
-            // UserTopicがない場合は全メッセージが未読
-            return messageStats != null ? (int)messageStats.TotalCount : 0;
-        }
-
-        return 0;
+        return await UnreadCountQueryHelper.CountUnreadAsync(_dbContext, topicId, lastReadMessageId, cancellationToken);
     }
 
     /// <summary>

@@ -49,6 +49,8 @@
   let showBanModal = $state(false);
   let banTargetUser = $state<User | null>(null);
   let banReason = $state('');
+  const createUserEmailInputId = 'create-user-email';
+  const banReasonInputId = 'ban-reason';
 
   const tabs = [
     { id: 'users', label: 'ユーザー' },
@@ -200,6 +202,36 @@
   function formatDate(dateString: string | null | undefined): string {
     if (!dateString) return '-';
     return new Date(dateString).toLocaleString('ja-JP');
+  }
+
+  function isBackdropCloseKey(event: KeyboardEvent): boolean {
+    return event.key === 'Enter' || event.key === ' ' || event.key === 'Escape';
+  }
+
+  function handleCreateUserBackdropClick(event: MouseEvent) {
+    if (event.target === event.currentTarget) {
+      showCreateUserModal = false;
+    }
+  }
+
+  function handleCreateUserBackdropKeydown(event: KeyboardEvent) {
+    if (isBackdropCloseKey(event)) {
+      event.preventDefault();
+      showCreateUserModal = false;
+    }
+  }
+
+  function handleBanBackdropClick(event: MouseEvent) {
+    if (event.target === event.currentTarget) {
+      showBanModal = false;
+    }
+  }
+
+  function handleBanBackdropKeydown(event: KeyboardEvent) {
+    if (isBackdropCloseKey(event)) {
+      event.preventDefault();
+      showBanModal = false;
+    }
   }
 </script>
 
@@ -592,14 +624,22 @@
 
 <!-- Create User Modal -->
 {#if showCreateUserModal}
-  <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onclick={(e) => e.target === e.currentTarget && (showCreateUserModal = false)}>
+  <div
+    class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+    role="button"
+    tabindex="0"
+    aria-label="ユーザー作成モーダルを閉じる"
+    onclick={handleCreateUserBackdropClick}
+    onkeydown={handleCreateUserBackdropKeydown}
+  >
     <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
       <h3 class="text-lg font-semibold text-text mb-4">ユーザーを作成</h3>
 
       <div class="space-y-4">
         <div>
-          <label class="block text-sm font-medium text-text mb-1">メールアドレス</label>
+          <label for={createUserEmailInputId} class="block text-sm font-medium text-text mb-1">メールアドレス</label>
           <input
+            id={createUserEmailInputId}
             type="email"
             bind:value={newEmail}
             placeholder="user@example.com"
@@ -631,7 +671,14 @@
 
 <!-- Ban Modal -->
 {#if showBanModal && banTargetUser}
-  <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onclick={(e) => e.target === e.currentTarget && (showBanModal = false)}>
+  <div
+    class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+    role="button"
+    tabindex="0"
+    aria-label="Banモーダルを閉じる"
+    onclick={handleBanBackdropClick}
+    onkeydown={handleBanBackdropKeydown}
+  >
     <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
       <h3 class="text-lg font-semibold text-text mb-4">ユーザーをBan</h3>
 
@@ -641,8 +688,9 @@
 
       <div class="space-y-4">
         <div>
-          <label class="block text-sm font-medium text-text mb-1">Ban理由 *</label>
+          <label for={banReasonInputId} class="block text-sm font-medium text-text mb-1">Ban理由 *</label>
           <textarea
+            id={banReasonInputId}
             bind:value={banReason}
             placeholder="Banの理由を入力してください"
             disabled={isLoading}

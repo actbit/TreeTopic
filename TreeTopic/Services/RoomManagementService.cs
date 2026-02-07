@@ -12,7 +12,10 @@ namespace TreeTopic.Services;
 
 public interface IRoomManagementService
 {
-    Task<Result<List<RoomDto>>> GetAllRoomsAsync(CancellationToken cancellationToken = default);
+    Task<Result<List<RoomDto>>> GetAllRoomsAsync(
+        Guid userId,
+        IReadOnlyCollection<string> roleNames,
+        CancellationToken cancellationToken = default);
     Task<Result<RoomDto>> GetRoomByIdAsync(Guid roomId, CancellationToken cancellationToken = default);
     Task<Result<RoomDto>> CreateRoomAsync(CreateRoomRequest request, Guid createdUserId, CancellationToken cancellationToken = default);
     Task<Result<RoomDto>> UpdateRoomAsync(Guid roomId, UpdateRoomRequest request, CancellationToken cancellationToken = default);
@@ -22,31 +25,102 @@ public interface IRoomManagementService
 public class RoomManagementService : BaseService, IRoomManagementService
 {
     private readonly IRoomRepository _roomRepository;
+    private readonly ApplicationDbContext _dbContext;
     private readonly IMultiTenantContextAccessor<ApplicationTenantInfo> _tenantAccessor;
     private readonly IHubContext<RoomTopicHub, IRoomTopicHubClient> _roomTopicHub;
     private readonly IMaskedUUIDService _maskedUuidService;
 
     public RoomManagementService(
         IRoomRepository roomRepository,
+        ApplicationDbContext dbContext,
         IMultiTenantContextAccessor<ApplicationTenantInfo> tenantAccessor,
         IHubContext<RoomTopicHub, IRoomTopicHubClient> roomTopicHub,
         IMaskedUUIDService maskedUuidService,
         ILogger<RoomManagementService> logger) : base(logger)
     {
         _roomRepository = roomRepository;
+        _dbContext = dbContext;
         _tenantAccessor = tenantAccessor;
         _roomTopicHub = roomTopicHub;
         _maskedUuidService = maskedUuidService;
     }
 
-    public async Task<Result<List<RoomDto>>> GetAllRoomsAsync(CancellationToken cancellationToken = default)
+    public async Task<Result<List<RoomDto>>> GetAllRoomsAsync(
+        Guid userId,
+        IReadOnlyCollection<string> roleNames,
+        CancellationToken cancellationToken = default)
     {
         return await ExecuteAsync(async () =>
         {
             var rooms = await _roomRepository.Query()
                 .ToListAsync(cancellationToken);
 
-            var dtos = rooms.Select(MapToDto).ToList();
+            var roomIds = rooms.Select(r => r.Id).ToList();
+
+            var joinedRoomIds = await _roomRepository.Query()
+                .SelectMany(r => r.RoomUsers)
+                .Where(ru => ru.ApplicationUserId == userId && roomIds.Contains(ru.RoomId))
+                .Select(ru => ru.RoomId)
+                .Distinct()
+                .ToListAsync(cancellationToken);
+
+            var joinedRoomSet = joinedRoomIds.ToHashSet();
+
+            var normalizedRoleNames = roleNames
+                .Where(r => !string.IsNullOrWhiteSpace(r))
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            var roleIdList = await _dbContext.Roles
+                .AsNoTracking()
+                .Where(r => r.Name != null && normalizedRoleNames.Contains(r.Name))
+                .Select(r => r.Id)
+                .ToListAsync(cancellationToken);
+
+            var roleIdSet = roleIdList.ToHashSet();
+
+            var allowedByUserRoomIds = await _dbContext.RoomJoinUserPermissions
+                .AsNoTracking()
+                .Where(p => p.ApplicationUserId == userId && roomIds.Contains(p.RoomId))
+                .Select(p => p.RoomId)
+                .Distinct()
+                .ToListAsync(cancellationToken);
+
+            var allowedByRoleRoomIds = roleIdSet.Count == 0
+                ? new List<Guid>()
+                : await _dbContext.RoomJoinRolePermissions
+                    .AsNoTracking()
+                    .Where(p => roleIdSet.Contains(p.RoleId) && roomIds.Contains(p.RoomId))
+                    .Select(p => p.RoomId)
+                    .Distinct()
+                    .ToListAsync(cancellationToken);
+
+            var canManageRooms = await _dbContext.Permissions
+                .AsNoTracking()
+                .Include(p => p.Role)
+                .AnyAsync(
+                    p => p.Role != null
+                         && p.Role.Name != null
+                         && normalizedRoleNames.Contains(p.Role.Name)
+                         && (p.Name == Permissions.TenantPermissions.RoomManage
+                             || p.Name == Permissions.TenantPermissions.RoomRead),
+                    cancellationToken);
+
+            var allowedByUserSet = allowedByUserRoomIds.ToHashSet();
+            var allowedByRoleSet = allowedByRoleRoomIds.ToHashSet();
+
+            var dtos = rooms.Select(room =>
+            {
+                var isJoined = joinedRoomSet.Contains(room.Id);
+                var canJoin =
+                    isJoined ||
+                    canManageRooms ||
+                    room.CreatedUserId == userId ||
+                    room.JoinPolicy == RoomJoinPolicy.Public ||
+                    allowedByUserSet.Contains(room.Id) ||
+                    allowedByRoleSet.Contains(room.Id);
+
+                return MapToDto(room, isJoined, canJoin);
+            }).ToList();
             return Result<List<RoomDto>>.Success(dtos);
         }, nameof(GetAllRoomsAsync));
     }
@@ -178,7 +252,7 @@ public class RoomManagementService : BaseService, IRoomManagementService
         return _roomTopicHub.Clients.Group(groupName).RoomDeleted(payload);
     }
 
-    private static RoomDto MapToDto(Room room)
+    private static RoomDto MapToDto(Room room, bool isJoined = false, bool canJoin = true)
     {
         return new RoomDto
         {
@@ -188,6 +262,8 @@ public class RoomManagementService : BaseService, IRoomManagementService
             JoinPolicy = room.JoinPolicy,
             CreatedUserId = room.CreatedUserId,
             CreatedUserName = room.CreatedUser?.UserName,
+            IsJoined = isJoined,
+            CanJoin = canJoin,
             CreatedAt = room.CreatedAt,
             UpdatedAt = room.UpdatedAt
         };

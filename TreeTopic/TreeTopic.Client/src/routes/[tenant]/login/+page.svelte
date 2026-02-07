@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
   import { page } from '$app/stores';
   import type { PageData } from './$types';
@@ -49,8 +50,8 @@
     window.location.href = loginUrl;
   }
 
-  function goToSetup() {
-    window.location.href = `/${tenant}/setup`;
+  async function goToSetup() {
+    await goto(`/${tenant}/setup`);
   }
 </script>
 

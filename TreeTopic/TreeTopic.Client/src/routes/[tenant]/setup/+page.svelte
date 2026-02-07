@@ -33,6 +33,7 @@
   let setupToken: string | null = null;
   let isLoading = $state(false);
   let error = $state<string | null>(null);
+  const requiredSetupPermissions = ['tenant.permission.read', 'tenant.role.manage'];
 
   // Role management state
   let roles = $state<any[]>([]);
@@ -343,6 +344,7 @@
 
   let isSetupComplete = $state(false);
   let redirectToDashboard = $state(false);
+  let canCompleteSetup = $derived(true);
 
   async function completeSetup() {
     if (!setupToken) return;
@@ -363,7 +365,17 @@
         redirectToDashboard = true;
       }, 1500);
     } catch (err) {
-      error = err instanceof Error ? err.message : 'Failed to complete setup';
+      if (err instanceof Error && err.name === 'ApiError') {
+        const apiError = err as import('$lib/api/client').ApiError;
+        const data = apiError.data as { missingPermissions?: string[] } | undefined;
+        if (apiError.status === 403 && data?.missingPermissions?.length) {
+          error = `Complete Setup requires: ${requiredSetupPermissions.join(', ')}. Missing: ${data.missingPermissions.join(', ')}`;
+        } else {
+          error = apiError.message || 'Failed to complete setup';
+        }
+      } else {
+        error = err instanceof Error ? err.message : 'Failed to complete setup';
+      }
       isLoading = false;
     }
   }

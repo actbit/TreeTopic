@@ -238,14 +238,23 @@ public class AuthController : ControllerBase
             return Unauthorized();
         }
 
-        // ユーザーのロールを取得
-        var roles = await userManager.GetRolesAsync(appUser);
+        // ユーザーのロールを取得（Identity管理ロール + claimsロールをマージ）
+        var identityRoles = await userManager.GetRolesAsync(appUser);
+        var claimRoles = User.FindAll(ClaimTypes.Role).Select(c => c.Value);
+        var roles = new HashSet<string>(identityRoles, StringComparer.OrdinalIgnoreCase);
+        foreach (var claimRole in claimRoles)
+        {
+            if (!string.IsNullOrWhiteSpace(claimRole))
+            {
+                roles.Add(claimRole);
+            }
+        }
 
         // ユーザーの全ての権限を取得
         var userPermissions = await dbContext.Permissions
             .AsNoTracking()
             .Include(p => p.Role)
-            .Where(p => p.Role != null && roles.Contains(p.Role.Name))
+            .Where(p => p.Role != null && p.Role.Name != null && roles.Contains(p.Role.Name))
             .Select(p => p.Name)
             .Distinct()
             .ToListAsync(HttpContext.RequestAborted);

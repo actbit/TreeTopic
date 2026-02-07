@@ -27,6 +27,8 @@
   let childrenFetchPromise: Promise<void> | null = null;
   let latestChildFetchSucceeded = $state(false);
   let hasFetchedChildrenForCurrentExpansion = $state(false);
+  let nextChildrenFetchRetryAt = $state(0);
+  const CHILD_FETCH_RETRY_COOLDOWN_MS = 5000;
   let isDragOver = $state(false);
   let isDraggingSelf = $state(false);
   let hasUnreadChildrenState = $state(false);
@@ -139,8 +141,9 @@
 
   // 指定したトピックIDの子トピックを取得
   async function fetchChildrenByParentId(parentId: string): Promise<any[]> {
+    if (!$currentRoom?.id) return [];
     const tenant = getCurrentTenant();
-    const response = await api.get<Record<string, unknown>[]>(`/${tenant}/api/topic/parent/${parentId}`);
+    const response = await api.get<Record<string, unknown>[]>(`/${tenant}/api/topic/room/${$currentRoom.id}/parent/${parentId}`);
     const childTopics = Array.isArray(response) ? response.map(normalizeTopic) : [];
 
     // 子トピックをストアに追加または更新
@@ -161,12 +164,13 @@
     return childTopics;
   }
 
-  async function fetchChildTopics(): Promise<boolean> {
+  async function fetchChildTopics(force = false): Promise<boolean> {
     if (childrenFetchPromise) {
       await childrenFetchPromise;
       return latestChildFetchSucceeded;
     }
     if (!$currentRoom || isLoadingChildren) return false;
+    if (!force && Date.now() < nextChildrenFetchRetryAt) return false;
 
     childrenFetchPromise = (async () => {
       isLoadingChildren = true;
@@ -177,8 +181,10 @@
           updateTopic(node.id, { hasChildren: true });
         }
         latestChildFetchSucceeded = true;
+        nextChildrenFetchRetryAt = 0;
       } catch (err) {
         console.error('Failed to fetch child topics:', err);
+        nextChildrenFetchRetryAt = Date.now() + CHILD_FETCH_RETRY_COOLDOWN_MS;
       } finally {
         isLoadingChildren = false;
       }
@@ -203,7 +209,7 @@
 
   async function toggleExpand() {
     if (!node.isExpanded) {
-      const loaded = await fetchChildTopics();
+      const loaded = await fetchChildTopics(true);
       if (loaded) {
         hasFetchedChildrenForCurrentExpansion = true;
       }

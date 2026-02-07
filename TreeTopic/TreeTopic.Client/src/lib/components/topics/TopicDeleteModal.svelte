@@ -107,7 +107,7 @@
         // If children existed but weren't loaded, fetch and merge to keep UI consistent
         if (topic.hasChildren && loadedChildIds.length === 0) {
           if (parentId) {
-            const childrenResponse = await api.get<any[]>(`/${tenant}/api/topic/parent/${parentId}`);
+            const childrenResponse = await api.get<any[]>(`/${tenant}/api/topic/room/${topic.roomId}/parent/${parentId}`);
             const normalized = Array.isArray(childrenResponse)
               ? childrenResponse.map((raw) => ({
                   id: raw?.id ?? raw?.Id ?? '',

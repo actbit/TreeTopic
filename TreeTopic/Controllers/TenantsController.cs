@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Ixnas.AltchaNet;
 using TreeTopic.Dtos;
 using TreeTopic.Models;
 using TreeTopic.Permissions;
@@ -17,10 +18,14 @@ namespace TreeTopic.Controllers;
 public class TenantsController : ControllerBase
 {
     private readonly TenantManagementService _tenantManagementService;
+    private readonly AltchaService _altchaService;
 
-    public TenantsController(TenantManagementService tenantManagementService)
+    public TenantsController(
+        TenantManagementService tenantManagementService,
+        AltchaService altchaService)
     {
         _tenantManagementService = tenantManagementService;
+        _altchaService = altchaService;
     }
 
     /// <summary>
@@ -50,12 +55,35 @@ public class TenantsController : ControllerBase
     }
 
     /// <summary>
+    /// CAPTCHA情報を取得
+    /// </summary>
+    [HttpGet("captcha")]
+    [AllowAnonymous]
+    public IActionResult GetCaptcha()
+    {
+        var challenge = _altchaService.Generate();
+        return Ok(challenge);
+    }
+
+    /// <summary>
     /// テナント登録
     /// </summary>
     [HttpPost("register")]
     [AllowAnonymous]
-    public async Task<IActionResult> RegisterTenant([FromBody] RegisterTenantRequest request, CancellationToken cancellationToken)
+    [Consumes("multipart/form-data")]
+    public async Task<IActionResult> RegisterTenant([FromForm] RegisterTenantRequest request, CancellationToken cancellationToken)
     {
+        if (string.IsNullOrWhiteSpace(request.Altcha))
+        {
+            return BadRequest(new { error = "Security verification is required." });
+        }
+
+        var altchaValidation = await _altchaService.Validate(request.Altcha, cancellationToken);
+        if (!altchaValidation.IsValid)
+        {
+            return BadRequest(new { error = "Invalid security code." });
+        }
+
         var result = await _tenantManagementService.RegisterTenantAsync(request, cancellationToken);
         if (result.IsFailure)
         {

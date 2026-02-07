@@ -21,6 +21,7 @@
   let showAddUser = $state(false);
   let selectedUserId = $state('');
   let selectedPermission = $state('');
+  let applyToDescendants = $state(false);
 
   $effect(() => {
     if (isOpen && tenant && roomId && topicId) {
@@ -71,13 +72,17 @@
 
       if (hasPermission) {
         // Remove permission
-        await api.delete(`/${tenant}/api/topics/${topicId}/permissions/users/${userId}/${encodeURIComponent(permissionName)}`);
+        const removeUrl =
+          `/${tenant}/api/topics/${topicId}/permissions/users/${userId}/${encodeURIComponent(permissionName)}` +
+          `?applyToDescendants=${applyToDescendants}`;
+        await api.delete(removeUrl);
         userPermissions[userId] = currentPerms.filter((p) => p !== permissionName);
       } else {
         // Add permission
         await api.post(`/${tenant}/api/topics/${topicId}/permissions/users`, {
           roomUserId: userId,
-          permissionName
+          permissionName,
+          applyToDescendants
         });
         userPermissions[userId] = [...currentPerms, permissionName];
       }
@@ -95,7 +100,8 @@
     try {
       await api.post(`/${tenant}/api/topics/${topicId}/permissions/users`, {
         roomUserId: selectedUserId,
-        permissionName: selectedPermission
+        permissionName: selectedPermission,
+        applyToDescendants
       });
 
       const currentPerms = userPermissions[selectedUserId] || [];
@@ -112,7 +118,10 @@
 
   async function removePermission(userId: string, permissionName: string) {
     try {
-      await api.delete(`/${tenant}/api/topics/${topicId}/permissions/users/${userId}/${encodeURIComponent(permissionName)}`);
+      const removeUrl =
+        `/${tenant}/api/topics/${topicId}/permissions/users/${userId}/${encodeURIComponent(permissionName)}` +
+        `?applyToDescendants=${applyToDescendants}`;
+      await api.delete(removeUrl);
       userPermissions[userId] = (userPermissions[userId] || []).filter((p) => p !== permissionName);
     } catch (err) {
       error = err instanceof Error ? err.message : 'Failed to remove permission';
@@ -176,6 +185,15 @@
             + Add Permission
           </button>
         </div>
+
+        <label class="inline-flex items-center gap-2 text-sm text-text">
+          <input
+            type="checkbox"
+            bind:checked={applyToDescendants}
+            class="h-4 w-4 rounded border-border text-primary focus:ring-primary"
+          />
+          Apply to children and descendants when adding/removing permissions
+        </label>
 
         {#if showAddUser}
           <div class="border border-border rounded-lg p-4 bg-surface">

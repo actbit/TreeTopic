@@ -186,17 +186,11 @@ public class MessageManagementService : BaseService, IMessageManagementService
         int unreadCount = 0;
         DateTime? lastReadAt = null;
 
-        if (userTopic != null && userTopic.LastReadMessageId.HasValue)
+        if (userTopic != null)
         {
             lastReadAt = userTopic.LastAccessAt;
-            unreadCount = await _dbContext.Messages
-                .CountAsync(m => m.TopicId == topicId && m.Id > userTopic.LastReadMessageId.Value, cancellationToken);
         }
-        else
-        {
-            unreadCount = await _dbContext.Messages
-                .CountAsync(m => m.TopicId == topicId, cancellationToken);
-        }
+        unreadCount = await CountUnreadMessagesAsync(topicId, userTopic?.LastReadMessageId, cancellationToken);
 
         var groupName = RoomUserSyncHubGroups.RoomUser(
             _maskedUuidService.EncodeSynchronous(topic.RoomId),
@@ -210,6 +204,51 @@ public class MessageManagementService : BaseService, IMessageManagementService
 
         Logger.LogInformation("[RoomUserSyncHub] Broadcast TopicUnreadUpdated topic={TopicId} user={UserId} unread={UnreadCount} group={Group}", topicId, userId, unreadCount, groupName);
         await _roomUserSyncHub.Clients.Group(groupName).TopicUnreadUpdated(payload);
+    }
+
+    private static bool IsMessageOrderAtOrAfter(
+        DateTime lhsCreatedAt,
+        Guid lhsId,
+        DateTime rhsCreatedAt,
+        Guid rhsId)
+    {
+        if (lhsCreatedAt != rhsCreatedAt)
+            return lhsCreatedAt > rhsCreatedAt;
+
+        return lhsId.CompareTo(rhsId) >= 0;
+    }
+
+    private async Task<(DateTime CreatedAt, Guid Id)?> GetMessageOrderKeyAsync(
+        Guid topicId,
+        Guid messageId,
+        CancellationToken cancellationToken)
+    {
+        var key = await _dbContext.Messages
+            .Where(m => m.TopicId == topicId && m.Id == messageId)
+            .Select(m => new { m.CreatedAt, m.Id })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (key == null)
+            return null;
+
+        return (key.CreatedAt, key.Id);
+    }
+
+    private async Task<int> CountUnreadMessagesAsync(
+        Guid topicId,
+        Guid? lastReadMessageId,
+        CancellationToken cancellationToken)
+    {
+        return await UnreadCountQueryHelper.CountUnreadAsync(_dbContext, topicId, lastReadMessageId, cancellationToken);
+    }
+
+    private static Guid GetLatestMessageId(IEnumerable<Message> messages)
+    {
+        return messages
+            .OrderByDescending(m => m.CreatedAt)
+            .ThenByDescending(m => m.Id)
+            .Select(m => m.Id)
+            .First();
     }
 
     private TopicDetailDto MapTopicDto(Topic topic)
@@ -348,7 +387,7 @@ public class MessageManagementService : BaseService, IMessageManagementService
             // 最新のメッセージIDでユーザーのLastReadMessageIdを更新
             if (messages.Count > 0 && userId != Guid.Empty)
             {
-                var latestMessageId = messages.Max(m => m.Id);
+                var latestMessageId = GetLatestMessageId(messages);
                 await UpdateUserTopicAccessAsync(topicId, userId, latestMessageId, cancellationToken);
 
                 // 未読数更新を通知
@@ -491,7 +530,7 @@ public class MessageManagementService : BaseService, IMessageManagementService
             // 未読更新処理
             if (messages.Count > 0 && userId != Guid.Empty)
             {
-                var latestMessageId = messages.Max(m => m.Id);
+                var latestMessageId = GetLatestMessageId(messages);
                 await UpdateUserTopicAccessAsync(topicId, userId, latestMessageId, cancellationToken);
                 await BroadcastTopicUnreadUpdatedAsync(topicId, userId, cancellationToken);
             }
@@ -543,7 +582,7 @@ public class MessageManagementService : BaseService, IMessageManagementService
             // 未読更新処理
             if (messages.Count > 0 && userId != Guid.Empty)
             {
-                var latestMessageId = messages.Max(m => m.Id);
+                var latestMessageId = GetLatestMessageId(messages);
                 await UpdateUserTopicAccessAsync(topicId, userId, latestMessageId, cancellationToken);
                 await BroadcastTopicUnreadUpdatedAsync(topicId, userId, cancellationToken);
             }
@@ -738,6 +777,17 @@ public class MessageManagementService : BaseService, IMessageManagementService
             var topic = await _topicRepository.GetByIdAsync(request.TopicId, cancellationToken);
             if (topic == null)
                 return Result<MessageDto>.NotFound("Topic not found");
+
+            if (request.ChildTopic?.ParentId.HasValue == true)
+            {
+                var requestedParentId = (Guid)request.ChildTopic.ParentId.Value;
+                var parentTopic = await _topicRepository.GetByIdAsync(requestedParentId, cancellationToken);
+                if (parentTopic == null)
+                    return Result<MessageDto>.BadRequest("Parent topic not found");
+
+                if (parentTopic.RoomId != topic.RoomId)
+                    return Result<MessageDto>.BadRequest("Parent topic must belong to the same room");
+            }
 
             if (request.ReplyId.HasValue && request.ReplyId != Guid.Empty)
             {
@@ -981,31 +1031,38 @@ public class MessageManagementService : BaseService, IMessageManagementService
                 .Where(m => m.TopicId == topicId)
                 .OrderByDescending(m => m.CreatedAt)
                 .ThenByDescending(m => m.Id)
-                .Select(m => m.Id)
+                .Select(m => new { m.Id, m.CreatedAt })
                 .FirstOrDefaultAsync(cancellationToken);
 
-            if (latestMessage == Guid.Empty)
+            if (latestMessage == null)
                 return Result<int>.Success(0);
 
             // 既にユーザーがこのメッセージより新しいものを読んでいる場合は未読数を返す
             var existingUserTopic = await _dbContext.UserTopics
                 .FirstOrDefaultAsync(ut => ut.UserId == userId && ut.TopicId == topicId, cancellationToken);
 
-            if (existingUserTopic != null && existingUserTopic.LastReadMessageId >= latestMessage)
+            if (existingUserTopic?.LastReadMessageId.HasValue == true)
             {
-                // 未読数を計算
-                var unreadCount = await _dbContext.Messages
-                    .CountAsync(m => m.TopicId == topicId && m.Id > existingUserTopic.LastReadMessageId, cancellationToken);
-                Logger.LogInformation("User {UserId} already has topic {TopicId} marked as read (LastReadMessageId: {LastRead} >= Latest: {Latest}), unread: {Unread}",
-                    userId, topicId, existingUserTopic.LastReadMessageId, latestMessage, unreadCount);
-                return Result<int>.Success(unreadCount);
+                var lastReadOrder = await GetMessageOrderKeyAsync(topicId, existingUserTopic.LastReadMessageId.Value, cancellationToken);
+                if (lastReadOrder.HasValue
+                    && IsMessageOrderAtOrAfter(
+                        lastReadOrder.Value.CreatedAt,
+                        lastReadOrder.Value.Id,
+                        latestMessage.CreatedAt,
+                        latestMessage.Id))
+                {
+                    var unreadCount = await CountUnreadMessagesAsync(topicId, existingUserTopic.LastReadMessageId, cancellationToken);
+                    Logger.LogInformation("User {UserId} already has topic {TopicId} marked as read (LastReadMessageId: {LastRead}), unread: {Unread}",
+                        userId, topicId, existingUserTopic.LastReadMessageId, unreadCount);
+                    return Result<int>.Success(unreadCount);
+                }
             }
 
             // ユーザーのLastReadMessageIdを更新（内部でトランザクションを使用）
-            await UpdateUserTopicAccessAsync(topicId, userId, latestMessage, cancellationToken);
+            await UpdateUserTopicAccessAsync(topicId, userId, latestMessage.Id, cancellationToken);
 
             Logger.LogInformation("Successfully marked topic {TopicId} as read for user {UserId} (LastReadMessageId: {Latest})",
-                topicId, userId, latestMessage);
+                topicId, userId, latestMessage.Id);
 
             // 同じRoomの同じユーザーの他デバイスへ未読数更新を通知
             await BroadcastTopicUnreadUpdatedAsync(topicId, userId, cancellationToken);
@@ -1452,26 +1509,90 @@ public class MessageManagementService : BaseService, IMessageManagementService
                     .Where(ru => ru.RoomId == topic.RoomId && ru.Id != senderRoomUser.Id)
                     .ToListAsync();
 
+                var targetUserIds = roomUsersForUnread
+                    .Select(ru => ru.ApplicationUserId)
+                    .Distinct()
+                    .ToList();
+
+                var totalMessageCount = await dbContext.Messages
+                    .CountAsync(m => m.TopicId == message.TopicId);
+
+                var userTopics = await dbContext.UserTopics
+                    .Where(ut => ut.TopicId == message.TopicId && targetUserIds.Contains(ut.UserId))
+                    .ToListAsync();
+
+                var userTopicMap = userTopics.ToDictionary(ut => ut.UserId, ut => ut);
+
+                var validAnchorUserIds = (
+                    await (
+                        from ut in dbContext.UserTopics
+                            .Where(ut =>
+                                ut.TopicId == message.TopicId
+                                && targetUserIds.Contains(ut.UserId)
+                                && ut.LastReadMessageId.HasValue)
+                        join anchor in dbContext.Messages
+                            on ut.LastReadMessageId equals anchor.Id
+                        where anchor.TopicId == message.TopicId
+                        select ut.UserId
+                    ).Distinct().ToListAsync()
+                ).ToHashSet();
+
+                var unreadCountsByUser = await (
+                    from m in dbContext.Messages
+                    where m.TopicId == message.TopicId
+                    join ut in dbContext.UserTopics
+                        .Where(ut =>
+                            ut.TopicId == message.TopicId
+                            && targetUserIds.Contains(ut.UserId)
+                            && ut.LastReadMessageId.HasValue)
+                        on m.TopicId equals ut.TopicId
+                    join anchor in dbContext.Messages
+                        on ut.LastReadMessageId equals anchor.Id
+                    where anchor.TopicId == message.TopicId
+                        && (
+                            m.CreatedAt > anchor.CreatedAt
+                            || (m.CreatedAt == anchor.CreatedAt && m.Id > anchor.Id)
+                        )
+                    group m by ut.UserId into g
+                    select new { UserId = g.Key, UnreadCount = g.Count() }
+                ).ToDictionaryAsync(x => x.UserId, x => x.UnreadCount);
+
                 foreach (var ru in roomUsersForUnread)
                 {
                     try
                     {
-                        // 未読数を計算
-                        var userTopic = await dbContext.UserTopics
-                            .FirstOrDefaultAsync(ut => ut.UserId == ru.ApplicationUserId && ut.TopicId == message.TopicId);
-                        int unreadCount = 0;
+                        int unreadCount;
                         DateTime? lastReadAt = null;
 
-                        if (userTopic != null && userTopic.LastReadMessageId.HasValue)
+                        if (userTopicMap.TryGetValue(ru.ApplicationUserId, out var userTopic))
                         {
                             lastReadAt = userTopic.LastAccessAt;
-                            unreadCount = await dbContext.Messages
-                                .CountAsync(m => m.TopicId == message.TopicId && m.Id > userTopic.LastReadMessageId.Value);
+
+                            if (userTopic.LastReadMessageId.HasValue)
+                            {
+                                if (unreadCountsByUser.TryGetValue(ru.ApplicationUserId, out var unread))
+                                {
+                                    unreadCount = unread;
+                                }
+                                else if (validAnchorUserIds.Contains(ru.ApplicationUserId))
+                                {
+                                    // アンカーは有効で未読行が0件のケース
+                                    unreadCount = 0;
+                                }
+                                else
+                                {
+                                    // LastReadMessageId が存在していてもアンカー行が消えていた場合は全件未読扱い
+                                    unreadCount = totalMessageCount;
+                                }
+                            }
+                            else
+                            {
+                                unreadCount = totalMessageCount;
+                            }
                         }
                         else
                         {
-                            unreadCount = await dbContext.Messages
-                                .CountAsync(m => m.TopicId == message.TopicId);
+                            unreadCount = totalMessageCount;
                         }
 
                         var groupName = RoomUserSyncHubGroups.RoomUser(
@@ -1513,7 +1634,38 @@ public class MessageManagementService : BaseService, IMessageManagementService
 
             if (userTopic != null)
             {
-                userTopic.LastReadMessageId = messageId;
+                var nextLastReadMessageId = userTopic.LastReadMessageId;
+                if (messageId.HasValue)
+                {
+                    if (!userTopic.LastReadMessageId.HasValue)
+                    {
+                        nextLastReadMessageId = messageId;
+                    }
+                    else if (userTopic.LastReadMessageId.Value == messageId.Value)
+                    {
+                        nextLastReadMessageId = messageId;
+                    }
+                    else
+                    {
+                        var currentOrder = await GetMessageOrderKeyAsync(topicId, userTopic.LastReadMessageId.Value, cancellationToken);
+                        var candidateOrder = await GetMessageOrderKeyAsync(topicId, messageId.Value, cancellationToken);
+
+                        if (candidateOrder.HasValue)
+                        {
+                            if (!currentOrder.HasValue
+                                || IsMessageOrderAtOrAfter(
+                                    candidateOrder.Value.CreatedAt,
+                                    candidateOrder.Value.Id,
+                                    currentOrder.Value.CreatedAt,
+                                    currentOrder.Value.Id))
+                            {
+                                nextLastReadMessageId = messageId;
+                            }
+                        }
+                    }
+                }
+
+                userTopic.LastReadMessageId = nextLastReadMessageId;
                 userTopic.LastAccessAt = DateTime.UtcNow;
             }
             else

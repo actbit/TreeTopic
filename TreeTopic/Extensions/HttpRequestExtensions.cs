@@ -23,6 +23,11 @@ public static class HttpRequestExtensions
         if (AuthenticationConstants.Paths.IsApiPath(path))
             return true;
 
+        // SignalR の negotiate / WebSocket エンドポイントも API リクエストとして扱う。
+        // （401/403 を返し、ログイン/OIDC リダイレクトは行わない）
+        if (IsHubPath(path) || request.Query.ContainsKey("negotiateVersion"))
+            return true;
+
         var accept = request.Headers["Accept"].ToString();
         if (!string.IsNullOrEmpty(accept) && accept.Contains("application/json", StringComparison.OrdinalIgnoreCase))
             return true;
@@ -32,5 +37,19 @@ public static class HttpRequestExtensions
             return true;
 
         return false;
+    }
+
+    private static bool IsHubPath(string path)
+    {
+        if (string.IsNullOrEmpty(path))
+            return false;
+
+        var trimmed = path.Trim('/');
+        if (trimmed.Length == 0)
+            return false;
+
+        var segments = trimmed.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        return string.Equals(segments[0], "hubs", StringComparison.OrdinalIgnoreCase) ||
+               (segments.Length >= 2 && string.Equals(segments[1], "hubs", StringComparison.OrdinalIgnoreCase));
     }
 }

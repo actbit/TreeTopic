@@ -31,15 +31,9 @@ public class TopicPermissionsController : BaseController
     /// </summary>
     [HttpGet("available")]
     [RequireAny(TenantPermissions.PermissionRead)]
-    public IActionResult GetAvailablePermissions([FromServices] PermissionScanService permissionScanService)
+    public IActionResult GetAvailablePermissions([FromServices] PermissionCatalogService permissionCatalogService)
     {
-        var permissions = permissionScanService.GetTopicPermissions();
-
-        return Ok(permissions.Select(p => new
-        {
-            name = p.Name,
-            scope = p.Scope.ToString()
-        }).ToList());
+        return Ok(permissionCatalogService.GetTopicPermissions());
     }
 
     /// <summary>
@@ -92,7 +86,12 @@ public class TopicPermissionsController : BaseController
         CancellationToken cancellationToken)
     {
         var topicGuid = (Guid)topicId;
-        var result = await _service.AddPermissionToUserAsync(topicGuid, request.RoomUserId, request.PermissionName, cancellationToken);
+        var result = await _service.AddPermissionToUserAsync(
+            topicGuid,
+            request.RoomUserId,
+            request.PermissionName,
+            request.ApplyToDescendants,
+            cancellationToken);
         if (result.IsSuccess)
         {
             var permission = result.Data;
@@ -112,11 +111,17 @@ public class TopicPermissionsController : BaseController
         [FromRoute] MaskedGuid topicId,
         [FromRoute] MaskedGuid roomUserId,
         [FromRoute] string permissionName,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        [FromQuery] bool applyToDescendants = false)
     {
         var topicGuid = (Guid)topicId;
         var roomUserGuid = (Guid)roomUserId;
-        var result = await _service.RemovePermissionFromUserAsync(topicGuid, roomUserGuid, permissionName, cancellationToken);
+        var result = await _service.RemovePermissionFromUserAsync(
+            topicGuid,
+            roomUserGuid,
+            permissionName,
+            applyToDescendants,
+            cancellationToken);
         if (result.IsSuccess)
         {
             return NoContent();
@@ -155,7 +160,12 @@ public class TopicPermissionsController : BaseController
         CancellationToken cancellationToken)
     {
         var topicGuid = (Guid)topicId;
-        var result = await _service.AddTopicRolePermissionAsync(topicGuid, request.RoleName, request.PermissionName, cancellationToken);
+        var result = await _service.AddTopicRolePermissionAsync(
+            topicGuid,
+            request.RoleName,
+            request.PermissionName,
+            request.ApplyToDescendants,
+            cancellationToken);
         if (result.IsSuccess)
         {
             var permission = result.Data;
@@ -175,10 +185,16 @@ public class TopicPermissionsController : BaseController
         [FromRoute] MaskedGuid topicId,
         [FromRoute] string roleName,
         [FromRoute] string permissionName,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        [FromQuery] bool applyToDescendants = false)
     {
         var topicGuid = (Guid)topicId;
-        var result = await _service.RemoveTopicRolePermissionAsync(topicGuid, roleName, permissionName, cancellationToken);
+        var result = await _service.RemoveTopicRolePermissionAsync(
+            topicGuid,
+            roleName,
+            permissionName,
+            applyToDescendants,
+            cancellationToken);
         if (result.IsSuccess)
         {
             return NoContent();
@@ -230,9 +246,9 @@ public class TopicPermissionsController : BaseController
 /// <summary>
 /// Topicユーザー権限割り当てリクエスト
 /// </summary>
-public record AddTopicPermissionToUserRequest(Guid RoomUserId, string PermissionName);
+public record AddTopicPermissionToUserRequest(Guid RoomUserId, string PermissionName, bool ApplyToDescendants = false);
 
 /// <summary>
 /// TopicRolePermission割り当てリクエスト
 /// </summary>
-public record AddTopicRolePermissionRequest(string RoleName, string PermissionName);
+public record AddTopicRolePermissionRequest(string RoleName, string PermissionName, bool ApplyToDescendants = false);

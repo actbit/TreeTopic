@@ -29,6 +29,8 @@
       memberCount: raw?.memberCount ?? raw?.MemberCount ?? 0,
       unreadCount: raw?.unreadCount ?? raw?.UnreadCount ?? 0,
       isArchived: raw?.isArchived ?? raw?.IsArchived ?? false,
+      canJoin: (raw?.canJoin ?? raw?.CanJoin ?? true) as boolean,
+      isJoined: (raw?.isJoined ?? raw?.IsJoined ?? false) as boolean,
       settings: raw?.settings ?? raw?.Settings,
     };
   }
@@ -53,7 +55,7 @@
       if (
         resolvedTenant &&
         error instanceof api.ApiError &&
-        (error.status === 401 || error.status === 403)
+        error.status === 401
       ) {
         await auth.logout(resolvedTenant);
         redirectToTenantLogin(resolvedTenant);
@@ -73,6 +75,7 @@
     const tenant = $page.params.tenant ?? getCurrentTenant();
     if (!tenant) return;
     const room = $roomList.find((r) => r.id === roomId);
+    if (room?.canJoin === false) return;
     if (room) {
       setCurrentRoom(room);
     }
@@ -132,13 +135,18 @@
             {#each $roomList as room (room.id)}
               <button
                 class="list-item clickable hoverable w-full text-left"
+                class:disabled={room.canJoin === false}
                 onclick={() => enterRoom(room.id)}
+                disabled={room.canJoin === false}
               >
                 <div class="flex items-center justify-between">
                   <div class="min-w-0">
                     <div class="text-bold text-base">{room.name}</div>
                     {#if room.description}
                       <div class="text-small text-light truncate">{room.description}</div>
+                    {/if}
+                    {#if room.canJoin === false}
+                      <div class="text-small text-light">You cannot join this room</div>
                     {/if}
                   </div>
                   {#if room.unreadCount > 0}

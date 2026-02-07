@@ -15,14 +15,20 @@ public class TopicDtoBuilder
     private readonly List<Topic> _topics;
     private readonly ApplicationDbContext _dbContext;
     private readonly ITopicRepository _topicRepository;
+    private readonly ILogger<TopicDtoBuilder>? _logger;
     private HashSet<Guid>? _hasChildrenSet;
     private Dictionary<Guid, int>? _unreadCountsMap;
 
-    public TopicDtoBuilder(List<Topic> topics, ApplicationDbContext dbContext, ITopicRepository topicRepository)
+    public TopicDtoBuilder(
+        List<Topic> topics,
+        ApplicationDbContext dbContext,
+        ITopicRepository topicRepository,
+        ILogger<TopicDtoBuilder>? logger = null)
     {
         _topics = topics;
         _dbContext = dbContext;
         _topicRepository = topicRepository;
+        _logger = logger;
     }
 
     public async Task<TopicDtoBuilder> WithHasChildren(CancellationToken cancellationToken)
@@ -47,57 +53,24 @@ public class TopicDtoBuilder
         }
 
         var topicIds = _topics.Select(t => t.Id).ToList();
-        _unreadCountsMap = new Dictionary<Guid, int>();
+        _unreadCountsMap = topicIds.ToDictionary(topicId => topicId, _ => 0);
 
         try
         {
-            var userTopics = await _dbContext.UserTopics
-                .Where(ut => topicIds.Contains(ut.TopicId) && ut.UserId == userId.Value)
-                .ToListAsync(cancellationToken);
+            var unreadCounts = await UnreadCountQueryHelper.GetUnreadCountsByTopicAsync(
+                _dbContext,
+                topicIds,
+                userId.Value,
+                cancellationToken);
 
-            var userTopicsMap = userTopics.ToDictionary(ut => ut.TopicId, ut => ut);
-
-            var messageCountsByTopic = await _dbContext.Messages
-                .Where(m => topicIds.Contains(m.TopicId))
-                .GroupBy(m => m.TopicId)
-                .Select(g => new { TopicId = g.Key, Count = g.Count() })
-                .ToDictionaryAsync(x => x.TopicId, x => x.Count, cancellationToken);
-
-            var lastReadMessageMap = userTopicsMap
-                .Where(kvp => kvp.Value.LastReadMessageId.HasValue)
-                .ToDictionary(kvp => kvp.Key, kvp => kvp.Value.LastReadMessageId!.Value);
-
-            if (lastReadMessageMap.Count > 0)
+            foreach (var item in unreadCounts)
             {
-                var messages = await _dbContext.Messages
-                    .Where(m => lastReadMessageMap.Keys.Contains(m.TopicId))
-                    .ToListAsync(cancellationToken);
-
-                var unreadCounts = messages
-                    .GroupBy(m => m.TopicId)
-                    .Select(g => new
-                    {
-                        TopicId = g.Key,
-                        UnreadCount = g.Count(m => m.Id > lastReadMessageMap[g.Key])
-                    })
-                    .ToDictionary(x => x.TopicId, x => x.UnreadCount);
-
-                foreach (var item in lastReadMessageMap)
-                {
-                    _unreadCountsMap[item.Key] = unreadCounts.GetValueOrDefault(item.Key, 0);
-                }
-            }
-
-            foreach (var topicId in topicIds)
-            {
-                if (!_unreadCountsMap.ContainsKey(topicId))
-                {
-                    _unreadCountsMap[topicId] = messageCountsByTopic.GetValueOrDefault(topicId, 0);
-                }
+                _unreadCountsMap[item.Key] = item.Value;
             }
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            _logger?.LogWarning(ex, "Failed to calculate unread counts in {Builder}", nameof(TopicDtoBuilder));
         }
 
         return this;

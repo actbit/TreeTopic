@@ -16,6 +16,7 @@ import type { User, AuthContext } from '$lib/stores/auth';
 import { get as getStore } from 'svelte/store';
 import { goto } from '$app/navigation';
 import * as cacheManager from './cache';
+import { activeModals, ui } from '$lib/stores/ui';
 
 /**
  * API Error
@@ -88,6 +89,7 @@ function inferTenantFromPathname(pathname: string): string {
 }
 
 let isRedirectingToLogin = false;
+const forbiddenModalId = 'forbidden-access';
 
 function redirectToTenantOidc(tenant: string): void {
   if (!tenant) return;
@@ -103,6 +105,26 @@ function redirectToTenantOidc(tenant: string): void {
   } else {
     goto(loginUrl);
   }
+}
+
+function showForbiddenModal(data?: unknown): void {
+  if (typeof window === 'undefined') return;
+
+  const modals = getStore(activeModals);
+  if (modals.some((modal) => modal.id === forbiddenModalId)) {
+    return;
+  }
+
+  const message =
+    (data as { message?: string } | undefined)?.message ??
+    'You do not have permission to perform this action.';
+
+  ui.openModal({
+    id: forbiddenModalId,
+    title: 'Access Denied',
+    type: 'custom',
+    data: { message },
+  });
 }
 
 /**
@@ -145,6 +167,9 @@ async function handleResponse<T>(response: Response): Promise<T> {
 
     const isAuthMeRequest = requestPath.toLowerCase().endsWith('/auth/me');
     const isSetupRequest = requestPath.includes('/api/setup/');
+    const isPublicTenantRegistrationRequest =
+      requestPath === '/api/tenants/register' ||
+      requestPath === '/api/tenants/captcha';
     const isOnLoginPage =
       Boolean(tenant) &&
       (currentPath === `/${tenant}/login` || currentPath === `/${tenant}/auth/login`);
@@ -152,6 +177,7 @@ async function handleResponse<T>(response: Response): Promise<T> {
     if (
       !isOnLoginPage &&
       !isSetupRequest &&
+      !isPublicTenantRegistrationRequest &&
       (response.status === 401 || (response.status === 404 && isAuthMeRequest))
     ) {
       // Clear all caches on authentication error
@@ -164,6 +190,10 @@ async function handleResponse<T>(response: Response): Promise<T> {
         // If no tenant in context, redirect to home
         goto('/');
       }
+    }
+
+    if (response.status === 403) {
+      showForbiddenModal(data);
     }
 
     throw error;
@@ -460,6 +490,9 @@ export async function uploadFile(
           (currentPath === `/${tenant}/login` || currentPath === `/${tenant}/auth/login`);
         if (tenant && !isOnLoginPage) redirectToTenantOidc(tenant);
         reject(new ApiError(xhr.status, xhr.statusText, 'Unauthorized'));
+      } else if (xhr.status === 403) {
+        showForbiddenModal();
+        reject(new ApiError(xhr.status, xhr.statusText, 'Forbidden'));
       } else {
         reject(
           new ApiError(

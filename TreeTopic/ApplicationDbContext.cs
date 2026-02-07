@@ -219,6 +219,9 @@ namespace TreeTopic
                 .HasForeignKey(m => m.ReplyId)
                 .OnDelete(DeleteBehavior.SetNull);
 
+            modelBuilder.Entity<Message>()
+                .HasIndex(m => new { m.TopicId, m.CreatedAt, m.Id });
+
             // RoomUser リレーション
             modelBuilder.Entity<RoomUser>()
                 .HasOne(ru => ru.ApplicationUser)

@@ -1,10 +1,14 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 using MaskedUUID.AspNetCore.Types;
 using TreeTopic.Helpers;
 using TreeTopic.Services;
 using TreeTopic.Permissions;
 using TreeTopic.Dtos;
 using TreeTopic.Common;
+using TreeTopic.Models;
+using System.Security.Claims;
 
 namespace TreeTopic.Controllers;
 
@@ -13,18 +17,30 @@ namespace TreeTopic.Controllers;
 [RequireSetupToken]
 public class SetupController : ControllerBase
 {
+    private static readonly string[] RequiredPermissionsForCompletion =
+    [
+        TenantPermissions.PermissionRead,
+        TenantPermissions.RoleManage
+    ];
+
     private readonly SetupTokenValidationService _tokenValidator;
     private readonly PermissionScanService _permissionScanService;
     private readonly UserManagementService _userManagementService;
+    private readonly UserManager<ApplicationUser> _userManager;
+    private readonly ApplicationDbContext _db;
 
     public SetupController(
         SetupTokenValidationService tokenValidator,
         PermissionScanService permissionScanService,
-        UserManagementService userManagementService)
+        UserManagementService userManagementService,
+        UserManager<ApplicationUser> userManager,
+        ApplicationDbContext db)
     {
         _tokenValidator = tokenValidator;
         _permissionScanService = permissionScanService;
         _userManagementService = userManagementService;
+        _userManager = userManager;
+        _db = db;
     }
 
     /// <summary>
@@ -41,6 +57,51 @@ public class SetupController : ControllerBase
         if (string.IsNullOrWhiteSpace(tenantId))
         {
             return Unauthorized(new { message = "Invalid or expired setup token" });
+        }
+
+        var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (!Guid.TryParse(userId, out var userGuid))
+        {
+            return Unauthorized(new { message = "Authentication required to complete setup" });
+        }
+
+        var appUser = await _userManager.FindByIdAsync(userGuid.ToString());
+        if (appUser == null)
+        {
+            return Unauthorized(new { message = "User not found" });
+        }
+
+        var identityRoles = await _userManager.GetRolesAsync(appUser);
+        var claimRoles = User.FindAll(ClaimTypes.Role).Select(c => c.Value);
+        var roles = new HashSet<string>(identityRoles, StringComparer.OrdinalIgnoreCase);
+        foreach (var claimRole in claimRoles)
+        {
+            if (!string.IsNullOrWhiteSpace(claimRole))
+            {
+                roles.Add(claimRole);
+            }
+        }
+
+        var userPermissions = await _db.Permissions
+            .AsNoTracking()
+            .Include(p => p.Role)
+            .Where(p => p.Role != null && roles.Contains(p.Role.Name))
+            .Select(p => p.Name)
+            .Distinct()
+            .ToListAsync(HttpContext.RequestAborted);
+
+        var missingPermissions = RequiredPermissionsForCompletion
+            .Where(required => !userPermissions.Contains(required))
+            .ToList();
+
+        if (missingPermissions.Count > 0)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new
+            {
+                message = "Missing required permissions to complete setup",
+                requiredPermissions = RequiredPermissionsForCompletion,
+                missingPermissions
+            });
         }
 
         // AuthorizationヘッダーからSetupトークンを取得

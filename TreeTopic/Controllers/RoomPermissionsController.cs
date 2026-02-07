@@ -30,15 +30,9 @@ public class RoomPermissionsController : BaseController
     /// </summary>
     [HttpGet("available")]
     [RequireAny(TenantPermissions.PermissionRead)]
-    public IActionResult GetAvailablePermissions([FromServices] PermissionScanService permissionScanService)
+    public IActionResult GetAvailablePermissions([FromServices] PermissionCatalogService permissionCatalogService)
     {
-        var permissions = permissionScanService.GetRoomPermissions();
-
-        return Ok(permissions.Select(p => new
-        {
-            name = p.Name,
-            scope = p.Scope.ToString()
-        }).ToList());
+        return Ok(permissionCatalogService.GetRoomPermissions());
     }
 
     /// <summary>

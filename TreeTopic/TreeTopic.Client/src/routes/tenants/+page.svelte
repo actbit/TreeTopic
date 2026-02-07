@@ -1,5 +1,7 @@
 <script lang="ts">
+  import { goto } from '$app/navigation';
   import { api } from '$lib/api/client';
+  import { onMount } from 'svelte';
 
   let isLoading = $state(false);
   let error = $state<string | null>(null);
@@ -13,7 +15,8 @@
     metadataAddress: false,
     openIdConnectAuthority: false,
     clientId: false,
-    clientSecret: false
+    clientSecret: false,
+    captcha: false
   });
 
   // フォームフィールド
@@ -30,6 +33,37 @@
   let metadataAddress = $state('');
   let clientId = $state('');
   let clientSecret = $state('');
+  let altchaPayload = $state('');
+  let altchaVerified = $state(false);
+  let altchaWidget = $state<HTMLElement | null>(null);
+
+  function handleAltchaStateChange(event: Event) {
+    const customEvent = event as CustomEvent<{ state?: string; payload?: string }>;
+    altchaPayload = customEvent.detail?.payload ?? '';
+    altchaVerified = customEvent.detail?.state === 'verified';
+    if (altchaVerified) {
+      errors.captcha = false;
+      error = null;
+    }
+  }
+
+  onMount(async () => {
+    await import('altcha');
+  });
+
+  $effect(() => {
+    const widget = altchaWidget as (HTMLElement & { addEventListener: (type: string, listener: EventListener) => void; removeEventListener: (type: string, listener: EventListener) => void }) | null;
+    if (!widget) {
+      return;
+    }
+
+    const listener = (event: Event) => handleAltchaStateChange(event);
+    widget.addEventListener('statechange', listener);
+
+    return () => {
+      widget.removeEventListener('statechange', listener);
+    };
+  });
 
   $effect(() => {
     // MySQLを選ぶと自動的にカスタム接続文字列を有効にする
@@ -56,7 +90,8 @@
       roleClaimName: false,
       metadataAddress: false,
       clientId: false,
-      clientSecret: false
+      clientSecret: false,
+      captcha: false
     };
 
     if (!identifier.trim()) {
@@ -112,43 +147,40 @@
       }
     }
 
+    if (!altchaVerified || !altchaPayload) {
+      error = 'Security verification is required';
+      errors.captcha = true;
+      return;
+    }
+
     try {
       isLoading = true;
       error = null;
       success = false;
       createdTenant = null;
 
-      const request: {
-        identifier: string;
-        name: string;
-        dbProvider: string;
-        dbConnectionString?: string;
-        openIdConnectAuthority?: string;
-        roleClaimName?: string;
-        openIdConnectMetadataAddress?: string;
-        openIdConnectClientId?: string;
-        openIdConnectClientSecret?: string;
-      } = {
-        identifier: identifier.trim(),
-        name: name.trim(),
-        dbProvider: dbProvider
-      };
+      const formData = new FormData();
+      formData.append('identifier', identifier.trim());
+      formData.append('name', name.trim());
+      formData.append('dbProvider', dbProvider);
 
       // カスタム接続文字列を追加
       if (useCustomConnection && dbConnectionString.trim()) {
-        request.dbConnectionString = dbConnectionString.trim();
+        formData.append('dbConnectionString', dbConnectionString.trim());
       }
 
       // OIDC設定を追加
       if (useOidc) {
-        if (openIdConnectAuthority) request.openIdConnectAuthority = openIdConnectAuthority.trim();
-        if (roleClaimName) request.roleClaimName = roleClaimName.trim();
-        if (metadataAddress) request.openIdConnectMetadataAddress = metadataAddress.trim();
-        if (clientId) request.openIdConnectClientId = clientId.trim();
-        if (clientSecret) request.openIdConnectClientSecret = clientSecret.trim();
+        if (openIdConnectAuthority) formData.append('openIdConnectAuthority', openIdConnectAuthority.trim());
+        if (roleClaimName) formData.append('roleClaimName', roleClaimName.trim());
+        if (metadataAddress) formData.append('openIdConnectMetadataAddress', metadataAddress.trim());
+        if (clientId) formData.append('openIdConnectClientId', clientId.trim());
+        if (clientSecret) formData.append('openIdConnectClientSecret', clientSecret.trim());
       }
 
-      const response = await api.post<{ identifier: string; name: string; setupToken?: string }>('/api/tenants/register', request);
+      formData.append('altcha', altchaPayload);
+
+      const response = await api.post<{ identifier: string; name: string; setupToken?: string }>('/api/tenants/register', formData);
       createdTenant = response;
 
       // 成功
@@ -163,8 +195,15 @@
       metadataAddress = '';
       clientId = '';
       clientSecret = '';
+      altchaPayload = '';
+      altchaVerified = false;
+      (altchaWidget as { reset?: () => void } | null)?.reset?.();
     } catch (err) {
       error = err instanceof Error ? err.message : 'Failed to create workspace';
+      errors.captcha = true;
+      altchaPayload = '';
+      altchaVerified = false;
+      (altchaWidget as { reset?: (newState?: string, err?: string | null) => void } | null)?.reset?.('unverified', null);
     } finally {
       isLoading = false;
     }
@@ -182,6 +221,9 @@
     metadataAddress = '';
     clientId = '';
     clientSecret = '';
+    altchaPayload = '';
+    altchaVerified = false;
+    (altchaWidget as { reset?: () => void } | null)?.reset?.();
     error = null;
     success = false;
     createdTenant = null;
@@ -205,9 +247,9 @@
     }
   }
 
-  function goToTenant() {
+  async function goToTenant() {
     if (createdTenant?.identifier) {
-      window.location.href = `/${createdTenant.identifier}/dashboard`;
+      await goto(`/${createdTenant.identifier}/dashboard`);
     }
   }
 </script>
@@ -253,29 +295,6 @@
           </button>
         </div>
 
-      {:else if error}
-        <!-- エラー画面 -->
-        <div class="logo-section">
-          <h1>TreeTopic</h1>
-        </div>
-
-        <div class="error-message">
-          <div class="error-icon">
-            <svg class="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </div>
-          <h2 class="text-xl font-bold text-text mb-2">An error occurred</h2>
-          <p class="text-text-light mb-6">{error}</p>
-          <button
-            onclick={resetForm}
-            class="submit-button"
-            style="width: 100%;"
-          >
-            Back to form
-          </button>
-        </div>
-
       {:else}
         <!-- 入力フォーム -->
         <div class="logo-section">
@@ -288,6 +307,12 @@
         </div>
 
         <form onsubmit={(e) => { e.preventDefault(); handleSubmit(); }} class="form-section">
+          {#if error}
+            <div class="inline-error">
+              {error}
+            </div>
+          {/if}
+
           <!-- 識別子 -->
           <label>
             <span class="label-text">Identifier *</span>
@@ -430,6 +455,19 @@
               />
             </label>
           {/if}
+
+          <div>
+            <span class="label-text">Security code *</span>
+            <div class="altcha-wrap" class:input-error={errors.captcha}>
+              <altcha-widget
+                bind:this={altchaWidget}
+                challengeurl="/api/tenants/captcha"
+                auto="off"
+                hidefooter
+              ></altcha-widget>
+            </div>
+            <p class="input-helper">Complete verification before creating workspace.</p>
+          </div>
 
           <!-- ボタン -->
           <div class="button-group">
@@ -640,6 +678,25 @@
     display: flex;
     gap: 16px;
     margin-top: 32px;
+  }
+
+  .inline-error {
+    border: 1px solid var(--color-error);
+    background-color: var(--color-error-light);
+    color: var(--color-error);
+    border-radius: var(--border-radius-lg);
+    padding: 10px 12px;
+    font-size: var(--font-size-sm);
+  }
+
+  .altcha-wrap {
+    display: inline-block;
+    border-radius: var(--border-radius-lg);
+  }
+
+  .altcha-wrap.input-error {
+    outline: 1px solid var(--color-error);
+    outline-offset: 4px;
   }
 
   .cancel-button,

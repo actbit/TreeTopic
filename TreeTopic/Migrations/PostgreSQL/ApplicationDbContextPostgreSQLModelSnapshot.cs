@@ -495,7 +495,7 @@ namespace TreeTopic.Migrations.PostgreSQL
 
                     b.HasIndex("RoomUserId");
 
-                    b.HasIndex("TopicId");
+                    b.HasIndex("TopicId", "CreatedAt", "Id");
 
                     b.ToTable("Messages");
 

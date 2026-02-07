@@ -29,6 +29,7 @@ public interface ITopicPermissionsService
         Guid topicId,
         Guid roomUserId,
         string permissionName,
+        bool applyToDescendants = false,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -38,6 +39,7 @@ public interface ITopicPermissionsService
         Guid topicId,
         Guid roomUserId,
         string permissionName,
+        bool applyToDescendants = false,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -62,6 +64,7 @@ public interface ITopicPermissionsService
         Guid topicId,
         string roleName,
         string permissionName,
+        bool applyToDescendants = false,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -71,6 +74,7 @@ public interface ITopicPermissionsService
         Guid topicId,
         string roleName,
         string permissionName,
+        bool applyToDescendants = false,
         CancellationToken cancellationToken = default);
 
     /// <summary>

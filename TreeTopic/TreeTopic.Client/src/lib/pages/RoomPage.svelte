@@ -40,9 +40,6 @@
   import ViewModeSelector from '$lib/components/messages/ViewModeSelector.svelte';
   import ShareList from '$lib/components/shares/ShareList.svelte';
   import FileUploadModal from '$lib/components/files/FileUploadModal.svelte';
-  import PdfViewerModal from '$lib/components/documents/PdfViewerModal.svelte';
-  import PdfEditorModal from '$lib/components/documents/PdfEditorModal.svelte';
-  import ImageEditorModal from '$lib/components/images/ImageEditorModal.svelte';
   import UserSettingModal from '$lib/components/user/UserSettingModal.svelte';
   import { ui } from '$lib/stores/ui';
   import { api, getApiBaseUrl, getCurrentTenant } from '$lib/api/client';
@@ -79,6 +76,7 @@
   let treeRenderTimeout: ReturnType<typeof setTimeout> | null = null;
   let hasScrolledToMessages = $state(false);
   let scrollTimeout: ReturnType<typeof setTimeout> | null = null;
+  let messageScrollListenerCleanup: (() => void) | null = null;
   let messageHub: HubConnection | null = null;
   let messageHubTenant: string | null = null;
   let messageHubTopicId: string | null = null;
@@ -100,6 +98,23 @@
 
   // Topic fetch deduplication map
   const pendingTopicFetches = new Map<string, Promise<any>>();
+  type PendingTopicPathLoad = { topicId: string; roomId: string; expandAncestors: boolean };
+  type PendingHasChildrenRefresh = { topicId: string; roomId: string };
+  const pendingTopicPathLoads = new Map<string, PendingTopicPathLoad>();
+  const pendingHasChildrenRefreshes = new Map<string, PendingHasChildrenRefresh>();
+  const TOPIC_EVENT_BATCH_DELAY_MS = 150;
+  const TOPIC_FALLBACK_SYNC_MIN_INTERVAL_MS = 5000;
+  let topicEventBatchTimer: ReturnType<typeof setTimeout> | null = null;
+  let isTopicEventBatchRunning = false;
+  const lastTopicFallbackSyncAtByRoom = new Map<string, number>();
+
+  // Lazy-loaded heavy modal components (PDF/Image editors)
+  let PdfViewerModalComponent = $state<any | null>(null);
+  let PdfEditorModalComponent = $state<any | null>(null);
+  let ImageEditorModalComponent = $state<any | null>(null);
+  let isLoadingPdfViewerModal = false;
+  let isLoadingPdfEditorModal = false;
+  let isLoadingImageEditorModal = false;
 
   let urlTopicId = $derived.by(() => ($page.params as any)?.topicId ?? null);
   let legacyQueryTopicId = $derived.by(() => $page.url.searchParams.get('topicId'));
@@ -121,6 +136,149 @@
     const normalizedBaseUrl = baseUrl?.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
     return normalizedBaseUrl ? `${normalizedBaseUrl}/${tenant}/hubs/roomusersync` : `/${tenant}/hubs/roomusersync`;
   }
+
+  function scheduleTopicEventBatch() {
+    if (topicEventBatchTimer || isTopicEventBatchRunning) return;
+    topicEventBatchTimer = setTimeout(() => {
+      topicEventBatchTimer = null;
+      void flushTopicEventBatch();
+    }, TOPIC_EVENT_BATCH_DELAY_MS);
+  }
+
+  function queueTopicPathLoad(topicId: string, roomId: string, expandAncestors = false) {
+    if (!topicId || !roomId) return;
+    const key = `${roomId}:${topicId}`;
+    const existing = pendingTopicPathLoads.get(key);
+    pendingTopicPathLoads.set(key, {
+      topicId,
+      roomId,
+      expandAncestors: (existing?.expandAncestors ?? false) || expandAncestors,
+    });
+    scheduleTopicEventBatch();
+  }
+
+  function queueHasChildrenRefresh(topicId: string | null, roomId: string | null) {
+    if (!topicId || !roomId) return;
+    const key = `${roomId}:${topicId}`;
+    pendingHasChildrenRefreshes.set(key, { topicId, roomId });
+    scheduleTopicEventBatch();
+  }
+
+  async function flushTopicEventBatch() {
+    if (isTopicEventBatchRunning) {
+      scheduleTopicEventBatch();
+      return;
+    }
+
+    const tenant = messageHubTenant ?? $page.params.tenant ?? getCurrentTenant();
+    if (!tenant) {
+      return;
+    }
+    const activeRoomId = $currentRoom?.id ?? null;
+    if (!activeRoomId) {
+      return;
+    }
+
+    isTopicEventBatchRunning = true;
+    const queuedPathRequests = Array.from(pendingTopicPathLoads.values());
+    const queuedHasChildrenRequests = Array.from(pendingHasChildrenRefreshes.values());
+    pendingTopicPathLoads.clear();
+    pendingHasChildrenRefreshes.clear();
+
+    const pathLoadRequests = queuedPathRequests.filter((request) => request.roomId === activeRoomId);
+    const hasChildrenRequests = queuedHasChildrenRequests.filter((request) => request.roomId === activeRoomId);
+
+    let failedPathTopicIds: string[] = [];
+
+    try {
+      if (pathLoadRequests.length > 0) {
+        const loadResults = await Promise.all(
+          pathLoadRequests.map(async ({ topicId, expandAncestors }) => {
+            try {
+              const loaded = await ensureTopicPathLoaded(tenant, topicId, { expandAncestors });
+              return { topicId, loaded: loaded !== null };
+            } catch (err) {
+              console.error('Failed to load topic path in batch:', { topicId, err });
+              return { topicId, loaded: false };
+            }
+          })
+        );
+        failedPathTopicIds = loadResults
+          .filter((result) => !result.loaded)
+          .map((result) => result.topicId);
+      }
+
+      if (failedPathTopicIds.length > 0 && $currentRoom) {
+        const now = Date.now();
+        const includesActiveTopic = failedPathTopicIds.some((id) => id === loadedTopicId || id === urlTopicId);
+        const includesExpandedTopic = failedPathTopicIds.some((id) => $expandedTopics.has(id));
+        const shouldFallbackSync = includesActiveTopic || includesExpandedTopic;
+        const lastSyncedAt = lastTopicFallbackSyncAtByRoom.get(activeRoomId) ?? 0;
+        const cooldownElapsed = now - lastSyncedAt >= TOPIC_FALLBACK_SYNC_MIN_INTERVAL_MS;
+        if (shouldFallbackSync && cooldownElapsed) {
+          lastTopicFallbackSyncAtByRoom.set(activeRoomId, now);
+          await loadDescendantsForExpandedTopics(tenant);
+        }
+      }
+
+      if (hasChildrenRequests.length > 0) {
+        const uniqueHasChildrenIds = Array.from(new Set(hasChildrenRequests.map((request) => request.topicId)));
+        await Promise.allSettled(
+          uniqueHasChildrenIds.map((topicId) => refreshTopicHasChildren(topicId, tenant))
+        );
+      }
+    } finally {
+      isTopicEventBatchRunning = false;
+      if (pendingTopicPathLoads.size > 0 || pendingHasChildrenRefreshes.size > 0) {
+        scheduleTopicEventBatch();
+      }
+    }
+  }
+
+  $effect(() => {
+    const activeRoomId = $currentRoom?.id ?? null;
+    if (!activeRoomId) return;
+    if (pendingTopicPathLoads.size === 0 && pendingHasChildrenRefreshes.size === 0) return;
+    scheduleTopicEventBatch();
+  });
+
+  async function ensureLazyModalsLoaded(modalIds: Set<string>) {
+    if (modalIds.has('pdf-viewer') && !PdfViewerModalComponent && !isLoadingPdfViewerModal) {
+      isLoadingPdfViewerModal = true;
+      try {
+        const mod = await import('$lib/components/documents/PdfViewerModal.svelte');
+        PdfViewerModalComponent = mod.default;
+      } finally {
+        isLoadingPdfViewerModal = false;
+      }
+    }
+
+    if (modalIds.has('pdf-editor') && !PdfEditorModalComponent && !isLoadingPdfEditorModal) {
+      isLoadingPdfEditorModal = true;
+      try {
+        const mod = await import('$lib/components/documents/PdfEditorModal.svelte');
+        PdfEditorModalComponent = mod.default;
+      } finally {
+        isLoadingPdfEditorModal = false;
+      }
+    }
+
+    if (modalIds.has('image-editor') && !ImageEditorModalComponent && !isLoadingImageEditorModal) {
+      isLoadingImageEditorModal = true;
+      try {
+        const mod = await import('$lib/components/images/ImageEditorModal.svelte');
+        ImageEditorModalComponent = mod.default;
+      } finally {
+        isLoadingImageEditorModal = false;
+      }
+    }
+  }
+
+  $effect(() => {
+    const activeModalIds = new Set(($ui.activeModals ?? []).map((modal) => modal.id));
+    if (activeModalIds.size === 0) return;
+    void ensureLazyModalsLoaded(activeModalIds);
+  });
 
   async function startMessageHub(tenant: string) {
     if (messageHub && messageHubTenant === tenant) return;
@@ -244,86 +402,79 @@
       deleteRoom(roomId);
     });
 
-    connection.on('TopicCreated', async (raw: TopicCreatedEvent) => {
+    connection.on('TopicCreated', (raw: TopicCreatedEvent) => {
       const normalized = normalizeTopic(raw);
       if (!$currentRoom || normalized.roomId !== $currentRoom.id) return;
-      const tenantForEvent = messageHubTenant ?? $page.params.tenant ?? getCurrentTenant();
 
-      if (tenantForEvent) {
-        try {
-          await ensureTopicPathLoaded(tenantForEvent, normalized.id);
-        } catch (err) {
-          console.error('Failed to ensure topic path on TopicCreated:', err);
-        }
-      }
-
-      const topicFromStore = $topicList.find((t) => t.id === normalized.id) ?? normalized;
-      const exists = $topicList.some((t) => t.id === topicFromStore.id);
+      const existing = $topicList.find((t) => t.id === normalized.id);
+      const exists = !!existing;
       if (exists) {
-        updateTopic(topicFromStore.id, topicFromStore);
+        // TopicRealtimeDto is partial for per-user fields; keep local unread/permission state.
+        updateTopic(normalized.id, {
+          parentId: normalized.parentId,
+          roomId: normalized.roomId,
+          title: normalized.title,
+          description: normalized.description,
+          sourceMessageId: normalized.sourceMessageId ?? null,
+          messageCount: normalized.messageCount,
+          hasChildren: normalized.hasChildren,
+          createdAt: normalized.createdAt,
+          updatedAt: normalized.updatedAt,
+        });
       } else {
-        addTopic(topicFromStore);
+        addTopic(normalized);
       }
 
-      const parentId = topicFromStore.parentId ?? null;
+      const parentId = normalized.parentId ?? null;
       if (parentId) {
+        // Optimistic UI update first; authoritative value is refreshed in batch.
         updateTopic(parentId, { hasChildren: true });
-        if (!$expandedTopics.has(parentId)) {
-          toggleTopicExpansion(parentId);
-        }
-        if (tenantForEvent) {
-          void refreshTopicHasChildren(parentId, tenantForEvent);
-        }
+        queueHasChildrenRefresh(parentId, normalized.roomId);
       }
+
+      // Remote events should not force UI expansion.
+      queueTopicPathLoad(normalized.id, normalized.roomId, false);
     });
 
-    connection.on('TopicUpdated', async (raw: TopicUpdatedEvent) => {
+    connection.on('TopicUpdated', (raw: TopicUpdatedEvent) => {
       const normalized = normalizeTopic(raw);
-      const tenantForEvent = messageHubTenant ?? $page.params.tenant ?? getCurrentTenant();
       if (!$currentRoom || normalized.roomId !== $currentRoom.id) {
         const existing = $topicList.find((t) => t.id === normalized.id);
         if (existing) deleteTopic(normalized.id);
         return;
       }
 
-      let existing = $topicList.find((t) => t.id === normalized.id);
-      if (!existing) {
-        if (tenantForEvent) {
-          try {
-            await ensureTopicPathLoaded(tenantForEvent, normalized.id);
-          } catch (err) {
-            console.error('Failed to ensure topic path on TopicUpdated:', err);
-          }
-        }
-        existing = $topicList.find((t) => t.id === normalized.id);
-      }
-
+      const existing = $topicList.find((t) => t.id === normalized.id);
       if (!existing) {
         addTopic(normalized);
-        return;
+        queueTopicPathLoad(normalized.id, normalized.roomId, false);
       }
 
       const normalizedParentId = normalized.parentId ?? null;
-      const previousParentId = existing.parentId ?? null;
+      const previousParentId = existing?.parentId ?? null;
       if (previousParentId !== normalizedParentId) {
+        const previousParentHadChildren = previousParentId
+          ? ($topicList.find((t) => t.id === previousParentId)?.hasChildren ?? false)
+          : false;
         moveTopicParent(normalized.id, normalizedParentId);
 
-        if (tenantForEvent) {
-          if (previousParentId) {
-            void refreshTopicHasChildren(previousParentId, tenantForEvent);
-          }
-          if (normalizedParentId) {
-            void refreshTopicHasChildren(normalizedParentId, tenantForEvent);
-          }
-        } else if (normalizedParentId) {
+        // Avoid false flicker until authoritative refresh finishes.
+        if (previousParentId && previousParentHadChildren) {
+          updateTopic(previousParentId, { hasChildren: true });
+        }
+        if (normalizedParentId) {
+          // Optimistic update: moved-in parent gets children immediately.
           updateTopic(normalizedParentId, { hasChildren: true });
         }
+        queueHasChildrenRefresh(previousParentId, normalized.roomId);
+        queueHasChildrenRefresh(normalizedParentId, normalized.roomId);
       }
 
-      // 未読数が0で既存の未読数がある場合は、既存の未読数を保持（バックエンドから未読数が送られない場合がある）
-      const unreadCount = (normalized.unreadCount === 0 && existing.unreadCount > 0)
-        ? existing.unreadCount
-        : normalized.unreadCount;
+      // unreadCount フィールドがイベントに含まれない場合のみ既存値を保持する。
+      // RoomTopicHub payload is room-scoped and may not carry accurate per-user unread.
+      const unreadCount = existing?.unreadCount ?? normalized.unreadCount;
+      const userPermission = (raw?.userPermission ?? raw?.UserPermission) as PermissionLevel | undefined;
+      const permissions = (raw?.permissions ?? raw?.Permissions) as string[] | undefined;
 
       updateTopic(normalized.id, {
         parentId: normalized.parentId,
@@ -333,31 +484,33 @@
         creatorId: normalized.creatorId,
         messageCount: normalized.messageCount,
         unreadCount,
-        userPermission: normalized.userPermission,
-        permissions: normalized.permissions,
+        userPermission,
+        permissions,
         hasChildren: normalized.hasChildren,
         createdAt: normalized.createdAt,
         updatedAt: normalized.updatedAt,
       });
+
+      queueTopicPathLoad(normalized.id, normalized.roomId, false);
     });
 
-    connection.on('TopicDeleted', async (raw: TopicDeletedEvent) => {
+    connection.on('TopicDeleted', (raw: TopicDeletedEvent) => {
       const topicId = raw?.topicId ?? raw?.TopicId ?? '';
       const roomId = raw?.roomId ?? raw?.RoomId ?? '';
       const parentId = raw?.parentId ?? raw?.ParentId ?? null;
-      const tenantForEvent = messageHubTenant ?? $page.params.tenant ?? getCurrentTenant();
       if (!topicId) return;
       if ($currentRoom && roomId && roomId !== $currentRoom.id) return;
 
       deleteTopic(topicId);
 
       if (parentId) {
-        if (tenantForEvent) {
-          void refreshTopicHasChildren(parentId, tenantForEvent);
-        } else {
-          const hasOtherChildren = $topicList.some((t) => t.parentId === parentId);
-          updateTopic(parentId, { hasChildren: hasOtherChildren });
+        const knownChildrenRemain = $topicList.some((t) => t.parentId === parentId);
+        // Only apply optimistic true; avoid false flicker before server reconciliation.
+        if (knownChildrenRemain) {
+          updateTopic(parentId, { hasChildren: true });
         }
+        const eventRoomId = roomId || $currentRoom?.id || '';
+        queueHasChildrenRefresh(parentId, eventRoomId);
       }
     });
 
@@ -546,6 +699,8 @@
       isArchived: raw?.isArchived ?? raw?.IsArchived ?? false,
       canEdit: (raw?.canEdit ?? raw?.CanEdit ?? undefined) as boolean | undefined,
       canDelete: (raw?.canDelete ?? raw?.CanDelete ?? undefined) as boolean | undefined,
+      canJoin: (raw?.canJoin ?? raw?.CanJoin ?? true) as boolean,
+      isJoined: (raw?.isJoined ?? raw?.IsJoined ?? false) as boolean,
       settings: raw?.settings ?? raw?.Settings,
     };
   }
@@ -579,12 +734,6 @@
    * Prevents duplicate fetches of the same topic
    */
   async function fetchTopicOnce(tenant: string, topicId: string): Promise<Topic | null> {
-    // Check if there's already a pending fetch for this topic
-    if (pendingTopicFetches.has(topicId)) {
-      return pendingTopicFetches.get(topicId);
-    }
-
-    // Check API cache first
     const cacheKey = `topic:${tenant}:${topicId}`;
     const cached = pendingTopicFetches.get(cacheKey);
     if (cached) return cached;
@@ -605,7 +754,11 @@
     return promise;
   }
 
-  async function ensureTopicPathLoaded(tenant: string, topicId: string) {
+  async function ensureTopicPathLoaded(
+    tenant: string,
+    topicId: string,
+    options?: { expandAncestors?: boolean }
+  ) {
     const chain: Topic[] = [];
     let cursorId: string | null = topicId;
     const visited = new Set<string>();
@@ -644,10 +797,12 @@
       }
     }
 
-    // Expand ancestors (not the leaf) so the selected topic is visible.
-    for (let i = 0; i < chain.length - 1; i++) {
-      const id = chain[i].id;
-      if (!$expandedTopics.has(id)) toggleTopicExpansion(id);
+    const shouldExpandAncestors = options?.expandAncestors ?? true;
+    if (shouldExpandAncestors) {
+      for (let i = 0; i < chain.length - 1; i++) {
+        const id = chain[i].id;
+        if (!$expandedTopics.has(id)) toggleTopicExpansion(id);
+      }
     }
 
     return chain[chain.length - 1] ?? null;
@@ -697,19 +852,21 @@
 
     const existing = $topicList.find((t) => t.id === urlTopicId) ?? null;
     if (existing) {
-      if (existing.roomId === room.id) setSelectedTopic(existing);
-      // トピックを選択したときに既読にする
-      if (!document.hidden) {
-        console.log('Topic selected from URL, marking as read:', existing.id);
-        setTimeout(() => {
-          void markTopicAsRead(existing.id).then(unreadCount => {
-            if (unreadCount !== null) {
-              updateTopic(existing.id, { unreadCount });
-            }
-          });
-        }, 100);
+      if (existing.roomId === room.id) {
+        setSelectedTopic(existing);
+        // トピックを選択したときに既読にする
+        if (!document.hidden) {
+          console.log('Topic selected from URL, marking as read:', existing.id);
+          setTimeout(() => {
+            void markTopicAsRead(existing.id).then(unreadCount => {
+              if (unreadCount !== null) {
+                updateTopic(existing.id, { unreadCount });
+              }
+            });
+          }, 100);
+        }
+        return existing;
       }
-      return existing;
     }
 
     try {
@@ -870,15 +1027,18 @@
 
   // メッセージ表示領域のスクロールイベントを監視
   function setupMessageScrollListener() {
+    if (messageScrollListenerCleanup) {
+      messageScrollListenerCleanup();
+      messageScrollListenerCleanup = null;
+    }
+
     const messageContainer = document.querySelector('.room-messages-container');
     if (!messageContainer) return;
 
-    messageContainer.addEventListener('scroll', () => {
+    const handleScroll = () => {
       if (scrollTimeout) clearTimeout(scrollTimeout);
 
       const scrollTop = messageContainer.scrollTop;
-      const scrollHeight = messageContainer.scrollHeight;
-      const clientHeight = messageContainer.clientHeight;
 
       // ユーザーがメッセージを表示していることを検出（スクロールが発生した場合）
       if (scrollTop > 0) {
@@ -889,7 +1049,16 @@
           }
         }, 1000); // スクロール停止後1秒で未読更新
       }
-    }, { passive: true });
+    };
+
+    messageContainer.addEventListener('scroll', handleScroll, { passive: true });
+    messageScrollListenerCleanup = () => {
+      messageContainer.removeEventListener('scroll', handleScroll);
+      if (scrollTimeout) {
+        clearTimeout(scrollTimeout);
+        scrollTimeout = null;
+      }
+    };
 
     // スクロールバーが出ていない場合（コンテンツが画面に収まっている場合）、即座に既読にする
     requestAnimationFrame(() => {
@@ -918,40 +1087,40 @@
     let cleanupPromise: Promise<number | null> | undefined;
 
     cleanupPromise = (async () => {
-      try {
-        console.log(`Marking topic ${topicId} as read (attempt ${retryCount + 1})`);
-        const response = await api.post<number>(`/${tenant}/api/message/topic/${topicId}/markAsRead`);
-        const unreadCount = typeof response === 'number' ? response : 0;
-        console.log(`Mark topic ${topicId} as read, unread count: ${unreadCount}`);
-        return unreadCount;
-      } catch (err: unknown) {
-        const error = err as Error & { status?: number };
-        console.error('Failed to mark topic as read:', error);
-        console.error('Topic ID:', topicId);
-        console.error('User ID:', $auth?.user?.id);
+      let attempt = retryCount;
+      while (attempt <= 3) {
+        try {
+          console.log(`Marking topic ${topicId} as read (attempt ${attempt + 1})`);
+          const response = await api.post<number>(`/${tenant}/api/message/topic/${topicId}/markAsRead`);
+          const unreadCount = typeof response === 'number' ? response : 0;
+          console.log(`Mark topic ${topicId} as read, unread count: ${unreadCount}`);
+          return unreadCount;
+        } catch (err: unknown) {
+          const error = err as Error & { status?: number };
+          console.error('Failed to mark topic as read:', error);
+          console.error('Topic ID:', topicId);
+          console.error('User ID:', $auth?.user?.id);
 
-        // リトライロジック（最大3回）
-        if (retryCount < 3 && error.status && error.status >= 500) {
-          console.log(`Retrying markAsRead for topic ${topicId} (attempt ${retryCount + 1})`);
-          await new Promise(resolve => setTimeout(resolve, 1000 * (retryCount + 1)));
-          // Retry by calling the function again (will reuse same promise due to pending check)
-          return await markTopicAsRead(topicId, retryCount + 1);
-        }
+          const canRetry = attempt < 3 && !!error.status && error.status >= 500;
+          if (!canRetry) {
+            if (error.status && error.status >= 400 && error.status < 500) {
+              alert('未読の更新に失敗しました。ページを再読み込みしてください。');
+            }
+            return null;
+          }
 
-        // ユーザーにエラーを通知
-        if (error.status && error.status >= 400 && error.status < 500) {
-          // クライアントエラーはユーザーに通知
-          alert('未読の更新に失敗しました。ページを再読み込みしてください。');
-        }
-
-        return null;
-      } finally {
-        // Clean up pending map when done
-        if (pendingMarkAsRead.get(topicId) === cleanupPromise) {
-          pendingMarkAsRead.delete(topicId);
+          attempt += 1;
+          console.log(`Retrying markAsRead for topic ${topicId} (attempt ${attempt})`);
+          await new Promise((resolve) => setTimeout(resolve, 1000 * attempt));
         }
       }
-    })();
+      return null;
+    })().finally(() => {
+      // Clean up pending map when done
+      if (pendingMarkAsRead.get(topicId) === cleanupPromise) {
+        pendingMarkAsRead.delete(topicId);
+      }
+    });
 
     requestPromise = cleanupPromise;
     pendingMarkAsRead.set(topicId, requestPromise);
@@ -1200,7 +1369,7 @@
       if (
         resolvedTenant &&
         error instanceof api.ApiError &&
-        (error.status === 401 || error.status === 403)
+        error.status === 401
       ) {
         isLoading = false;
         await auth.logout(resolvedTenant);
@@ -1284,6 +1453,17 @@
       }
     });
     return () => {
+      if (topicEventBatchTimer) {
+        clearTimeout(topicEventBatchTimer);
+        topicEventBatchTimer = null;
+      }
+      if (messageScrollListenerCleanup) {
+        messageScrollListenerCleanup();
+        messageScrollListenerCleanup = null;
+      }
+      pendingTopicPathLoads.clear();
+      pendingHasChildrenRefreshes.clear();
+      lastTopicFallbackSyncAtByRoom.clear();
       void stopMessageHub();
       void stopRoomTopicHub();
       void stopRoomUserSyncHub();
@@ -1554,9 +1734,15 @@
   <TopicEditModal />
   <TopicDeleteModal />
   <FileUploadModal />
-  <PdfViewerModal />
-  <PdfEditorModal />
-  <ImageEditorModal />
+  {#if PdfViewerModalComponent}
+    <PdfViewerModalComponent />
+  {/if}
+  {#if PdfEditorModalComponent}
+    <PdfEditorModalComponent />
+  {/if}
+  {#if ImageEditorModalComponent}
+    <ImageEditorModalComponent />
+  {/if}
   <MessageEditModal />
   <MessageDeleteModal />
   <UserSettingModal roomId={$currentRoom?.id?.toString() ?? ''} />

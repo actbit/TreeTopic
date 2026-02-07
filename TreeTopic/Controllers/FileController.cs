@@ -279,7 +279,18 @@ public class FileController : ControllerBase
     {
         var tenant = RouteData.Values["tenant"]?.ToString() ?? "default";
         var webRoot = _environment.ContentRootPath;
-        var filePath = Path.Combine(webRoot, "uploads", tenant, roomId.ToString(), fileName);
+        var roomRoot = Path.GetFullPath(Path.Combine(webRoot, "uploads", tenant, roomId.ToString()));
+        var safeFileName = Path.GetFileName(fileName);
+        if (!string.Equals(fileName, safeFileName, StringComparison.Ordinal))
+        {
+            return BadRequest(new { message = "Invalid file name." });
+        }
+
+        var filePath = Path.GetFullPath(Path.Combine(roomRoot, safeFileName));
+        if (!filePath.StartsWith(roomRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+        {
+            return BadRequest(new { message = "Invalid file path." });
+        }
 
         if (!System.IO.File.Exists(filePath))
         {
@@ -288,7 +299,7 @@ public class FileController : ControllerBase
 
         // Content-Type を決定
         string contentType;
-        if (_contentTypeProvider.TryGetContentType(fileName, out var providerContentType))
+        if (_contentTypeProvider.TryGetContentType(safeFileName, out var providerContentType))
         {
             contentType = providerContentType;
         }

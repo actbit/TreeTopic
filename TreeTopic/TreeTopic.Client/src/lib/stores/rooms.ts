@@ -39,6 +39,8 @@ export interface Room {
   };
   canEdit?: boolean;
   canDelete?: boolean;
+  canJoin?: boolean;
+  isJoined?: boolean;
 }
 
 /**

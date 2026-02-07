@@ -35,6 +35,10 @@ export interface RawRoom {
   CanEdit?: boolean;
   canDelete?: boolean;
   CanDelete?: boolean;
+  canJoin?: boolean;
+  CanJoin?: boolean;
+  isJoined?: boolean;
+  IsJoined?: boolean;
   settings?: Record<string, unknown>;
   Settings?: Record<string, unknown>;
   [key: string]: unknown;

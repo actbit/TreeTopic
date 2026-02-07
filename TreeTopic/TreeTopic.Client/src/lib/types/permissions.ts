@@ -79,6 +79,7 @@ export interface TopicRolePermissionDto {
 export interface AddTopicPermissionToUserRequest {
   roomUserId: string;
   permissionName: string;
+  applyToDescendants?: boolean;
 }
 
 /**
@@ -87,6 +88,7 @@ export interface AddTopicPermissionToUserRequest {
 export interface AddTopicRolePermissionRequest {
   roleName: string;
   permissionName: string;
+  applyToDescendants?: boolean;
 }
 
 /**

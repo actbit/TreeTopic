@@ -117,7 +117,7 @@
   async function handleUnauthorizedError(error: unknown, tenant: string): Promise<boolean> {
     if (
       error instanceof api.ApiError &&
-      (error.status === 401 || error.status === 403)
+      error.status === 401
     ) {
       await auth.logout(tenant);
       redirectToTenantLogin(tenant);

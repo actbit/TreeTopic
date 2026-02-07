@@ -5,7 +5,10 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.IdentityModel.Protocols;
 using Microsoft.IdentityModel.Protocols.OpenIdConnect;
+using Ixnas.AltchaNet;
 using System.Security.Claims;
+using System.Security.Cryptography;
+using System.Text;
 using TreeTopic.Models;
 using Microsoft.EntityFrameworkCore;
 using TreeTopic.Extensions;
@@ -283,6 +286,14 @@ public class Program
                 "The encryption key must be at least 32 characters long for AES-256 encryption.");
         }
 
+        var altchaKey = SHA512.HashData(Encoding.UTF8.GetBytes($"{masterEncryptionKey}:tenant-registration-altcha"));
+        var altchaService = Altcha.CreateServiceBuilder()
+            .UseSha256(altchaKey)
+            .UseInMemoryStore()
+            .SetExpiryInSeconds(180)
+            .Build();
+        builder.Services.AddSingleton(altchaService);
+
         var masterEncryptionForOidc = new EncryptionService(
             masterEncryptionKey,
             Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance);
@@ -475,6 +486,7 @@ public class Program
         builder.Services.AddScoped<IBrainstormManagementService, BrainstormManagementService>();
 
         builder.Services.AddSingleton<PermissionScanService>();
+        builder.Services.AddSingleton<PermissionCatalogService>();
 
         builder.Services.AddHttpClient();
 

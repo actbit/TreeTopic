@@ -46,10 +46,22 @@ public class RoomController : ControllerBase
     }
 
     [HttpGet]
-    [RequireAny(RoomPermissions.Read, TenantPermissions.RoomRead)]
     public async Task<IActionResult> GetAll(CancellationToken cancellationToken)
     {
-        var result = await _roomManagementService.GetAllRoomsAsync(cancellationToken);
+        var appUser = await _userManager.FindByIdAsync(CurrentUserId.ToString());
+        if (appUser == null)
+            return Unauthorized();
+
+        var identityRoles = await _userManager.GetRolesAsync(appUser);
+        var claimRoles = User.FindAll(ClaimTypes.Role).Select(c => c.Value);
+        var roleNames = new HashSet<string>(identityRoles, StringComparer.OrdinalIgnoreCase);
+        foreach (var claimRole in claimRoles)
+        {
+            if (!string.IsNullOrWhiteSpace(claimRole))
+                roleNames.Add(claimRole);
+        }
+
+        var result = await _roomManagementService.GetAllRoomsAsync(CurrentUserId, roleNames.ToList(), cancellationToken);
         return result.ToApiResult();
     }
 

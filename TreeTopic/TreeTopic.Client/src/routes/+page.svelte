@@ -15,6 +15,7 @@
     if (url.searchParams.has('room')) {
       url.searchParams.delete('room');
       await goto(url, { replaceState: true, keepFocus: true, noScroll: true });
+      return;
     }
     try {
       console.log('Loading tenants...');

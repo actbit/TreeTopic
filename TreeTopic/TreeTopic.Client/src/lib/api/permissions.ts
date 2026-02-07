@@ -158,10 +158,11 @@ export const topicPermissionsApi = {
     tenant: string,
     topicId: string,
     roomUserId: string,
-    permissionName: string
+    permissionName: string,
+    applyToDescendants = false
   ) =>
     api.delete(
-      `/${tenant}/api/topics/${topicId}/permissions/users/${roomUserId}/${encodeURIComponent(permissionName)}`
+      `/${tenant}/api/topics/${topicId}/permissions/users/${roomUserId}/${encodeURIComponent(permissionName)}?applyToDescendants=${applyToDescendants}`
     ),
 
   /**
@@ -198,10 +199,11 @@ export const topicPermissionsApi = {
     tenant: string,
     topicId: string,
     roleName: string,
-    permissionName: string
+    permissionName: string,
+    applyToDescendants = false
   ) =>
     api.delete(
-      `/${tenant}/api/topics/${topicId}/permissions/role-permissions/${roleName}/${encodeURIComponent(permissionName)}`
+      `/${tenant}/api/topics/${topicId}/permissions/role-permissions/${roleName}/${encodeURIComponent(permissionName)}?applyToDescendants=${applyToDescendants}`
     ),
 
   /**

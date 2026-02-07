@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { goto } from '$app/navigation';
   import Modal from '../common/Modal.svelte';
   import { api } from '$lib/api/client';
   import { ui, activeModals } from '$lib/stores/ui';
@@ -206,9 +207,9 @@
     }
   }
 
-  function continueToLogin() {
+  async function continueToLogin() {
     ui.closeModal(modalId);
-    window.location.href = `/${identifier}/login`;
+    await goto(`/${identifier}/login`);
   }
 </script>
 

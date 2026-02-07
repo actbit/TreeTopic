@@ -290,12 +290,42 @@ function createTopicsStore() {
      * Delete topic
      */
     deleteTopic: (topicId: string) => {
-      update((state) => ({
-        ...state,
-        topics: state.topics.filter((t) => t.id !== topicId),
-        selectedTopic:
-          state.selectedTopic?.id === topicId ? null : state.selectedTopic,
-      }));
+      update((state) => {
+        const childIdsByParent = new Map<string, string[]>();
+        state.topics.forEach((topic) => {
+          if (!topic.parentId) return;
+          const siblings = childIdsByParent.get(topic.parentId) ?? [];
+          siblings.push(topic.id);
+          childIdsByParent.set(topic.parentId, siblings);
+        });
+
+        const deletedIds = new Set<string>();
+        const stack = [topicId];
+        while (stack.length > 0) {
+          const currentId = stack.pop();
+          if (!currentId || deletedIds.has(currentId)) continue;
+          deletedIds.add(currentId);
+          const children = childIdsByParent.get(currentId) ?? [];
+          children.forEach((childId) => stack.push(childId));
+        }
+
+        const topics = state.topics.filter((t) => !deletedIds.has(t.id));
+        const expandedTopics = new Set(
+          Array.from(state.expandedTopics).filter((id) => !deletedIds.has(id))
+        );
+        localStorage.setItem('expanded_topics', JSON.stringify([...expandedTopics]));
+
+        const selectedTopic =
+          state.selectedTopic && deletedIds.has(state.selectedTopic.id) ? null : state.selectedTopic;
+
+        return {
+          ...state,
+          topics,
+          expandedTopics,
+          selectedTopic,
+          selectedTopicId: selectedTopic?.id ?? null,
+        };
+      });
     },
     /**
      * Toggle topic expansion
@@ -442,8 +472,8 @@ export const getTopicById = (topicId: string) =>
 export const topicTree = derived([topicList, expandedTopics], ([$topics, $expandedTopics]) => {
   const buildTree = (): TopicTreeNode[] => {
     if (!$topics || $topics.length === 0) return [];
-    const topicMap = new Map($topics.map((t) => [t.id, t]));
     const roots: TopicTreeNode[] = [];
+    const globalProcessed = new Set<string>();
 
     const buildNode = (topic: Topic, level: number = 0, isProcessed: Set<string> = new Set()): TopicTreeNode | null => {
       if (isProcessed.has(topic.id)) {
@@ -482,13 +512,21 @@ export const topicTree = derived([topicList, expandedTopics], ([$topics, $expand
     };
 
     // Build tree starting from root topics (no parent)
-    const rootProcessed = new Set<string>();
     $topics.forEach((topic) => {
       if (!topic.parentId) {
-        const rootNode = buildNode(topic, 0, rootProcessed);
+        const rootNode = buildNode(topic, 0, globalProcessed);
         if (rootNode) {
           roots.push(rootNode);
         }
+      }
+    });
+
+    // Guard against hidden orphan topics when parent nodes are absent locally.
+    $topics.forEach((topic) => {
+      if (globalProcessed.has(topic.id)) return;
+      const orphanNode = buildNode(topic, 0, globalProcessed);
+      if (orphanNode) {
+        roots.push(orphanNode);
       }
     });
 
