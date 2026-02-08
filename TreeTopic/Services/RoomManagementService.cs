@@ -59,48 +59,23 @@ public class RoomManagementService : BaseService, IRoomManagementService
     {
         return await ExecuteAsync(async () =>
         {
-            var rooms = await _roomRepository.Query()
-                .ToListAsync(cancellationToken);
-
-            var roomIds = rooms.Select(r => r.Id).ToList();
-
-            var joinedRoomIds = await _roomRepository.Query()
-                .SelectMany(r => r.RoomUsers)
-                .Where(ru => ru.ApplicationUserId == userId && roomIds.Contains(ru.RoomId))
-                .Select(ru => ru.RoomId)
-                .Distinct()
-                .ToListAsync(cancellationToken);
-
-            var joinedRoomSet = joinedRoomIds.ToHashSet();
-
             var normalizedRoleNames = roleNames
                 .Where(r => !string.IsNullOrWhiteSpace(r))
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-            var roleIdList = await _dbContext.Roles
-                .AsNoTracking()
-                .Where(r => r.Name != null && normalizedRoleNames.Contains(r.Name))
-                .Select(r => r.Id)
+            // クエリ1: Roomsと参加情報をまとめて取得
+            var roomsWithJoinInfo = await _roomRepository.Query()
+                .GroupJoin(
+                    _dbContext.RoomUsers.Where(ru => ru.ApplicationUserId == userId),
+                    room => room.Id,
+                    ru => ru.RoomId,
+                    (room, roomUsers) => new { room, roomUsers })
+                .SelectMany(
+                    x => x.roomUsers.DefaultIfEmpty(),
+                    (x, ru) => new { x.room, IsJoined = ru != null })
                 .ToListAsync(cancellationToken);
 
-            var roleIdSet = roleIdList.ToHashSet();
-
-            var allowedByUserRoomIds = await _dbContext.RoomJoinUserPermissions
-                .AsNoTracking()
-                .Where(p => p.ApplicationUserId == userId && roomIds.Contains(p.RoomId))
-                .Select(p => p.RoomId)
-                .Distinct()
-                .ToListAsync(cancellationToken);
-
-            var allowedByRoleRoomIds = roleIdSet.Count == 0
-                ? new List<Guid>()
-                : await _dbContext.RoomJoinRolePermissions
-                    .AsNoTracking()
-                    .Where(p => roleIdSet.Contains(p.RoleId) && roomIds.Contains(p.RoomId))
-                    .Select(p => p.RoomId)
-                    .Distinct()
-                    .ToListAsync(cancellationToken);
-
+            // クエリ2: Role権限チェック（RoomRead/RoomManageを持っているか）
             var canManageRooms = await _dbContext.Permissions
                 .AsNoTracking()
                 .Include(p => p.Role)
@@ -112,22 +87,46 @@ public class RoomManagementService : BaseService, IRoomManagementService
                              || p.Name == Permissions.TenantPermissions.RoomRead),
                     cancellationToken);
 
-            var allowedByUserSet = allowedByUserRoomIds.ToHashSet();
-            var allowedByRoleSet = allowedByRoleRoomIds.ToHashSet();
+            // クエリ3: RoomJoinPermissionsをまとめて取得（ユーザー直接 + Role経由）
+            var roleIds = normalizedRoleNames.Count == 0
+                ? new List<Guid>()
+                : await _dbContext.Roles
+                    .AsNoTracking()
+                    .Where(r => r.Name != null && normalizedRoleNames.Contains(r.Name))
+                    .Select(r => r.Id)
+                    .ToListAsync(cancellationToken);
 
-            var dtos = rooms.Select(room =>
+            var allowedRoomIds = roleIds.Any()
+                ? await _dbContext.RoomJoinUserPermissions
+                    .AsNoTracking()
+                    .Where(p => p.ApplicationUserId == userId)
+                    .Select(p => p.RoomId)
+                    .Union(
+                        _dbContext.RoomJoinRolePermissions
+                            .AsNoTracking()
+                            .Where(p => roleIds.Contains(p.RoleId))
+                            .Select(p => p.RoomId)
+                    )
+                    .ToHashSetAsync(cancellationToken)
+                : await _dbContext.RoomJoinUserPermissions
+                    .AsNoTracking()
+                    .Where(p => p.ApplicationUserId == userId)
+                    .Select(p => p.RoomId)
+                    .ToHashSetAsync(cancellationToken);
+
+            // DTOに変換
+            var dtos = roomsWithJoinInfo.Select(x =>
             {
-                var isJoined = joinedRoomSet.Contains(room.Id);
                 var canJoin =
-                    isJoined ||
+                    x.IsJoined ||
                     canManageRooms ||
-                    room.CreatedUserId == userId ||
-                    room.JoinPolicy == RoomJoinPolicy.Public ||
-                    allowedByUserSet.Contains(room.Id) ||
-                    allowedByRoleSet.Contains(room.Id);
+                    x.room.CreatedUserId == userId ||
+                    x.room.JoinPolicy == RoomJoinPolicy.Public ||
+                    allowedRoomIds.Contains(x.room.Id);
 
-                return MapToDto(room, isJoined, canJoin);
+                return MapToDto(x.room, x.IsJoined, canJoin);
             }).ToList();
+
             return Result<List<RoomDto>>.Success(dtos);
         }, nameof(GetAllRoomsAsync));
     }
@@ -153,57 +152,71 @@ public class RoomManagementService : BaseService, IRoomManagementService
     {
         return await ExecuteAsync(async () =>
         {
-            var room = new Room
+            // トランザクションを開始してデータ整合性を確保
+            using var transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
+            try
             {
-                Name = request.Name,
-                Description = request.Description,
-                JoinPolicy = request.JoinPolicy,
-                CreatedUserId = createdUserId
-            };
+                var room = new Room
+                {
+                    Name = request.Name,
+                    Description = request.Description,
+                    JoinPolicy = request.JoinPolicy,
+                    CreatedUserId = createdUserId
+                };
 
-            await _roomRepository.AddAsync(room, cancellationToken);
-            await _roomRepository.SaveChangesAsync(cancellationToken);
+                await _roomRepository.AddAsync(room, cancellationToken);
+                await _roomRepository.SaveChangesAsync(cancellationToken);
 
-            // Room作成者のRoomUserを作成して管理者権限を付与
-            var roomUser = new RoomUser
-            {
-                Id = Guid.CreateVersion7(),
-                ApplicationUserId = createdUserId,
-                RoomId = room.Id,
-                Name = RoomUserNameHelper.DefaultUserToken,
-                UseMainName = true,
-                UseMainIcon = true
-            };
+                // Room作成者のRoomUserを作成して管理者権限を付与
+                var roomUser = new RoomUser
+                {
+                    Id = Guid.CreateVersion7(),
+                    ApplicationUserId = createdUserId,
+                    RoomId = room.Id,
+                    Name = RoomUserNameHelper.DefaultUserToken,
+                    UseMainName = true,
+                    UseMainIcon = true
+                };
 
-            await _roomUserRepository.AddAsync(roomUser, cancellationToken);
-            await _roomUserRepository.SaveChangesAsync(cancellationToken);
+                await _roomUserRepository.AddAsync(roomUser, cancellationToken);
+                await _roomUserRepository.SaveChangesAsync(cancellationToken);
 
-            // 管理者権限を付与
-            var adminPermissions = new[]
-            {
-                RoomPermissions.Manage,
-                RoomPermissions.ManageUsers,
-                RoomPermissions.ManageRoles,
-                RoomPermissions.Delete,
-                RoomPermissions.TopicManage,
-                RoomPermissions.TopicWrite,
-                RoomPermissions.TopicRead,
-                RoomPermissions.Write,
-                RoomPermissions.Join
-            };
+                // 管理者権限を付与
+                var adminPermissions = new[]
+                {
+                    RoomPermissions.Manage,
+                    RoomPermissions.ManageUsers,
+                    RoomPermissions.ManageRoles,
+                    RoomPermissions.Delete,
+                    RoomPermissions.TopicManage,
+                    RoomPermissions.TopicWrite,
+                    RoomPermissions.TopicRead,
+                    RoomPermissions.Write,
+                    RoomPermissions.Read
+                };
 
-            foreach (var permissionName in adminPermissions)
-            {
-                await _roomUserManager.AddPermissionAsync(roomUser, permissionName, cancellationToken);
+                foreach (var permissionName in adminPermissions)
+                {
+                    await _roomUserManager.AddPermissionAsync(roomUser, permissionName, cancellationToken);
+                }
+
+                Logger.LogInformation(
+                    "Admin permissions granted to RoomUser {RoomUserId} for room {RoomId}",
+                    roomUser.Id, room.Id);
+
+                // トランザクションをコミット（ブロードキャスト前に確定）
+                await transaction.CommitAsync(cancellationToken);
+
+                var dto = MapToDto(room);
+                await BroadcastRoomCreatedAsync(dto);
+                return Result<RoomDto>.Success(dto, 201);
             }
-
-            Logger.LogInformation(
-                "Admin permissions granted to RoomUser {RoomUserId} for room {RoomId}",
-                roomUser.Id, room.Id);
-
-            var dto = MapToDto(room);
-            await BroadcastRoomCreatedAsync(dto);
-            return Result<RoomDto>.Success(dto, 201);
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                Logger.LogError(ex, "Failed to create room. Transaction rolled back.");
+                throw;
+            }
         }, nameof(CreateRoomAsync));
     }
 
@@ -241,16 +254,39 @@ public class RoomManagementService : BaseService, IRoomManagementService
     {
         return await ExecuteAsync(async () =>
         {
-            var room = await _roomRepository.GetByIdAsync(roomId, cancellationToken);
+            using var transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
+            try
+            {
+                var room = await _roomRepository.GetByIdAsync(roomId, cancellationToken);
 
-            if (room == null)
-                return Result.NotFound("Room not found");
+                if (room == null)
+                    return Result.NotFound("Room not found");
 
-            _roomRepository.Delete(room);
-            await _roomRepository.SaveChangesAsync(cancellationToken);
+                // 削除前にRoomの関連データをログに記録（監査用）
+                var roomUserCount = await _dbContext.RoomUsers
+                    .CountAsync(ru => ru.RoomId == roomId, cancellationToken);
+                var topicCount = await _dbContext.Topics
+                    .CountAsync(t => t.RoomId == roomId, cancellationToken);
 
-            await BroadcastRoomDeletedAsync(room.Id);
-            return Result.Success();
+                Logger.LogInformation(
+                    "Deleting room {RoomId} with {RoomUserCount} room users and {TopicCount} topics",
+                    roomId, roomUserCount, topicCount);
+
+                _roomRepository.Delete(room);
+                await _roomRepository.SaveChangesAsync(cancellationToken);
+
+                await transaction.CommitAsync(cancellationToken);
+
+                // トランザクション外でブロードキャスト
+                await BroadcastRoomDeletedAsync(room.Id);
+                return Result.Success();
+            }
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                Logger.LogError(ex, "Failed to delete room {RoomId}. Transaction rolled back.", roomId);
+                throw;
+            }
         }, nameof(DeleteRoomAsync));
     }
 

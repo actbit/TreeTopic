@@ -222,58 +222,72 @@ public class RoleManagementService : BaseService
 
             var cleanName = request.DefaultRoleName.Trim();
 
-            // Check if default role already exists
-            if (await _roleManager.RoleExistsAsync(cleanName))
+            // トランザクションを開始してデータ整合性を確保
+            using var transaction = await _context.Database.BeginTransactionAsync();
+            try
             {
-                return Result<RoleSetupCompletionResponse>.Conflict($"Default role '{cleanName}' already exists");
-            }
-
-            // Create default role
-            var role = new ApplicationRole(cleanName);
-            var createResult = await _roleManager.CreateAsync(role);
-
-            var identityResult = createResult.ToResult<RoleSetupCompletionResponse>(null);
-            if (identityResult.IsFailure)
-            {
-                return Result<RoleSetupCompletionResponse>.BadRequest(identityResult.Error!.Message);
-            }
-
-            // Add default permissions using DbContext directly
-            int permissionsAdded = 0;
-            if (request.DefaultPermissions?.Count > 0)
-            {
-                foreach (var permissionName in request.DefaultPermissions)
+                // Check if default role already exists
+                if (await _roleManager.RoleExistsAsync(cleanName))
                 {
-                    if (string.IsNullOrWhiteSpace(permissionName))
-                        continue;
+                    return Result<RoleSetupCompletionResponse>.Conflict($"Default role '{cleanName}' already exists");
+                }
 
-                    var permission = new Permission
+                // Create default role
+                var role = new ApplicationRole(cleanName);
+                var createResult = await _roleManager.CreateAsync(role);
+
+                var identityResult = createResult.ToResult<RoleSetupCompletionResponse>(null);
+                if (identityResult.IsFailure)
+                {
+                    return Result<RoleSetupCompletionResponse>.BadRequest(identityResult.Error!.Message);
+                }
+
+                // Add default permissions using DbContext directly
+                int permissionsAdded = 0;
+                if (request.DefaultPermissions?.Count > 0)
+                {
+                    foreach (var permissionName in request.DefaultPermissions)
                     {
-                        Id = Guid.CreateVersion7(),
-                        Name = permissionName.Trim(),
-                        RoleId = role.Id,
-                        CreatedAt = DateTime.UtcNow
-                    };
+                        if (string.IsNullOrWhiteSpace(permissionName))
+                            continue;
 
-                    _context.Permissions.Add(permission);
-                    permissionsAdded++;
+                        var permission = new Permission
+                        {
+                            Id = Guid.CreateVersion7(),
+                            Name = permissionName.Trim(),
+                            RoleId = role.Id,
+                            CreatedAt = DateTime.UtcNow
+                        };
+
+                        _context.Permissions.Add(permission);
+                        permissionsAdded++;
+                    }
+
+                    if (permissionsAdded > 0)
+                    {
+                        await _context.SaveChangesAsync();
+                    }
                 }
 
-                if (permissionsAdded > 0)
+                // トランザクションをコミット
+                await transaction.CommitAsync();
+
+                var response = new RoleSetupCompletionResponse
                 {
-                    await _context.SaveChangesAsync();
-                }
+                    Success = true,
+                    Message = $"Default role '{cleanName}' configured successfully",
+                    DefaultRoleName = cleanName,
+                    PermissionsAdded = permissionsAdded
+                };
+
+                return Result<RoleSetupCompletionResponse>.Success(response, 201);
             }
-
-            var response = new RoleSetupCompletionResponse
+            catch (Exception ex)
             {
-                Success = true,
-                Message = $"Default role '{cleanName}' configured successfully",
-                DefaultRoleName = cleanName,
-                PermissionsAdded = permissionsAdded
-            };
-
-            return Result<RoleSetupCompletionResponse>.Success(response, 201);
+                await transaction.RollbackAsync();
+                Logger.LogError(ex, "Failed to setup default role '{RoleName}'. Transaction rolled back.", cleanName);
+                throw;
+            }
         }, nameof(SetupDefaultRoleAsync));
     }
 }

@@ -148,6 +148,25 @@ export function invalidateByResource(method: string, path: string): void {
 	if (normalizedPath.includes('/api/file')) {
 		invalidate(/^GET:.*\/api\/File/i);
 	}
+
+	// 権限変更時はユーザー関連のキャッシュもクリア
+	if (normalizedPath.includes('/users/') && normalizedPath.includes('/roles')) {
+		// ユーザーロールが変更された場合、認証・ユーザー関連のキャッシュをクリア
+		invalidate(/^GET:.*\/auth\//i);
+		invalidate(/^GET:.*\/api\/Users/i);
+		invalidate(/^GET:.*\/api\/Roles/i);
+		invalidate(/^GET:.*\/api\/Room/i); // Roomアクセス権限が変わる可能性
+		invalidate(/^GET:.*\/api\/Topic/i); // Topicアクセス権限が変わる可能性
+	}
+	if (normalizedPath.includes('/api/room') && (normalizedPath.includes('/users') || normalizedPath.includes('/roles'))) {
+		// Roomユーザー/ロールが変更された場合
+		invalidate(/^GET:.*\/api\/Room/i);
+		invalidate(/^GET:.*\/api\/Topic/i);
+	}
+	if (normalizedPath.includes('/api/topic') && normalizedPath.includes('/permissions')) {
+		// Topic権限が変更された場合
+		invalidate(/^GET:.*\/api\/Topic/i);
+	}
 }
 
 /**

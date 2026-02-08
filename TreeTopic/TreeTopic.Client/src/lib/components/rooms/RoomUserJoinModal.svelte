@@ -57,6 +57,11 @@
           iconUrl: response.iconUrl ?? response.IconUrl,
           useMainIcon: response.useMainIcon ?? response.UseMainIcon ?? false,
         });
+
+        // 参加完了イベントを発火
+        window.dispatchEvent(new CustomEvent('room-user-joined', {
+          detail: { roomId, roomUser: response }
+        }));
       }
 
       ui.closeModal(modalId);

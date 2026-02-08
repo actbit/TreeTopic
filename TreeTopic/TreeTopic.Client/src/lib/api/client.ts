@@ -562,7 +562,6 @@ export const api = {
   put,
   patch,
   delete: del,
-  del,
   configureApiClient,
   getCurrentTenant,
   setApiBaseUrl,
@@ -681,7 +680,7 @@ export async function banUser(tenant: string, userId: string, reason: string) {
 }
 
 export async function unbanUser(tenant: string, userId: string) {
-  return api.del(`/${tenant}/api/users/${userId}/ban`);
+  return api.delete(`/${tenant}/api/users/${userId}/ban`);
 }
 
 export async function assignUserRole(tenant: string, userId: string, roleName: string) {
@@ -702,6 +701,12 @@ export async function removeUserRole(tenant: string, userId: string, roleName: s
   });
 
   return handleResponse(response);
+}
+
+// Room user candidates for adding to room
+export async function getRoomUserCandidates(tenant: string, roomId: string, search?: string) {
+  const params = search ? { search } : undefined;
+  return api.get(`/${tenant}/api/room/${roomId}/users/candidates`, { params });
 }
 
 export default api;

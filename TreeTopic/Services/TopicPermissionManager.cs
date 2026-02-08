@@ -226,45 +226,57 @@ public class TopicPermissionManager
         Guid childTopicId,
         CancellationToken cancellationToken = default)
     {
-        // 1. TopicRolePermissionをコピー
-        var parentRolePermissions = await _context.TopicRolePermissions
-            .Where(trp => trp.TopicId == parentTopicId)
-            .ToListAsync(cancellationToken);
-
-        foreach (var parentPerm in parentRolePermissions)
+        using var transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
+        try
         {
-            var childPerm = new TopicRolePermission
+            // 1. TopicRolePermissionをコピー
+            var parentRolePermissions = await _context.TopicRolePermissions
+                .Where(trp => trp.TopicId == parentTopicId)
+                .ToListAsync(cancellationToken);
+
+            foreach (var parentPerm in parentRolePermissions)
             {
-                Id = Guid.CreateVersion7(),
-                TopicId = childTopicId,
-                RoomRoleId = parentPerm.RoomRoleId,
-                Name = parentPerm.Name
-            };
-            _context.TopicRolePermissions.Add(childPerm);
+                var childPerm = new TopicRolePermission
+                {
+                    Id = Guid.CreateVersion7(),
+                    TopicId = childTopicId,
+                    RoomRoleId = parentPerm.RoomRoleId,
+                    Name = parentPerm.Name
+                };
+                _context.TopicRolePermissions.Add(childPerm);
+            }
+
+            // 2. TopicUserPermissionをコピー
+            var parentUserPermissions = await _context.TopicUserPermissions
+                .Where(tup => tup.TopicId == parentTopicId)
+                .ToListAsync(cancellationToken);
+
+            foreach (var parentPerm in parentUserPermissions)
+            {
+                var childPerm = new TopicUserPermission
+                {
+                    Id = Guid.CreateVersion7(),
+                    TopicId = childTopicId,
+                    RoomUserId = parentPerm.RoomUserId,
+                    Name = parentPerm.Name
+                };
+                _context.TopicUserPermissions.Add(childPerm);
+            }
+
+            await _context.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+
+            _logger.LogInformation(
+                "Permissions copied from parent topic {ParentTopicId} to child topic {ChildTopicId}: {RoleCount} role permissions, {UserCount} user permissions",
+                parentTopicId, childTopicId, parentRolePermissions.Count, parentUserPermissions.Count);
         }
-
-        // 2. TopicUserPermissionをコピー
-        var parentUserPermissions = await _context.TopicUserPermissions
-            .Where(tup => tup.TopicId == parentTopicId)
-            .ToListAsync(cancellationToken);
-
-        foreach (var parentPerm in parentUserPermissions)
+        catch (Exception ex)
         {
-            var childPerm = new TopicUserPermission
-            {
-                Id = Guid.CreateVersion7(),
-                TopicId = childTopicId,
-                RoomUserId = parentPerm.RoomUserId,
-                Name = parentPerm.Name
-            };
-            _context.TopicUserPermissions.Add(childPerm);
+            await transaction.RollbackAsync(cancellationToken);
+            _logger.LogError(ex, "Failed to copy permissions from parent topic {ParentTopicId} to child topic {ChildTopicId}. Transaction rolled back.",
+                parentTopicId, childTopicId);
+            throw;
         }
-
-        await _context.SaveChangesAsync(cancellationToken);
-
-        _logger.LogInformation(
-            "Permissions copied from parent topic {ParentTopicId} to child topic {ChildTopicId}: {RoleCount} role permissions, {UserCount} user permissions",
-            parentTopicId, childTopicId, parentRolePermissions.Count, parentUserPermissions.Count);
     }
 
     /// <summary>

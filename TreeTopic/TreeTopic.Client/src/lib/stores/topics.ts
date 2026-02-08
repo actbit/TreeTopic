@@ -405,7 +405,7 @@ function createTopicsStore() {
     refreshHasChildren: async (topicId: string) => {
       try {
         const tenant = getCurrentTenant();
-        const updated = await api.get<Record<string, unknown>>(`/${tenant}/api/topic/${topicId}`);
+        const updated = await api.get<Record<string, unknown>>(`/${tenant}/api/Topic/${topicId}`);
         const hasChildren = updated?.hasChildren ?? updated?.HasChildren ?? undefined;
         if (typeof hasChildren !== 'boolean') return;
 

@@ -3,11 +3,49 @@ using System.Text.RegularExpressions;
 
 namespace TreeTopic.Services;
 
+/// <summary>
+/// 正規表現検索の仕様（データベース固有の演算子を含む）
+/// </summary>
 public sealed record RegexSearchSpec(
     string Pattern,
     bool CaseSensitive,
     string PostgresOperator,
-    string MySqlMatchType);
+    string MySqlMatchType)
+{
+    /// <summary>
+    /// PostgreSQLの正規表現演算子（大文字小文字区別）
+    /// </summary>
+    public const string PostgresCaseSensitive = "~";
+
+    /// <summary>
+    /// PostgreSQLの正規表現演算子（大文字小文字区別なし）
+    /// </summary>
+    public const string PostgresCaseInsensitive = "~*";
+
+    /// <summary>
+    /// MySQLの正規表現マッチタイプ（大文字小文字区別）
+    /// </summary>
+    public const string MySqlCaseSensitive = "c";
+
+    /// <summary>
+    /// MySQLの正規表現マッチタイプ（大文字小文字区別なし）
+    /// </summary>
+    public const string MySqlCaseInsensitive = "i";
+
+    /// <summary>
+    /// 演算子が有効な値か検証
+    /// </summary>
+    public bool IsValidOperator =>
+        PostgresOperator == PostgresCaseSensitive ||
+        PostgresOperator == PostgresCaseInsensitive;
+
+    /// <summary>
+    /// マッチタイプが有効な値か検証
+    /// </summary>
+    public bool IsValidMatchType =>
+        MySqlMatchType == MySqlCaseSensitive ||
+        MySqlMatchType == MySqlCaseInsensitive;
+}
 
 public interface IRegexSearchPatternConverter
 {

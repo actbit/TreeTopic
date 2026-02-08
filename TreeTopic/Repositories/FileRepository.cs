@@ -25,7 +25,7 @@ public class FileRepository : BaseRepository<FileModel>, IFileRepository
     public Task<FileModel?> GetLatestForMessageAsync(Guid messageId, CancellationToken cancellationToken = default)
     {
         return Query()
-            .Where(f => f.MessageId == messageId && f.IsLatast)
+            .Where(f => f.MessageId == messageId && f.IsLatest)
             .OrderByDescending(f => f.UpdatedAt)
             .FirstOrDefaultAsync(cancellationToken);
     }

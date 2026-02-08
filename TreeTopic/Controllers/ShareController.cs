@@ -228,7 +228,7 @@ public class ShareController : ControllerBase
     }
 
     [HttpGet("room/{roomId}")]
-    [RequireAny(RoomPermissions.Join, TenantPermissions.RoomRead)]
+    [RequireAny(RoomPermissions.Read, TenantPermissions.RoomRead)]
     public async Task<IActionResult> GetByRoom(
         [FromRoute] MaskedGuid roomId,
         [FromQuery] MaskedGuid? topicId,
@@ -342,126 +342,148 @@ public class ShareController : ControllerBase
                 return BadRequest(new { message = "Share kind mismatch." });
         }
 
-        if (baseShare != null && !shouldUpdateShare)
+        var savePath = string.Empty;
+        var fileCreated = false;
+        try
         {
-            var roomUser = await GetRoomUserAsync(baseShare.RoomId, cancellationToken);
-            if (roomUser == null)
-                return Unauthorized(new { message = "Room user not found." });
-
-            var roomUserName = RoomUserNameHelper.ResolveDisplayName(roomUser);
-            // Create a new share entry for the new version, copying metadata from the selected share.
-            targetShare = new ShareItem
+            if (baseShare != null && !shouldUpdateShare)
             {
-                RoomId = baseShare.RoomId,
-                TopicId = baseShare.TopicId,
-                Kind = baseShare.Kind,
-                Title = string.IsNullOrWhiteSpace(title) ? baseShare.Title : title.Trim(),
-                CreatedByRoomUserId = roomUser.Id,
-                CreatedByName = roomUserName,
-                SourceMessageId = baseShare.SourceMessageId,
-                SourceFileId = baseShare.SourceFileId,
-                SourceShareItemId = baseShare.SourceShareItemId
-            };
-            _db.ShareItems.Add(targetShare);
-            await _db.SaveChangesAsync(cancellationToken);
-        }
-        else if (baseShare != null)
-        {
-            targetShare = baseShare;
-            if (!string.IsNullOrWhiteSpace(title))
-                targetShare.Title = title.Trim();
-            targetShare.UpdatedAt = DateTime.UtcNow;
-        }
-        else
-        {
-            var roomUser = await GetRoomUserAsync(roomGuid, cancellationToken);
-            if (roomUser == null)
-                return Unauthorized(new { message = "Room user not found." });
+                var roomUser = await GetRoomUserAsync(baseShare.RoomId, cancellationToken);
+                if (roomUser == null)
+                    return Unauthorized(new { message = "Room user not found." });
 
-            var roomUserName = RoomUserNameHelper.ResolveDisplayName(roomUser);
-            targetShare = new ShareItem
-            {
-                RoomId = roomGuid,
-                TopicId = topicGuid,
-                Kind = normalizedKind,
-                Title = string.IsNullOrWhiteSpace(title) ? originalFileName : title.Trim(),
-                CreatedByRoomUserId = roomUser.Id,
-                CreatedByName = roomUserName,
-            };
-            _db.ShareItems.Add(targetShare);
-            await _db.SaveChangesAsync(cancellationToken);
-        }
-
-        // Resolve current file for version chain (if any).
-        FileModel? currentFile = null;
-        if (baseShare != null)
-        {
-            var currentLink = await _db.ShareItemFiles
-                .Where(x => x.ShareItemId == baseShare.Id && x.IsCurrent)
-                .OrderByDescending(x => x.CreatedAt)
-                .FirstOrDefaultAsync(cancellationToken);
-
-            if (currentLink != null)
-                currentFile = await _db.Files.FirstOrDefaultAsync(f => f.Id == currentLink.FileId, cancellationToken);
-        }
-
-        var fileId = Guid.CreateVersion7();
-        var savedFileName = $"{fileId:N}_{originalFileName}";
-
-        var shareDir = GetShareItemFolder(tenant, targetShare.Id);
-        Directory.CreateDirectory(shareDir);
-        var savePath = Path.Combine(shareDir, savedFileName);
-
-        await using (var stream = System.IO.File.Create(savePath))
-        {
-            await file.CopyToAsync(stream, cancellationToken);
-        }
-
-        var fileEntity = new FileModel
-        {
-            Id = fileId,
-            FileName = originalFileName,
-            SaveFileName = savedFileName,
-            FileType = mime,
-            MessageId = null,
-            SourceFileId = currentFile?.Id,
-            SourceFile = null,
-            IsLatast = true
-        };
-
-        if (currentFile != null)
-            currentFile.IsLatast = false;
-
-        _db.Files.Add(fileEntity);
-
-        if (shouldUpdateShare)
-        {
-            var existingCurrentLinks = await _db.ShareItemFiles
-                .Where(x => x.ShareItemId == targetShare.Id && x.IsCurrent)
-                .ToListAsync(cancellationToken);
-
-            foreach (var link in existingCurrentLinks)
-            {
-                link.IsCurrent = false;
-                link.UpdatedAt = DateTime.UtcNow;
+                var roomUserName = RoomUserNameHelper.ResolveDisplayName(roomUser);
+                // Create a new share entry for the new version, copying metadata from the selected share.
+                targetShare = new ShareItem
+                {
+                    RoomId = baseShare.RoomId,
+                    TopicId = baseShare.TopicId,
+                    Kind = baseShare.Kind,
+                    Title = string.IsNullOrWhiteSpace(title) ? baseShare.Title : title.Trim(),
+                    CreatedByRoomUserId = roomUser.Id,
+                    CreatedByName = roomUserName,
+                    SourceMessageId = baseShare.SourceMessageId,
+                    SourceFileId = baseShare.SourceFileId,
+                    SourceShareItemId = baseShare.SourceShareItemId
+                };
+                _db.ShareItems.Add(targetShare);
+                await _db.SaveChangesAsync(cancellationToken);
             }
+            else if (baseShare != null)
+            {
+                targetShare = baseShare;
+                if (!string.IsNullOrWhiteSpace(title))
+                    targetShare.Title = title.Trim();
+                targetShare.UpdatedAt = DateTime.UtcNow;
+            }
+            else
+            {
+                var roomUser = await GetRoomUserAsync(roomGuid, cancellationToken);
+                if (roomUser == null)
+                    return Unauthorized(new { message = "Room user not found." });
+
+                var roomUserName = RoomUserNameHelper.ResolveDisplayName(roomUser);
+                targetShare = new ShareItem
+                {
+                    RoomId = roomGuid,
+                    TopicId = topicGuid,
+                    Kind = normalizedKind,
+                    Title = string.IsNullOrWhiteSpace(title) ? originalFileName : title.Trim(),
+                    CreatedByRoomUserId = roomUser.Id,
+                    CreatedByName = roomUserName,
+                };
+                _db.ShareItems.Add(targetShare);
+                await _db.SaveChangesAsync(cancellationToken);
+            }
+
+            // Resolve current file for version chain (if any).
+            FileModel? currentFile = null;
+            if (baseShare != null)
+            {
+                var currentLink = await _db.ShareItemFiles
+                    .Where(x => x.ShareItemId == baseShare.Id && x.IsCurrent)
+                    .OrderByDescending(x => x.CreatedAt)
+                    .FirstOrDefaultAsync(cancellationToken);
+
+                if (currentLink != null)
+                    currentFile = await _db.Files.FirstOrDefaultAsync(f => f.Id == currentLink.FileId, cancellationToken);
+            }
+
+            var fileId = Guid.CreateVersion7();
+            var savedFileName = $"{fileId:N}_{originalFileName}";
+
+            var shareDir = GetShareItemFolder(tenant, targetShare.Id);
+            Directory.CreateDirectory(shareDir);
+            savePath = Path.Combine(shareDir, savedFileName);
+
+            await using (var stream = System.IO.File.Create(savePath))
+            {
+                await file.CopyToAsync(stream, cancellationToken);
+            }
+            fileCreated = true;
+
+            var fileEntity = new FileModel
+            {
+                Id = fileId,
+                FileName = originalFileName,
+                SaveFileName = savedFileName,
+                FileType = mime,
+                MessageId = null,
+                SourceFileId = currentFile?.Id,
+                SourceFile = null,
+                IsLatest = true
+            };
+
+            if (currentFile != null)
+                currentFile.IsLatest = false;
+
+            _db.Files.Add(fileEntity);
+
+            if (shouldUpdateShare)
+            {
+                var existingCurrentLinks = await _db.ShareItemFiles
+                    .Where(x => x.ShareItemId == targetShare.Id && x.IsCurrent)
+                    .ToListAsync(cancellationToken);
+
+                foreach (var link in existingCurrentLinks)
+                {
+                    link.IsCurrent = false;
+                    link.UpdatedAt = DateTime.UtcNow;
+                }
+            }
+
+            var linkEntity = new ShareItemFile
+            {
+                ShareItemId = targetShare.Id,
+                FileId = fileEntity.Id,
+                ShareItem = null!,
+                File = null!,
+                IsCurrent = true
+            };
+            _db.ShareItemFiles.Add(linkEntity);
+
+            await _db.SaveChangesAsync(cancellationToken);
+
+            var url = BuildShareFileUrl(tenant, targetShare.RoomId, targetShare.Id, fileEntity.SaveFileName);
+            var dto = ToDto(targetShare, tenant, (fileEntity, url, file.Length));
+            return Ok(dto);
         }
-
-        var linkEntity = new ShareItemFile
+        catch
         {
-            ShareItemId = targetShare.Id,
-            FileId = fileEntity.Id,
-            ShareItem = null!,
-            File = null!,
-            IsCurrent = true
-        };
-        _db.ShareItemFiles.Add(linkEntity);
-
-        await _db.SaveChangesAsync(cancellationToken);
-
-        var url = BuildShareFileUrl(tenant, targetShare.RoomId, targetShare.Id, fileEntity.SaveFileName);
-        var dto = ToDto(targetShare, tenant, (fileEntity, url, file.Length));
-        return Ok(dto);
+            // DB保存失敗時やエラー時にファイルを削除
+            if (fileCreated && !string.IsNullOrEmpty(savePath) && System.IO.File.Exists(savePath))
+            {
+                try
+                {
+                    System.IO.File.Delete(savePath);
+                }
+                catch
+                {
+                    // ファイル削除に失敗しても無視
+                }
+            }
+            throw;
+        }
     }
 
     [HttpPost("room/{roomId}/brainstorm")]
@@ -531,7 +553,7 @@ public class ShareController : ControllerBase
     /// /uploads 静的配信の代わりに使用
     /// </summary>
     [HttpGet("room/{roomId}/download/{shareId}/{fileName}")]
-    [RequireAny(RoomPermissions.Join, TenantPermissions.RoomRead)]
+    [RequireAny(RoomPermissions.Read, TenantPermissions.RoomRead)]
     public async Task<IActionResult> DownloadShareFile(
         [FromRoute] MaskedGuid roomId,
         [FromRoute] MaskedGuid shareId,
@@ -554,8 +576,10 @@ public class ShareController : ControllerBase
 
         var tenant = GetTenantIdentifier();
         var shareRoot = Path.GetFullPath(GetShareItemFolder(tenant, shareGuid));
+        if (!shareRoot.EndsWith(Path.DirectorySeparatorChar))
+            shareRoot += Path.DirectorySeparatorChar;
         var filePath = Path.GetFullPath(Path.Combine(shareRoot, safeFileName));
-        if (!filePath.StartsWith(shareRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+        if (!filePath.StartsWith(shareRoot, StringComparison.OrdinalIgnoreCase))
             return BadRequest(new { message = "Invalid file path." });
 
         if (!System.IO.File.Exists(filePath))

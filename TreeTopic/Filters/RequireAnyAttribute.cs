@@ -5,7 +5,6 @@ using MaskedUUID.AspNetCore.Services;
 using TreeTopic.Models;
 using TreeTopic.Services;
 using TreeTopic.Permissions;
-using TreeTopic.Extensions;
 
 namespace TreeTopic.Filters;
 
@@ -21,6 +20,8 @@ public class RequireAnyAttribute : Attribute, IAsyncActionFilter
     public string RoomIdKey { get; set; } = "roomId";
     public string RoomUserIdKey { get; set; } = "roomUserId";
     public string BoardIdKey { get; set; } = "boardId";
+    public string MessageIdKey { get; set; } = "messageId";
+    public string FileIdKey { get; set; } = "fileId";
     public bool FallbackToRoute { get; set; } = true;
     public bool ResolveRoomIdFromTopic { get; set; } = true;
     public bool ResolveRoomIdFromRoomUser { get; set; } = true;
@@ -34,7 +35,7 @@ public class RequireAnyAttribute : Attribute, IAsyncActionFilter
 
     private static PermissionRequirement ParsePermissionRequirement(string permission)
     {
-        if (permission.StartsWith("identity.") || permission.StartsWith("tenant."))
+        if (permission.StartsWith("tenant."))
             return new PermissionRequirement(PermissionScope.Role, permission);
         if (permission.StartsWith("room."))
             return new PermissionRequirement(PermissionScope.Room, permission);
@@ -47,110 +48,58 @@ public class RequireAnyAttribute : Attribute, IAsyncActionFilter
     {
         var httpContext = context.HttpContext;
         var logger = httpContext.RequestServices.GetRequiredService<ILogger<RequireAnyAttribute>>();
-        var userManager = httpContext.RequestServices.GetRequiredService<UserManager<ApplicationUser>>();
-        var dbContext = httpContext.RequestServices.GetRequiredService<ApplicationDbContext>();
         var roomUserManager = httpContext.RequestServices.GetRequiredService<RoomUserManager>();
         var topicPermissionManager = httpContext.RequestServices.GetRequiredService<TopicPermissionManager>();
-        var maskedUuidService = httpContext.RequestServices.GetRequiredService<IMaskedUUIDService>();
 
-        var user = httpContext.User;
-        if (user?.Identity?.IsAuthenticated != true)
-        {
-            context.Result = new UnauthorizedResult();
-            return;
-        }
-
-        if (!PermissionFilterHelper.TryGetCurrentUserId(user, out var userId))
-        {
-            context.Result = new UnauthorizedResult();
-            return;
-        }
-
-        // 【キャッシュ】ユーザー情報
-        var appUser = await httpContext.GetOrCreateAsync(
-            $"user_{userId}",
-            async () => await userManager.FindByIdAsync(userId.ToString())
-        );
-
-        if (appUser == null)
-        {
-            context.Result = new UnauthorizedResult();
-            return;
-        }
-
-        // 【キャッシュ】マージされたロール
-        var roles = await httpContext.GetOrCreateAsync(
-            $"user_roles_{userId}",
-            async () => await PermissionFilterHelper.GetMergedRolesAsync(user, userManager, appUser)
-        );
-
-        // 【キャッシュ】テナントロール権限（Userレベル）
-        var rolePermissions = await httpContext.GetOrCreateAsync(
-            "role_perms",
-            async () => await PermissionFilterHelper.GetRolePermissionsFromDbAsync(roles, dbContext, httpContext.RequestAborted)
-        );
-
-        var roomId = PermissionFilterHelper.GetId(context, RoomIdKey, maskedUuidService, FallbackToRoute);
-        var topicId = PermissionFilterHelper.GetId(context, TopicIdKey, maskedUuidService, FallbackToRoute);
-        var roomUserId = PermissionFilterHelper.GetId(context, RoomUserIdKey, maskedUuidService, FallbackToRoute);
-        var boardId = PermissionFilterHelper.GetId(context, BoardIdKey, maskedUuidService, FallbackToRoute);
-
-        topicId = await PermissionFilterHelper.ResolveTopicIdAsync(
-            topicId,
-            boardId,
-            ResolveTopicIdFromBoard,
-            dbContext,
+        // TopicId → RoomId の順に解決
+        var resolvedTopicId = await PermissionFilterHelper.ResolveTopicIdFromContextAsync(
+            context,
+            TopicIdKey, BoardIdKey, MessageIdKey, FileIdKey,
+            FallbackToRoute, ResolveTopicIdFromBoard,
             httpContext.RequestAborted);
 
-        roomId = await PermissionFilterHelper.ResolveRoomIdAsync(
-            roomId,
-            topicId,
-            roomUserId,
-            ResolveRoomIdFromTopic,
-            ResolveRoomIdFromRoomUser,
-            dbContext,
+        var resolvedRoomId = await PermissionFilterHelper.ResolveRoomIdFromContextAsync(
+            context,
+            RoomIdKey, RoomUserIdKey, resolvedTopicId,
+            FallbackToRoute, ResolveRoomIdFromTopic, ResolveRoomIdFromRoomUser,
             httpContext.RequestAborted);
 
-        RoomUser? roomUser = null;
-        HashSet<string>? roomPermissions = null;
+        // 共通メソッドでコンテキストを構築
+        var (permContext, errorResult) = await PermissionFilterHelper.InitializePermissionContextAsync(
+            context,
+            resolvedTopicId,
+            resolvedRoomId,
+            roomUserManager,
+            httpContext.RequestAborted);
 
-        if (roomId.HasValue)
+        if (errorResult != null || permContext == null)
         {
-            // 【キャッシュ】RoomUser情報
-            roomUser = await httpContext.GetOrCreateAsync(
-                $"roomUser_{userId}_{roomId.Value}",
-                async () => await roomUserManager.FindByRoomAndUserAsync(roomId.Value, userId, httpContext.RequestAborted)
-            );
-
-            // 【キャッシュ】Room権限（RoomUserレベル）
-            if (roomUser != null)
-            {
-                roomPermissions = await httpContext.GetOrCreateAsync(
-                    $"room_perms_{userId}_{roomId.Value}",
-                    async () => await roomUserManager.GetPermissionsAsync(roomUser, httpContext.RequestAborted)
-                );
-            }
+            context.Result = errorResult ?? new UnauthorizedResult();
+            return;
         }
+
+        // Topic scope の権限を一括取得（DBアクセスは最大1回）
+        var topicPermissions = await PermissionFilterHelper.ResolveTopicPermissionsAsync(
+            _requirements,
+            permContext.RoomUser,
+            permContext.TopicId,
+            topicPermissionManager,
+            httpContext.RequestAborted);
 
         foreach (var requirement in _requirements)
         {
-            var hasPermission = await PermissionFilterHelper.CheckPermissionAsync(
+            var hasPermission = PermissionFilterHelper.CheckPermission(
                 requirement,
-                rolePermissions,
-                roomUser,
-                roomPermissions,
-                roomId,
-                topicId,
-                httpContext,
-                dbContext,
-                topicPermissionManager,
-                httpContext.RequestAborted);
+                permContext.RolePermissions,
+                permContext.RoomUser,
+                permContext.RoomPermissions,
+                topicPermissions);
 
             if (hasPermission)
             {
                 logger.LogDebug(
                     "[RequireAny] Permission granted: UserId={UserId}, Requirement={Requirement}",
-                    userId, requirement);
+                    permContext.UserId, requirement);
                 await next();
                 return;
             }
@@ -158,7 +107,7 @@ public class RequireAnyAttribute : Attribute, IAsyncActionFilter
 
         logger.LogWarning(
             "[RequireAny] Permission denied: UserId={UserId}, Requirements={Requirements}",
-            userId, string.Join(", ", _requirements.Select(r => r.ToString())));
+            permContext.UserId, string.Join(", ", _requirements.Select(r => r.ToString())));
         context.Result = new ForbidResult();
     }
 }

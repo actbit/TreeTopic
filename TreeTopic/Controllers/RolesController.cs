@@ -10,6 +10,7 @@ using TreeTopic.Models;
 namespace TreeTopic.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("{tenant}/api/[controller]")]
 public class RolesController : ControllerBase
 {
@@ -22,7 +23,7 @@ public class RolesController : ControllerBase
 
     [HttpGet]
     [Authorize]
-    [RequireAny(TenantPermissions.RoleRead, TenantPermissions.UserManagement)]
+    [RequireAny(TenantPermissions.RoleRead, TenantPermissions.UserAdmin)]
     public async Task<ActionResult<List<RoleDto>>> List()
     {
         var roles = await _roleManager.Roles

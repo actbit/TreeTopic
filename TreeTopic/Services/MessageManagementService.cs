@@ -44,6 +44,7 @@ public class MessageManagementService : BaseService, IMessageManagementService
     private readonly ITopicRepository _topicRepository;
     private readonly IFileRepository _fileRepository;
     private readonly IRoomUserRepository _roomUserRepository;
+    private readonly RoomUserManager _roomUserManager;
     private readonly IconService _iconService;
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly IWebHostEnvironment _webHostEnvironment;
@@ -63,6 +64,7 @@ public class MessageManagementService : BaseService, IMessageManagementService
         ITopicRepository topicRepository,
         IFileRepository fileRepository,
         IRoomUserRepository roomUserRepository,
+        RoomUserManager roomUserManager,
         IconService iconService,
         UserManager<ApplicationUser> userManager,
         IWebHostEnvironment webHostEnvironment,
@@ -82,6 +84,7 @@ public class MessageManagementService : BaseService, IMessageManagementService
         _topicRepository = topicRepository;
         _fileRepository = fileRepository;
         _roomUserRepository = roomUserRepository;
+        _roomUserManager = roomUserManager;
         _iconService = iconService;
         _userManager = userManager;
         _webHostEnvironment = webHostEnvironment;
@@ -622,37 +625,60 @@ public class MessageManagementService : BaseService, IMessageManagementService
     {
         var providerName = _dbContext.Database.ProviderName ?? string.Empty;
         var regexSpec = _regexSearchPatternConverter.Convert(pattern, caseSensitive, providerName);
+
+        // 安全性検証: 演算子とマッチタイプが期待値であることを確認
+        if (!regexSpec.IsValidOperator || !regexSpec.IsValidMatchType)
+        {
+            Logger.LogWarning("Invalid regex operator or match type detected. Operator: {Operator}, MatchType: {MatchType}",
+                regexSpec.PostgresOperator, regexSpec.MySqlMatchType);
+            throw new InvalidOperationException("Invalid regex search specification.");
+        }
+
         var provider = providerName.ToLowerInvariant();
 
         if (provider.Contains("npgsql") || provider.Contains("postgres"))
         {
+            // PostgreSQL専用のSQLテンプレート（演算子は条件分岐で決定）
+            var sqlTemplate = regexSpec.PostgresOperator == RegexSearchSpec.PostgresCaseSensitive
+                ? """
+                  SELECT "Id"
+                  FROM "Messages"
+                  WHERE "TopicId" = @topicId
+                    AND (
+                      COALESCE("Header", '') ~ @pattern
+                      OR COALESCE("Body", '') ~ @pattern
+                    )
+                  ORDER BY "CreatedAt" DESC, "Id" DESC
+                  LIMIT @take
+                  """
+                : """
+                  SELECT "Id"
+                  FROM "Messages"
+                  WHERE "TopicId" = @topicId
+                    AND (
+                      COALESCE("Header", '') ~* @pattern
+                      OR COALESCE("Body", '') ~* @pattern
+                    )
+                  ORDER BY "CreatedAt" DESC, "Id" DESC
+                  LIMIT @take
+                  """;
+
             return await QueryRegexIdsSqlAsync(
                 topicId,
                 take,
                 regexSpec.Pattern,
-                regexSpec.PostgresOperator,
-                null,
-                """
-                SELECT "Id"
-                FROM "Messages"
-                WHERE "TopicId" = @topicId
-                  AND (
-                    COALESCE("Header", '') {0} @pattern
-                    OR COALESCE("Body", '') {0} @pattern
-                  )
-                ORDER BY "CreatedAt" DESC, "Id" DESC
-                LIMIT @take
-                """,
+                null,  // MySQLでないためmySqlMatchTypeは不要
+                sqlTemplate,
                 cancellationToken);
         }
 
         if (provider.Contains("mysql"))
         {
+            // MySQL専用のSQLテンプレート（matchTypeはパラメータとして渡す）
             return await QueryRegexIdsSqlAsync(
                 topicId,
                 take,
                 regexSpec.Pattern,
-                null,
                 regexSpec.MySqlMatchType,
                 """
                 SELECT `Id`
@@ -693,13 +719,11 @@ public class MessageManagementService : BaseService, IMessageManagementService
         Guid topicId,
         int take,
         string pattern,
-        string? pgOperator,
         string? mySqlMatchType,
-        string sqlTemplate,
+        string sql,
         CancellationToken cancellationToken)
     {
         var ids = new List<Guid>();
-        var sql = string.IsNullOrEmpty(pgOperator) ? sqlTemplate : string.Format(sqlTemplate, pgOperator);
 
         var connection = _dbContext.Database.GetDbConnection();
         var openedByMethod = false;
@@ -722,10 +746,12 @@ public class MessageManagementService : BaseService, IMessageManagementService
                 command.Transaction = currentTransaction.GetDbTransaction();
             }
 
+            // パラメータを追加（SQLインジェクション対策）
             AddParameter(command, "@topicId", topicId, DbType.Guid);
             AddParameter(command, "@pattern", pattern, DbType.String);
             AddParameter(command, "@take", take, DbType.Int32);
 
+            // MySQLの場合のみmatchTypeを追加
             if (!string.IsNullOrEmpty(mySqlMatchType))
             {
                 AddParameter(command, "@matchType", mySqlMatchType, DbType.String);
@@ -777,9 +803,13 @@ public class MessageManagementService : BaseService, IMessageManagementService
     {
         return await ExecuteAsync(async () =>
         {
-            var topic = await _topicRepository.GetByIdAsync(request.TopicId, cancellationToken);
-            if (topic == null)
-                return Result<MessageDto>.NotFound("Topic not found");
+            // トランザクションを開始してデータ整合性を確保
+            using var transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
+            try
+            {
+                var topic = await _topicRepository.GetByIdAsync(request.TopicId, cancellationToken);
+                if (topic == null)
+                    return Result<MessageDto>.NotFound("Topic not found");
 
             if (request.ChildTopic?.ParentId.HasValue == true)
             {
@@ -914,7 +944,10 @@ public class MessageManagementService : BaseService, IMessageManagementService
                 dto.ChildTopicTitle = createdTopicDto.Title;
             }
 
-            // SignalRブロードキャスト（失敗してもメッセージ作成自体は成功させる）
+            // トランザクションをコミット（ブロードキャスト前に確定）
+            await transaction.CommitAsync(cancellationToken);
+
+            // SignalRブロードキャスト（トランザクション外で実行）
             try
             {
                 await BroadcastMessageCreatedAsync(dto);
@@ -925,10 +958,17 @@ public class MessageManagementService : BaseService, IMessageManagementService
                 Logger.LogError(ex, "Failed to broadcast message created for message {MessageId}. SignalR broadcast failed but message was created successfully.", message.Id);
             }
 
-            // プッシュ通知と未読カウント更新（fire-and-forget）
+            // プッシュ通知と未読カウント更新（fire-and-forget、トランザクション外で実行）
             _ = SendPushNotificationsAsync(message, roomUser, dto);
 
             return Result<MessageDto>.Success(dto, 201);
+            }
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                Logger.LogError(ex, "Failed to create message. Transaction rolled back.");
+                throw;
+            }
         }, nameof(CreateMessageAsync));
     }
 
@@ -1327,7 +1367,7 @@ public class MessageManagementService : BaseService, IMessageManagementService
                         MessageId = message.Id,
                         SourceFileId = null,
                         SourceFile = null,
-                        IsLatast = true
+                        IsLatest = true
                     };
 
                     await _fileRepository.AddAsync(fileEntity, cancellationToken);
@@ -1361,11 +1401,21 @@ public class MessageManagementService : BaseService, IMessageManagementService
             UseMainIcon = true
         };
 
-        await _roomUserRepository.AddAsync(roomUser, cancellationToken);
-        await _roomUserRepository.SaveChangesAsync(cancellationToken);
-        roomUser.ApplicationUser = user;
-
-        return roomUser;
+        try
+        {
+            await _roomUserManager.CreateMemberAsync(roomUser, cancellationToken);
+            roomUser.ApplicationUser = user;
+            return roomUser;
+        }
+        catch (DbUpdateException ex) when (IsUniqueConstraintViolation(ex))
+        {
+            // 一意制約違反: 誰かが先に作成したので、再取得して返す
+            var retry = await _roomUserRepository.GetByRoomAndUserAsync(roomId, applicationUserId, cancellationToken);
+            if (retry != null)
+                return retry;
+            // 再取得にも失敗した場合は元の例外を再スロー
+            throw;
+        }
     }
 
     private async Task<MessageDto> MapToDtoAsync(Message message, CancellationToken cancellationToken = default)
@@ -1416,7 +1466,7 @@ public class MessageManagementService : BaseService, IMessageManagementService
                     FileType = f.FileType,
                     MessageId = f.MessageId != Guid.Empty ? f.MessageId : null,
                     SourceFileId = f.SourceFileId != Guid.Empty ? f.SourceFileId : null,
-                    IsLatest = f.IsLatast,
+                    IsLatest = f.IsLatest,
                     CreatedAt = f.CreatedAt,
                     UpdatedAt = f.UpdatedAt,
                     Size = size,
@@ -1703,6 +1753,16 @@ public class MessageManagementService : BaseService, IMessageManagementService
             Logger.LogError(ex, "Failed to update UserTopic access for topic {TopicId}, user {UserId}", topicId, userId);
             throw;
         }
+    }
+
+    /// <summary>
+    /// DbUpdateExceptionがユニーク制約違反かどうかを判定
+    /// PostgreSQL: 23505, MySQL: 1062
+    /// </summary>
+    private static bool IsUniqueConstraintViolation(DbUpdateException ex)
+    {
+        var message = ex.InnerException?.Message ?? string.Empty;
+        return message.Contains("23505") || message.Contains("1062");
     }
 }
 

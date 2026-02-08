@@ -365,10 +365,21 @@ public class BrainstormManagementService : BaseService, IBrainstormManagementSer
             UseMainIcon = true
         };
 
-        await _roomUserRepository.AddAsync(roomUser, cancellationToken);
-        await _roomUserRepository.SaveChangesAsync(cancellationToken);
-
-        return await _roomUserRepository.GetByRoomAndUserAsync(topic.RoomId, applicationUserId, cancellationToken);
+        try
+        {
+            await _roomUserRepository.AddAsync(roomUser, cancellationToken);
+            await _roomUserRepository.SaveChangesAsync(cancellationToken);
+            return roomUser;
+        }
+        catch (DbUpdateException ex) when (IsUniqueConstraintViolation(ex))
+        {
+            // 一意制約違反: 誰かが先に作成したので、再取得して返す
+            var retry = await _roomUserRepository.GetByRoomAndUserAsync(topic.RoomId, applicationUserId, cancellationToken);
+            if (retry != null)
+                return retry;
+            // 再取得にも失敗した場合は元の例外を再スロー
+            throw;
+        }
     }
 
     // Mapping methods
@@ -412,5 +423,15 @@ public class BrainstormManagementService : BaseService, IBrainstormManagementSer
             VoteType = vote.VoteType,
             Value = vote.Value
         };
+    }
+
+    /// <summary>
+    /// DbUpdateExceptionがユニーク制約違反かどうかを判定
+    /// PostgreSQL: 23505, MySQL: 1062
+    /// </summary>
+    private static bool IsUniqueConstraintViolation(DbUpdateException ex)
+    {
+        var message = ex.InnerException?.Message ?? string.Empty;
+        return message.Contains("23505") || message.Contains("1062");
     }
 }

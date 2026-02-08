@@ -128,7 +128,6 @@ public class RoomUsersController : ControllerBase
             }
             _roomUserRepository.Update(existing);
             await _roomUserRepository.SaveChangesAsync(cancellationToken);
-            await EnsureDefaultJoinPermissionsAsync(existing, cancellationToken);
 
             // Ensure ApplicationUser has icon if using main icon
             if (existing.UseMainIcon && existing.ApplicationUser != null)
@@ -159,9 +158,7 @@ public class RoomUsersController : ControllerBase
             toCreate.IconFileName = await _iconService.EnsureDefaultRoomUserIconAsync(toCreate, seedName, cancellationToken);
         }
 
-        await _roomUserRepository.AddAsync(toCreate, cancellationToken);
-        await _roomUserRepository.SaveChangesAsync(cancellationToken);
-        await EnsureDefaultJoinPermissionsAsync(toCreate, cancellationToken);
+        await _roomUserManager.CreateMemberAsync(toCreate, cancellationToken);
 
         // Ensure ApplicationUser has icon
         if (toCreate.UseMainIcon)
@@ -175,22 +172,6 @@ public class RoomUsersController : ControllerBase
         }
 
         return Ok(MapToDto(toCreate));
-    }
-
-    private async Task EnsureDefaultJoinPermissionsAsync(RoomUser roomUser, CancellationToken cancellationToken)
-    {
-        var permissions = new[]
-        {
-            RoomPermissions.Join,
-            RoomPermissions.TopicRead,
-            RoomPermissions.TopicWrite,
-            RoomPermissions.Write
-        };
-
-        foreach (var permission in permissions)
-        {
-            await _roomUserManager.AddPermissionAsync(roomUser, permission, cancellationToken);
-        }
     }
 
     private async Task<ApplicationUser?> GetCurrentApplicationUserAsync()
@@ -238,8 +219,7 @@ public class RoomUsersController : ControllerBase
 
         ApplyNameSettings(toCreate, request.Name, request.UseMainName);
 
-        await _roomUserRepository.AddAsync(toCreate);
-        await _roomUserRepository.SaveChangesAsync();
+        await _roomUserManager.CreateMemberAsync(toCreate);
 
         return Ok(MapToDto(toCreate));
     }
@@ -272,13 +252,53 @@ public class RoomUsersController : ControllerBase
             return Forbid();
         }
 
-        var fileName = await _iconService.SaveRoomUserIconAsync(roomUser, file, cancellationToken);
-        roomUser.IconFileName = fileName;
-        roomUser.UseMainIcon = false;
-        _roomUserRepository.Update(roomUser);
-        await _roomUserRepository.SaveChangesAsync(cancellationToken);
+        string? newFileName = null;
+        var fileCreated = false;
+        try
+        {
+            newFileName = await _iconService.SaveRoomUserIconAsync(roomUser, file, cancellationToken);
+            fileCreated = true;
 
-        return Ok(new { iconUrl = _iconService.GetRoomUserIconUrl(roomUser) });
+            var oldFileName = roomUser.IconFileName;
+            roomUser.IconFileName = newFileName;
+            roomUser.UseMainIcon = false;
+            _roomUserRepository.Update(roomUser);
+            await _roomUserRepository.SaveChangesAsync(cancellationToken);
+
+            // 古いアイコンファイルを削除
+            if (!string.IsNullOrEmpty(oldFileName))
+            {
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await _iconService.DeleteRoomUserIconAsync(roomUser, oldFileName, cancellationToken);
+                    }
+                    catch
+                    {
+                        // 削除に失敗しても無視
+                    }
+                }, cancellationToken);
+            }
+
+            return Ok(new { iconUrl = _iconService.GetRoomUserIconUrl(roomUser) });
+        }
+        catch
+        {
+            // エラー時にファイルを削除
+            if (fileCreated && !string.IsNullOrEmpty(newFileName))
+            {
+                try
+                {
+                    await _iconService.DeleteRoomUserIconAsync(roomUser, newFileName, cancellationToken);
+                }
+                catch
+                {
+                    // ファイル削除に失敗しても無視
+                }
+            }
+            throw;
+        }
     }
 
     [HttpPut("room/{roomId}/me")]

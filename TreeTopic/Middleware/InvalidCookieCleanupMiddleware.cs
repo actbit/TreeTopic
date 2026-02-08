@@ -25,7 +25,7 @@ public class InvalidCookieCleanupMiddleware
         {
             Path = AuthenticationConstants.Cookie.CookiePath,
             Secure = true,
-            SameSite = SameSiteMode.None
+            SameSite = SameSiteMode.Lax
         };
 
         void DeleteChunkedCookieSet(string cookieKey)

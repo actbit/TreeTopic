@@ -101,7 +101,7 @@ public class FileController : ControllerBase
     );
 
     [HttpGet]
-    [RequireAny(RoomPermissions.Join, TenantPermissions.RoomRead)]
+    [RequireAny(TenantPermissions.RoomRead)]
     public async Task<IActionResult> GetAll(CancellationToken cancellationToken)
     {
         var result = await _fileManagementService.GetAllFilesAsync(cancellationToken);
@@ -125,7 +125,7 @@ public class FileController : ControllerBase
     }
 
     [HttpGet("room/{roomId}")]
-    [RequireAny(RoomPermissions.Join, TenantPermissions.RoomRead)]
+    [RequireAny(RoomPermissions.Read, TenantPermissions.RoomRead)]
     public IActionResult GetByRoom([FromRoute] MaskedGuid roomId)
     {
         var tenant = RouteData.Values["tenant"]?.ToString() ?? "default";
@@ -201,39 +201,61 @@ public class FileController : ControllerBase
         var savedFileName = $"{id:N}_{originalFileName}";
         var savePath = Path.Combine(roomDir, savedFileName);
 
-        await using (var stream = System.IO.File.Create(savePath))
+        // ファイル保存前にパスを記録（エラー時のクリア用）
+        var fileCreated = false;
+        try
         {
-            await file.CopyToAsync(stream, cancellationToken);
+            await using (var stream = System.IO.File.Create(savePath))
+            {
+                await file.CopyToAsync(stream, cancellationToken);
+            }
+            fileCreated = true;
+
+            var mime = !string.IsNullOrWhiteSpace(file.ContentType)
+                ? file.ContentType
+                : (_contentTypeProvider.TryGetContentType(originalFileName, out var ct)
+                    ? ct
+                    : "application/octet-stream");
+
+            // 認可付きダウンロードエンドポイントを使用
+            var url = $"/{tenant}/api/file/download/{roomId}/{savedFileName}".Replace("\\", "/");
+
+            var roomUserName = await GetRoomUserDisplayNameAsync((Guid)roomId, cancellationToken);
+            var dto = new RoomMaterialDto(
+                Id: id.ToString(),
+                RoomId: roomId.ToString(),
+                MessageId: null,
+                FileName: originalFileName,
+                OriginalFileName: originalFileName,
+                MimeType: mime,
+                Size: file.Length,
+                Url: url,
+                FileType: GetFileType(originalFileName, mime),
+                UploadedAt: DateTime.UtcNow,
+                UploadedBy: CurrentUserId.ToString(),
+                UploadedByName: roomUserName,
+                Versions: Array.Empty<object>(),
+                IsArchived: false
+            );
+
+            return Ok(dto);
         }
-
-        var mime = !string.IsNullOrWhiteSpace(file.ContentType)
-            ? file.ContentType
-            : (_contentTypeProvider.TryGetContentType(originalFileName, out var ct)
-                ? ct
-                : "application/octet-stream");
-
-        // 認可付きダウンロードエンドポイントを使用
-        var url = $"/{tenant}/api/file/download/{roomId}/{savedFileName}".Replace("\\", "/");
-
-        var roomUserName = await GetRoomUserDisplayNameAsync((Guid)roomId, cancellationToken);
-        var dto = new RoomMaterialDto(
-            Id: id.ToString(),
-            RoomId: roomId.ToString(),
-            MessageId: null,
-            FileName: originalFileName,
-            OriginalFileName: originalFileName,
-            MimeType: mime,
-            Size: file.Length,
-            Url: url,
-            FileType: GetFileType(originalFileName, mime),
-            UploadedAt: DateTime.UtcNow,
-            UploadedBy: CurrentUserId.ToString(),
-            UploadedByName: roomUserName,
-            Versions: Array.Empty<object>(),
-            IsArchived: false
-        );
-
-        return Ok(dto);
+        catch
+        {
+            // DB保存失敗時やエラー時にファイルを削除
+            if (fileCreated && System.IO.File.Exists(savePath))
+            {
+                try
+                {
+                    System.IO.File.Delete(savePath);
+                }
+                catch
+                {
+                    // ファイル削除に失敗しても無視
+                }
+            }
+            throw;
+        }
     }
 
     [HttpPost]
@@ -271,7 +293,7 @@ public class FileController : ControllerBase
     /// /uploads 静的配信の代わりに使用
     /// </summary>
     [HttpGet("download/{roomId}/{fileName}")]
-    [RequireAny(RoomPermissions.Join, TenantPermissions.RoomRead)]
+    [RequireAny(RoomPermissions.Read, TenantPermissions.RoomRead)]
     public async Task<IActionResult> DownloadFile(
         [FromRoute] MaskedGuid roomId,
         [FromRoute] string fileName,
@@ -286,8 +308,10 @@ public class FileController : ControllerBase
             return BadRequest(new { message = "Invalid file name." });
         }
 
+        if (!roomRoot.EndsWith(Path.DirectorySeparatorChar))
+            roomRoot += Path.DirectorySeparatorChar;
         var filePath = Path.GetFullPath(Path.Combine(roomRoot, safeFileName));
-        if (!filePath.StartsWith(roomRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+        if (!filePath.StartsWith(roomRoot, StringComparison.OrdinalIgnoreCase))
         {
             return BadRequest(new { message = "Invalid file path." });
         }

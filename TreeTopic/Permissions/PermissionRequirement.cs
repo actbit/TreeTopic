@@ -5,7 +5,7 @@ namespace TreeTopic.Permissions;
 /// </summary>
 public enum PermissionScope
 {
-    /// <summary>Role権限（identity.*）</summary>
+    /// <summary>Role権限（tenant.*）</summary>
     Role,
 
     /// <summary>Room権限（room.*）</summary>
@@ -48,7 +48,7 @@ public sealed class PermissionRequirement : IEquatable<PermissionRequirement>
     /// <summary>文字列から変換</summary>
     public static PermissionRequirement Parse(string permission)
     {
-        if (permission.StartsWith("identity.") || permission.StartsWith("tenant."))
+        if (permission.StartsWith("tenant."))
             return new PermissionRequirement(PermissionScope.Role, permission);
         if (permission.StartsWith("room."))
             return new PermissionRequirement(PermissionScope.Room, permission);
@@ -56,7 +56,7 @@ public sealed class PermissionRequirement : IEquatable<PermissionRequirement>
             return new PermissionRequirement(PermissionScope.Topic, permission);
 
         throw new ArgumentException(
-            $"Permission must start with 'identity.', 'room.', or 'topic.'. Got: '{permission}'.");
+            $"Permission must start with 'tenant.', 'room.', or 'topic.'. Got: '{permission}'.");
     }
 }
 
@@ -65,8 +65,8 @@ public sealed class PermissionRequirement : IEquatable<PermissionRequirement>
 /// </summary>
 public static class Perm
 {
-    /// <summary>Identity（Role）権限</summary>
-    public static PermissionRequirement Identity(string name) => new PermissionRequirement(PermissionScope.Role, $"identity.{name}");
+    /// <summary>Tenant（Role）権限</summary>
+    public static PermissionRequirement Tenant(string name) => new PermissionRequirement(PermissionScope.Role, $"tenant.{name}");
 
     /// <summary>Room権限</summary>
     public static PermissionRequirement Room(string name) => new PermissionRequirement(PermissionScope.Room, $"room.{name}");

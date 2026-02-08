@@ -116,6 +116,45 @@ public class IconService
         return fileName;
     }
 
+    public Task DeleteUserIconAsync(ApplicationUser user, string fileName, CancellationToken cancellationToken = default)
+    {
+        return Task.Run(() =>
+        {
+            try
+            {
+                var tenantFolder = GetTenantUploadsFolderName();
+                var path = GetUserIconPath(tenantFolder, fileName);
+                if (System.IO.File.Exists(path))
+                {
+                    System.IO.File.Delete(path);
+                }
+            }
+            catch
+            {
+                // 削除に失敗しても無視
+            }
+        }, cancellationToken);
+    }
+
+    public Task DeleteRoomUserIconAsync(RoomUser roomUser, string fileName, CancellationToken cancellationToken = default)
+    {
+        return Task.Run(() =>
+        {
+            try
+            {
+                var path = GetRoomUserIconPath(fileName);
+                if (System.IO.File.Exists(path))
+                {
+                    System.IO.File.Delete(path);
+                }
+            }
+            catch
+            {
+                // 削除に失敗しても無視
+            }
+        }, cancellationToken);
+    }
+
     private string GetTenantUploadsFolderName()
     {
         var tenantInfo = _tenantAccessor.MultiTenantContext?.TenantInfo;

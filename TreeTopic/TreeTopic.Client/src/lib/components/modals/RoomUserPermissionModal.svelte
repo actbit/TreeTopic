@@ -14,7 +14,6 @@
 
   interface Permission {
     name: string;
-    label?: string;
   }
 
   const modalId = 'room-user-permission';
@@ -299,7 +298,7 @@
                             ? 'bg-primary bg-opacity-10 border-primary text-primary'
                             : 'border-border hover:bg-surface'}"
                         >
-                          {perm.label}
+                          {formatPermissionName(perm.name)}
                         </button>
                       {/each}
                     </div>

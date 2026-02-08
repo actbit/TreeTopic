@@ -235,6 +235,10 @@ namespace TreeTopic
                 .HasForeignKey(rp => rp.RoomUserId)
                 .OnDelete(DeleteBehavior.Cascade);
 
+            modelBuilder.Entity<RoomUser>()
+                .HasIndex(ru => new { ru.RoomId, ru.ApplicationUserId })
+                .IsUnique();
+
             // RoomUserRoomRole 多対多リレーション
             modelBuilder.Entity<RoomUserRoomRole>()
                 .HasIndex(rur => new { rur.RoomUserId, rur.RoomRoleId })

@@ -63,6 +63,11 @@
     modals.open('user-setting', 'User Settings', { roomId });
   }
 
+  function openTenantRolePermissionModal() {
+    modals.open('tenant-role-permission', 'Tenant Role Permissions', { tenant: tenantName });
+    isOpen = false;
+  }
+
   function resolveIconUrl(url?: string): string {
     const raw = (url ?? '').trim();
     if (!raw) return '';
@@ -118,13 +123,22 @@
         <div class="panel-header sticky top-0">
           <div class="flex items-center justify-between">
             <span class="text-small text-light">テナント: {tenantName}</span>
-            <Button
-              onclick={openCreateModal}
-              variant="secondary"
-              size="small"
-            >
-              + New Room
-            </Button>
+            <div class="flex gap-2">
+              <button
+                onclick={openTenantRolePermissionModal}
+                class="px-2 py-1 text-xs border border-border rounded hover:bg-surface transition-colors"
+                title="テナントロール権限管理"
+              >
+                🛡 ロール権限
+              </button>
+              <Button
+                onclick={openCreateModal}
+                variant="secondary"
+                size="small"
+              >
+                + New Room
+              </Button>
+            </div>
           </div>
         </div>
 
@@ -160,30 +174,39 @@
               </div>
 
               {#if room.canEdit !== false}
-                <a
-                  href="/{$page.params.tenant}/room/{room.id}/settings"
-                  onclick={(e) => e.stopPropagation()}
+                <button
+                  onclick={(e) => openRoomSettings(room.id, e)}
                   class="button clickable room-settings-button"
                   title="Room settings"
                 >
                   ⚙
-                </a>
+                </button>
               {/if}
             </div>
           {/each}
 
           {#if $currentRoom && $currentRoom.canEdit !== false}
             <div class="border-t border-border mt-2 pt-2">
-              <a
-                href="/{$page.params.tenant}/room/{$currentRoom.id}/settings"
-                class="list-item clickable hoverable flex items-center gap-2"
-                onclick={() => (isOpen = false)}
+              <button
+                onclick={() => openRoomSettings($currentRoom.id, new Event('click'))}
+                class="list-item clickable hoverable flex items-center gap-2 w-full text-left"
               >
                 <span>⚙</span>
                 <span>ルーム設定</span>
-              </a>
+              </button>
             </div>
           {/if}
+
+          <!-- テナントロール権限管理（右下） -->
+          <div class="border-t border-border mt-2 pt-2">
+            <button
+              onclick={openTenantRolePermissionModal}
+              class="list-item clickable hoverable flex items-center gap-2 w-full text-left"
+            >
+              <span>🛡</span>
+              <span>テナントロール権限</span>
+            </button>
+          </div>
         </div>
       </div>
     {/if}

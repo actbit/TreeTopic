@@ -7,7 +7,6 @@
   import { currentRoom, updateRoom, deleteRoom as deleteRoomStore } from '$lib/stores/rooms';
   import { isRequired } from '$lib/utils/validation';
   import { api } from '$lib/api/client';
-  import { goto } from '$app/navigation';
   import { page } from '$app/stores';
 
   const modalId = 'room-settings';
@@ -25,11 +24,27 @@
   let canManageUsers = $state(false);
   let canManageJoinPermissions = $state(false);
 
+  // タブ状態を永続化
+  const getStoredTab = (): string => {
+    if (typeof window === 'undefined') return 'general';
+    return localStorage.getItem('room_settings_active_tab') || 'general';
+  };
+  const setStoredTab = (tab: string) => {
+    if (typeof window === 'undefined') return;
+    localStorage.setItem('room_settings_active_tab', tab);
+  };
+  let activeTab = $state(getStoredTab());
+
+  // タブ変更時に保存
+  $effect(() => {
+    setStoredTab(activeTab);
+  });
+
   $effect(() => {
     if ($currentRoom) {
       name = $currentRoom.name;
       description = $currentRoom.description ?? '';
-      joinPolicy = $currentRoom.joinPolicy ?? 0;
+      joinPolicy = $currentRoom?.joinPolicy ?? 0;
       void loadCapabilities();
     }
   });
@@ -111,7 +126,7 @@
     try {
       if ($currentRoom) {
         const tenant = api.getCurrentTenant();
-        await api.del(`/${tenant}/api/room/${$currentRoom.id}`);
+        await api.delete(`/${tenant}/api/room/${$currentRoom.id}`);
         deleteRoomStore($currentRoom.id);
         ui.closeModal(modalId);
       }
@@ -127,143 +142,171 @@
   }
 </script>
 
-<Modal {isOpen} title="Room Settings" onClose={handleClose} size="medium">
-  <form onsubmit={handleSave} class="space-y-6">
+<Modal {isOpen} title="Room Settings" onClose={handleClose} size="large">
+  <div class="flex flex-col bg-white">
+    <!-- Error message -->
     {#if error}
-      <ErrorMessage message={error} onDismiss={() => (error = null)} />
-    {/if}
-
-    <Input
-      label="Room Name"
-      type="text"
-      bind:value={name}
-      placeholder="Enter room name"
-      error={nameError}
-      disabled={isLoading || isDeleting || !canManageRoom}
-      required
-    />
-
-    <div class="flex flex-col gap-1">
-      <label for="room-settings-description" class="text-sm font-semibold text-text">Description</label>
-      <textarea
-        id="room-settings-description"
-        bind:value={description}
-        placeholder="Enter room description (optional)"
-        disabled={isLoading || isDeleting || !canManageRoom}
-      ></textarea>
-    </div>
-
-    <div class="flex flex-col gap-1">
-      <label for="room-settings-join-policy" class="text-sm font-semibold text-text">Join Policy</label>
-      <select
-        id="room-settings-join-policy"
-        bind:value={joinPolicy}
-        disabled={isLoading || isDeleting || !canManageRoom}
-      >
-        <option value={0}>Public (any authenticated user can join)</option>
-        <option value={1}>Invite Only (only allowed users/roles can join)</option>
-      </select>
-    </div>
-
-    {#if $currentRoom?.memberCount}
-      <div class="text-sm text-text-light bg-surface rounded-lg p-3">
-        <span class="font-semibold text-text">{$currentRoom.memberCount}</span> member{$currentRoom
-          .memberCount !== 1
-          ? 's'
-          : ''} in this room
+      <div class="p-4 bg-red-50 border-b border-red-200 text-red-800 text-sm flex justify-between items-center">
+        <span>{error}</span>
+        <button onclick={() => (error = null)} class="underline hover:no-underline">Close</button>
       </div>
     {/if}
 
-    <div class="flex gap-4 pt-8">
-      <Button
-        type="submit"
-        variant="primary"
-        size="base"
-        fullWidth
-        loading={isLoading}
-        disabled={isLoading || isDeleting || !canManageRoom}
+    <!-- Tabs -->
+    <div class="flex border-b border-border">
+      <button
+        onclick={() => activeTab = 'general'}
+        class="px-6 py-3 text-sm font-medium {activeTab === 'general'
+          ? 'border-b-2 border-primary text-primary'
+          : 'text-text hover:text-text-light'}"
       >
-        {#if isLoading}
-          Saving...
-        {:else}
-          Save Changes
-        {/if}
-      </Button>
-      <Button
-        type="button"
-        variant="secondary"
-        size="base"
-        fullWidth
-        disabled={isLoading || isDeleting}
-        onclick={handleClose}
-      >
-        Cancel
-      </Button>
-    </div>
-
-    {#if canManageRoles || canManageUsers || canManageJoinPermissions}
-      <div class="border-t border-border pt-8">
-        <div class="flex gap-4 flex-wrap">
-          {#if canManageRoles}
-            <button
-              type="button"
-              class="flex-1 px-4 py-3 border border-primary text-primary rounded-lg hover:bg-primary hover:bg-opacity-10 transition-colors font-medium"
-              onclick={() => modals.open('room-role-permission', 'Room Role Permissions', {
-                tenant: $page.params.tenant,
-                roomId: $currentRoom?.id
-              })}
-            >
-              ロール権限管理
-            </button>
-          {/if}
-          {#if canManageUsers}
-            <button
-              type="button"
-              class="flex-1 px-4 py-3 border border-primary text-primary rounded-lg hover:bg-primary hover:bg-opacity-10 transition-colors font-medium"
-              onclick={() => modals.open('room-user-permission', 'Room User Permissions', {
-                tenant: $page.params.tenant,
-                roomId: $currentRoom?.id
-              })}
-            >
-              ユーザー権限管理
-            </button>
-          {/if}
-          {#if canManageJoinPermissions}
-            <button
-              type="button"
-              class="flex-1 px-4 py-3 border border-primary text-primary rounded-lg hover:bg-primary hover:bg-opacity-10 transition-colors font-medium"
-              onclick={() => modals.open('room-join-permission', 'Room Join Permissions', {
-                tenant: $page.params.tenant,
-                roomId: $currentRoom?.id
-              })}
-            >
-              参加権限管理
-            </button>
-          {/if}
-        </div>
-      </div>
-    {/if}
-
-    {#if $currentRoom?.canDelete}
-      <div class="border-t border-border pt-8">
-        <Button
-          type="button"
-          variant="danger"
-          size="base"
-          fullWidth
-          loading={isDeleting}
-          disabled={isLoading || isDeleting}
-          onclick={handleDelete}
+        General
+      </button>
+      {#if canManageRoles || canManageUsers || canManageJoinPermissions}
+        <button
+          onclick={() => activeTab = 'permissions'}
+          class="px-6 py-3 text-sm font-medium {activeTab === 'permissions'
+            ? 'border-b-2 border-primary text-primary'
+            : 'text-text hover:text-text-light'}"
         >
-          {#if isDeleting}
-            Deleting...
-          {:else}
-            Delete Room
+          Permissions
+        </button>
+      {/if}
+    </div>
+
+    <!-- Content -->
+    <div class="overflow-auto p-6" style="max-height: calc(100vh - 220px);">
+      {#if activeTab === 'general'}
+        <form onsubmit={handleSave} class="space-y-6">
+          <div>
+            <label class="block text-sm font-medium text-text mb-2">Room Name</label>
+            <input
+              type="text"
+              bind:value={name}
+              placeholder="Enter room name"
+              disabled={isLoading || isDeleting || !canManageRoom}
+              class="w-full px-3 py-2 border border-border rounded focus:outline-none focus:border-primary disabled:opacity-50"
+              required
+            />
+            {#if nameError}
+              <p class="text-sm text-red-600 mt-1">{nameError}</p>
+            {/if}
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-text mb-2">Description</label>
+            <textarea
+              bind:value={description}
+              placeholder="Enter room description (optional)"
+              disabled={isLoading || isDeleting || !canManageRoom}
+              class="w-full px-3 py-2 border border-border rounded focus:outline-none focus:border-primary disabled:opacity-50 resize-vertical"
+              rows="3"
+            ></textarea>
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-text mb-2">Join Policy</label>
+            <select
+              bind:value={joinPolicy}
+              disabled={isLoading || isDeleting || !canManageRoom}
+              class="w-full px-3 py-2 border border-border rounded focus:outline-none focus:border-primary disabled:opacity-50"
+            >
+              <option value={0}>Public (any authenticated user can join)</option>
+              <option value={1}>Invite Only (only allowed users/roles can join)</option>
+            </select>
+          </div>
+
+          {#if $currentRoom?.memberCount}
+            <div class="text-sm text-text-light bg-surface rounded-lg p-3">
+              <span class="font-semibold text-text">{$currentRoom.memberCount}</span> member{$currentRoom
+                .memberCount !== 1
+                ? 's'
+                : ''} in this room
+            </div>
           {/if}
-        </Button>
-      </div>
-    {/if}
-  </form>
+
+          <div class="flex gap-3 pt-4 border-t border-border">
+            <Button
+              type="submit"
+              variant="primary"
+              disabled={isLoading || isDeleting || !canManageRoom}
+            >
+              {isLoading ? 'Saving...' : 'Save Changes'}
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={isLoading || isDeleting}
+              onclick={handleClose}
+            >
+              Cancel
+            </Button>
+          </div>
+
+          {#if $currentRoom?.canDelete}
+            <div class="pt-4 border-t border-border">
+              <Button
+                type="button"
+                variant="danger"
+                disabled={isLoading || isDeleting}
+                onclick={handleDelete}
+              >
+                {isDeleting ? 'Deleting...' : 'Delete Room'}
+              </Button>
+            </div>
+          {/if}
+        </form>
+
+      {:else if activeTab === 'permissions' && (canManageRoles || canManageUsers || canManageJoinPermissions)}
+        <div class="space-y-6">
+          <p class="text-sm text-text-light">Manage room permissions and access control.</p>
+
+          <div class="grid grid-cols-1 {canManageRoles && canManageUsers && canManageJoinPermissions
+            ? 'lg:grid-cols-3'
+            : 'md:grid-cols-2'} gap-4">
+            {#if canManageRoles}
+              <button
+                onclick={() => modals.open('room-role-permission', 'Role Permissions', {
+                  tenant: $page.params.tenant,
+                  roomId: $currentRoom?.id
+                })}
+                class="p-4 border border-border rounded-lg hover:bg-surface transition-colors text-left"
+              >
+                <h3 class="font-semibold text-text mb-1">Role Permissions</h3>
+                <p class="text-sm text-text-light">Manage permissions for room roles</p>
+              </button>
+            {/if}
+
+            {#if canManageUsers}
+              <button
+                onclick={() => modals.open('room-user-permission', 'User Permissions', {
+                  tenant: $page.params.tenant,
+                  roomId: $currentRoom?.id
+                })}
+                class="p-4 border border-border rounded-lg hover:bg-surface transition-colors text-left"
+              >
+                <h3 class="font-semibold text-text mb-1">User Permissions</h3>
+                <p class="text-sm text-text-light">Manage individual user permissions</p>
+              </button>
+            {/if}
+
+            {#if canManageJoinPermissions}
+              <button
+                onclick={() => modals.open('room-join-permission', 'Join Permissions', {
+                  tenant: $page.params.tenant,
+                  roomId: $currentRoom?.id
+                })}
+                class="p-4 border border-border rounded-lg hover:bg-surface transition-colors text-left"
+              >
+                <h3 class="font-semibold text-text mb-1">Join Permissions</h3>
+                <p class="text-sm text-text-light">Manage who can join this room</p>
+              </button>
+            {/if}
+          </div>
+        </div>
+      {/if}
+    </div>
+  </div>
 </Modal>
 
 <style>
