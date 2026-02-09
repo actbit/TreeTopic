@@ -39,7 +39,7 @@ public class RealtimeAccessService : IRealtimeAccessService
         // トピックのルームIDを取得（Finbuckleのクエリフィルタがテナント分離を自動適用）
         var roomId = await _dbContext.Topics
             .AsNoTracking()
-            .Where(t => t.Id == topicId)
+            .Where(t => t.Id == (Guid)topicId)
             .Select(t => (Guid?)t.RoomId)
             .FirstOrDefaultAsync(cancellationToken);
 
@@ -83,7 +83,7 @@ public class RealtimeAccessService : IRealtimeAccessService
         // ルームの存在確認（Finbuckleのクエリフィルタがテナント分離を自動適用）
         var roomExists = await _dbContext.Rooms
             .AsNoTracking()
-            .AnyAsync(r => r.Id == roomId, cancellationToken);
+            .AnyAsync(r => r.Id == (Guid)roomId, cancellationToken);
 
         if (!roomExists)
         {
@@ -94,7 +94,7 @@ public class RealtimeAccessService : IRealtimeAccessService
         // RoomUserとして参加しているか確認
         var isRoomUser = await _dbContext.RoomUsers
             .AsNoTracking()
-            .AnyAsync(ru => ru.RoomId == roomId && ru.ApplicationUserId == currentUserId, cancellationToken);
+            .AnyAsync(ru => ru.RoomId == (Guid)roomId && ru.ApplicationUserId == currentUserId, cancellationToken);
         if (isRoomUser)
         {
             return true;
@@ -121,7 +121,7 @@ public class RealtimeAccessService : IRealtimeAccessService
         }
 
         // ユーザーID照合: 自分のグループにのみ参加可能
-        if (currentUserId != userId)
+        if (currentUserId != (Guid)userId)
         {
             _logger.LogWarning("[RealtimeAccessService] CanJoinRoomUserGroup denied: userId mismatch. CurrentUserId={CurrentUserId}, RequestedUserId={RequestedUserId}",
                 currentUserId, userId);
@@ -131,7 +131,7 @@ public class RealtimeAccessService : IRealtimeAccessService
         // RoomUserとして参加しているか確認（Finbuckleのクエリフィルタがテナント分離を自動適用）
         return await _dbContext.RoomUsers
             .AsNoTracking()
-            .AnyAsync(ru => ru.RoomId == roomId && ru.ApplicationUserId == currentUserId, cancellationToken);
+            .AnyAsync(ru => ru.RoomId == (Guid)roomId && ru.ApplicationUserId == currentUserId, cancellationToken);
     }
 
     private bool TryGetCurrentUserId(ClaimsPrincipal? user, out Guid userId)

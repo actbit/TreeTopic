@@ -145,7 +145,7 @@ public class RoomController : ControllerBase
     }
 
     [HttpPost]
-    [RequireAny(PermissionScope.Room, RoomPermissions.Manage, TenantPermissions.RoomManage)]
+    [RequireAny(PermissionScope.Role, TenantPermissions.RoomManage)]
     public async Task<IActionResult> Create([FromBody] CreateRoomRequest request, CancellationToken cancellationToken)
     {
         if (!ModelState.IsValid)

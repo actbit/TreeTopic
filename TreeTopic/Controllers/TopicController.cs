@@ -30,14 +30,16 @@ public class TopicController : ControllerBase
         _topicPermissionManager = topicPermissionManager;
     }
 
-    private Guid? CurrentUserId
+    private Guid CurrentUserId
     {
         get
         {
-            var userIdStr = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-            if (Guid.TryParse(userIdStr, out var userId))
-                return userId;
-            return null;
+            var userIdValue = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (!Guid.TryParse(userIdValue, out var userId))
+            {
+                throw new UnauthorizedAccessException("User is not authenticated or has invalid user ID.");
+            }
+            return userId;
         }
     }
 
@@ -116,10 +118,6 @@ public class TopicController : ControllerBase
     {
         var topicGuid = (Guid)topicId;
         var userId = CurrentUserId;
-        if (!userId.HasValue)
-        {
-            return Unauthorized();
-        }
 
         // トピックのルームIDを取得
         var topic = await _db.Topics
@@ -137,7 +135,7 @@ public class TopicController : ControllerBase
                 .ThenInclude(rur => rur.RoomRole)
                     .ThenInclude(rr => rr!.Permissions)
             .Include(ru => ru.RoomPermission)
-            .FirstOrDefaultAsync(ru => ru.RoomId == topic.RoomId && ru.ApplicationUserId == userId.Value, cancellationToken);
+            .FirstOrDefaultAsync(ru => ru.RoomId == topic.RoomId && ru.ApplicationUserId == userId, cancellationToken);
 
         if (roomUser == null)
         {
@@ -239,10 +237,7 @@ public class TopicController : ControllerBase
         CancellationToken cancellationToken)
     {
         var userId = CurrentUserId;
-        if (!userId.HasValue)
-            return Unauthorized();
-
-        var result = await _topicManagementService.GetTopicsWithStatsAsync((Guid)roomId, userId.Value, cancellationToken);
+        var result = await _topicManagementService.GetTopicsWithStatsAsync((Guid)roomId, userId, cancellationToken);
         return result.ToApiResult();
     }
 
@@ -256,10 +251,7 @@ public class TopicController : ControllerBase
         CancellationToken cancellationToken)
     {
         var userId = CurrentUserId;
-        if (!userId.HasValue)
-            return Unauthorized();
-
-        var result = await _topicManagementService.GetTopicWithStatsByIdAsync((Guid)topicId, userId.Value, cancellationToken);
+        var result = await _topicManagementService.GetTopicWithStatsByIdAsync((Guid)topicId, userId, cancellationToken);
         return result.ToApiResult();
     }
 
@@ -273,13 +265,7 @@ public class TopicController : ControllerBase
         CancellationToken cancellationToken)
     {
         var userId = CurrentUserId;
-
-        if (!userId.HasValue)
-        {
-            return Unauthorized();
-        }
-
-        var result = await _topicManagementService.GetRootTopicsWithUnreadAsync((Guid)roomId, userId.Value, cancellationToken);
+        var result = await _topicManagementService.GetRootTopicsWithUnreadAsync((Guid)roomId, userId, cancellationToken);
         return result.ToApiResult();
     }
 
@@ -293,10 +279,7 @@ public class TopicController : ControllerBase
         CancellationToken cancellationToken)
     {
         var userId = CurrentUserId;
-        if (!userId.HasValue)
-            return Unauthorized();
-
-        var result = await _topicManagementService.GetAllTopicsWithUnreadAsync((Guid)roomId, userId.Value, cancellationToken);
+        var result = await _topicManagementService.GetAllTopicsWithUnreadAsync((Guid)roomId, userId, cancellationToken);
         return result.ToApiResult();
     }
 }

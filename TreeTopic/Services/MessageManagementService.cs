@@ -1,6 +1,5 @@
 using Finbuckle.MultiTenant;
 using Finbuckle.MultiTenant.Abstractions;
-using MaskedUUID.AspNetCore.Services;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.SignalR;
@@ -52,7 +51,6 @@ public class MessageManagementService : BaseService, IMessageManagementService
     private readonly IHubContext<MessageHub, IMessageHubClient> _messageHub;
     private readonly IHubContext<RoomTopicHub, IRoomTopicHubClient> _roomTopicHub;
     private readonly IHubContext<RoomUserSyncHub, IRoomUserSyncHubClient> _roomUserSyncHub;
-    private readonly IMaskedUUIDService _maskedUuidService;
     private readonly IPushService _pushService;
     private readonly IRegexSearchPatternConverter _regexSearchPatternConverter;
     private readonly ApplicationDbContext _dbContext;
@@ -72,7 +70,6 @@ public class MessageManagementService : BaseService, IMessageManagementService
         IHubContext<MessageHub, IMessageHubClient> messageHub,
         IHubContext<RoomTopicHub, IRoomTopicHubClient> roomTopicHub,
         IHubContext<RoomUserSyncHub, IRoomUserSyncHubClient> roomUserSyncHub,
-        IMaskedUUIDService maskedUuidService,
         IPushService pushService,
         IRegexSearchPatternConverter regexSearchPatternConverter,
         ApplicationDbContext dbContext,
@@ -92,7 +89,6 @@ public class MessageManagementService : BaseService, IMessageManagementService
         _messageHub = messageHub;
         _roomTopicHub = roomTopicHub;
         _roomUserSyncHub = roomUserSyncHub;
-        _maskedUuidService = maskedUuidService;
         _pushService = pushService;
         _regexSearchPatternConverter = regexSearchPatternConverter;
         _dbContext = dbContext;
@@ -138,8 +134,8 @@ public class MessageManagementService : BaseService, IMessageManagementService
     {
         try
         {
-            var maskedTopicId = _maskedUuidService.EncodeSynchronous(topicId);
-            return MessageHubGroups.Topic(string.Empty, maskedTopicId);
+            var tenantKey = ResolveTenantKey();
+            return MessageHubGroups.Topic(tenantKey, topicId.ToString());
         }
         catch (Exception ex)
         {
@@ -198,9 +194,11 @@ public class MessageManagementService : BaseService, IMessageManagementService
         }
         unreadCount = await CountUnreadMessagesAsync(topicId, userTopic?.LastReadMessageId, cancellationToken);
 
+        var tenantKey = ResolveTenantKey();
         var groupName = RoomUserSyncHubGroups.RoomUser(
-            _maskedUuidService.EncodeSynchronous(topic.RoomId),
-            _maskedUuidService.EncodeSynchronous(userId));
+            tenantKey,
+            topic.RoomId.ToString(),
+            userId.ToString());
 
         var payload = new TopicUnreadUpdateEvent(
             topic.RoomId,
@@ -301,7 +299,8 @@ public class MessageManagementService : BaseService, IMessageManagementService
     private async Task BroadcastTopicCreatedAsync(TopicDetailDto dto, CancellationToken cancellationToken = default)
     {
         var roomId = (Guid)dto.RoomId;
-        var groupName = RoomTopicHubGroups.Room(_maskedUuidService.EncodeSynchronous(roomId));
+        var tenantKey = ResolveTenantKey();
+        var groupName = RoomTopicHubGroups.Room(tenantKey, roomId.ToString());
         Logger.LogInformation("[RoomTopicHub] Broadcast TopicCreated topic={TopicId} room={RoomId} group={Group}", dto.Id, dto.RoomId, groupName);
         var payload = await MapTopicRealtimeAsync(dto, cancellationToken);
         await _roomTopicHub.Clients.Group(groupName).TopicCreated(payload);
@@ -310,7 +309,8 @@ public class MessageManagementService : BaseService, IMessageManagementService
     private async Task BroadcastTopicUpdatedAsync(TopicDetailDto dto, CancellationToken cancellationToken = default)
     {
         var roomId = (Guid)dto.RoomId;
-        var groupName = RoomTopicHubGroups.Room(_maskedUuidService.EncodeSynchronous(roomId));
+        var tenantKey = ResolveTenantKey();
+        var groupName = RoomTopicHubGroups.Room(tenantKey, roomId.ToString());
         Logger.LogInformation("[RoomTopicHub] Broadcast TopicUpdated topic={TopicId} room={RoomId} group={Group}", dto.Id, dto.RoomId, groupName);
         var payload = await MapTopicRealtimeAsync(dto, cancellationToken);
         await _roomTopicHub.Clients.Group(groupName).TopicUpdated(payload);
@@ -865,6 +865,7 @@ public class MessageManagementService : BaseService, IMessageManagementService
             var dto = await MapToDtoAsync(message, cancellationToken);
 
             TopicDetailDto? createdTopicDto = null;
+            Result<List<MessageDto>>? moveResult = null;
             if (request.ChildTopic != null)
             {
                 var childRequest = request.ChildTopic;
@@ -922,7 +923,6 @@ public class MessageManagementService : BaseService, IMessageManagementService
                     .Distinct()
                     .ToList();
 
-                Result<List<MessageDto>>? moveResult = null;
                 if (selectedMessageIds != null && selectedMessageIds.Count > 0)
                 {
                     moveResult = await MoveMessagesByIdsInternalAsync(
@@ -951,6 +951,22 @@ public class MessageManagementService : BaseService, IMessageManagementService
             try
             {
                 await BroadcastMessageCreatedAsync(dto);
+
+                // 移動されたメッセージのブロードキャスト
+                if (moveResult is { IsSuccess: true, Data: { } movedDtos })
+                {
+                    foreach (var movedDto in movedDtos)
+                    {
+                        await BroadcastMessageDeletedAsync(movedDto.Id, topic.Id);
+                        await BroadcastMessageCreatedAsync(movedDto);
+                    }
+                }
+
+                // 移動によって親が変わった子Topicのブロードキャスト
+                if (createdTopicDto != null && moveResult is { IsSuccess: true })
+                {
+                    await BroadcastTopicUpdatedAsync(createdTopicDto, cancellationToken);
+                }
             }
             catch (Exception ex)
             {
@@ -1254,85 +1270,53 @@ public class MessageManagementService : BaseService, IMessageManagementService
         IReadOnlyCollection<Guid> messageIds,
         CancellationToken cancellationToken)
     {
-        // トランザクションを使用してデータ整合性を確保
-        using var transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
-        try
+        // 呼び出し元(CreateMessageAsync)のトランザクション内で実行される
+        var ids = messageIds.ToList();
+        if (ids.Count == 0)
+            return Result<List<MessageDto>>.Success(new List<MessageDto>());
+
+        var messages = await _messageRepository.Query()
+            .Where(m => ids.Contains(m.Id) && m.TopicId == sourceTopicId)
+            .Include(m => m.RoomUser)
+            .ThenInclude(ru => ru.ApplicationUser)
+            .Include(m => m.Files)
+            .ToListAsync(cancellationToken);
+
+        if (messages.Count == 0)
+            return Result<List<MessageDto>>.Success(new List<MessageDto>());
+
+        foreach (var message in messages)
         {
-            var ids = messageIds.ToList();
-            if (ids.Count == 0)
-                return Result<List<MessageDto>>.Success(new List<MessageDto>());
-
-            var messages = await _messageRepository.Query()
-                .Where(m => ids.Contains(m.Id) && m.TopicId == sourceTopicId)
-                .Include(m => m.RoomUser)
-                .ThenInclude(ru => ru.ApplicationUser)
-                .Include(m => m.Files)
-                .ToListAsync(cancellationToken);
-
-            if (messages.Count == 0)
-                return Result<List<MessageDto>>.Success(new List<MessageDto>());
-
-            foreach (var message in messages)
-            {
-                message.TopicId = targetTopicId;
-                message.UpdatedAt = DateTime.UtcNow;
-                _messageRepository.Update(message);
-            }
-
-            await _messageRepository.SaveChangesAsync(cancellationToken);
-
-            // メッセージに紐づいた子Topicの親を移動先Topicに変更
-            var movedMessageIds = messages.Select(m => m.Id).ToList();
-            var childTopics = await _topicRepository.Query()
-                .Where(t => movedMessageIds.Contains(t.SourceMessageId!.Value))
-                .ToListAsync(cancellationToken);
-
-            if (childTopics.Count > 0)
-            {
-                foreach (var childTopic in childTopics)
-                {
-                    childTopic.ParentId = targetTopicId;
-                }
-                await _topicRepository.SaveChangesAsync(cancellationToken);
-
-                // トランザクションをコミット（ブロードキャスト前に確定）
-                await transaction.CommitAsync(cancellationToken);
-
-                // 子Topicの更新をブロードキャスト
-                foreach (var childTopic in childTopics)
-                {
-                    var topicDto = MapTopicDto(childTopic);
-                    await BroadcastTopicUpdatedAsync(topicDto, cancellationToken);
-                }
-            }
-            else
-            {
-                // 子Topicがない場合もトランザクションをコミット
-                await transaction.CommitAsync(cancellationToken);
-            }
-
-            var dtos = new List<MessageDto>();
-            foreach (var message in messages)
-            {
-                await BroadcastMessageDeletedAsync(message.Id, sourceTopicId);
-                var dto = await MapToDtoAsync(message, cancellationToken);
-                dtos.Add(dto);
-            }
-
-            foreach (var dto in dtos)
-            {
-                await BroadcastMessageCreatedAsync(dto);
-            }
-
-            return Result<List<MessageDto>>.Success(dtos);
+            message.TopicId = targetTopicId;
+            message.UpdatedAt = DateTime.UtcNow;
+            _messageRepository.Update(message);
         }
-        catch (Exception ex)
+
+        await _messageRepository.SaveChangesAsync(cancellationToken);
+
+        // メッセージに紐づいた子Topicの親を移動先Topicに変更
+        var movedMessageIds = messages.Select(m => m.Id).ToList();
+        var childTopics = await _topicRepository.Query()
+            .Where(t => movedMessageIds.Contains(t.SourceMessageId!.Value))
+            .ToListAsync(cancellationToken);
+
+        if (childTopics.Count > 0)
         {
-            await transaction.RollbackAsync(cancellationToken);
-            Logger.LogError(ex, "Failed to move messages by IDs. SourceTopicId={SourceTopicId}, TargetTopicId={TargetTopicId}, MessageCount={MessageCount}",
-                sourceTopicId, targetTopicId, messageIds.Count);
-            throw;
+            foreach (var childTopic in childTopics)
+            {
+                childTopic.ParentId = targetTopicId;
+            }
+            await _topicRepository.SaveChangesAsync(cancellationToken);
         }
+
+        var dtos = new List<MessageDto>();
+        foreach (var message in messages)
+        {
+            var dto = await MapToDtoAsync(message, cancellationToken);
+            dtos.Add(dto);
+        }
+
+        return Result<List<MessageDto>>.Success(dtos);
     }
 
     private async Task ProcessUploadedFilesAsync(
@@ -1565,7 +1549,8 @@ public class MessageManagementService : BaseService, IMessageManagementService
 
                 // 未読カウントを更新して通知（送信者以外のRoomUsers）
                 var roomUserSyncHub = scope.ServiceProvider.GetRequiredService<IHubContext<RoomUserSyncHub, IRoomUserSyncHubClient>>();
-                var maskedUuidService = scope.ServiceProvider.GetRequiredService<IMaskedUUIDService>();
+                var tenantAccessor = scope.ServiceProvider.GetRequiredService<IMultiTenantContextAccessor<ApplicationTenantInfo>>();
+                var tenantKey = RoomUserSyncHubGroups.ResolveTenantKey(tenantAccessor.MultiTenantContext?.TenantInfo);
 
                 var roomUsersForUnread = await dbContext.RoomUsers
                     .Where(ru => ru.RoomId == topic.RoomId && ru.Id != senderRoomUser.Id)
@@ -1658,8 +1643,9 @@ public class MessageManagementService : BaseService, IMessageManagementService
                         }
 
                         var groupName = RoomUserSyncHubGroups.RoomUser(
-                            maskedUuidService.EncodeSynchronous(topic.RoomId),
-                            maskedUuidService.EncodeSynchronous(ru.ApplicationUserId));
+                            tenantKey,
+                            topic.RoomId.ToString(),
+                            ru.ApplicationUserId.ToString());
 
                         var payload = new TopicUnreadUpdateEvent(
                             topic.RoomId,
@@ -1763,6 +1749,11 @@ public class MessageManagementService : BaseService, IMessageManagementService
     {
         var message = ex.InnerException?.Message ?? string.Empty;
         return message.Contains("23505") || message.Contains("1062");
+    }
+
+    private string ResolveTenantKey()
+    {
+        return MessageHubGroups.ResolveTenantKey(_tenantAccessor.MultiTenantContext?.TenantInfo);
     }
 }
 

@@ -226,7 +226,10 @@ public class TopicPermissionManager
         Guid childTopicId,
         CancellationToken cancellationToken = default)
     {
-        using var transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
+        var hasExistingTransaction = _context.Database.CurrentTransaction != null;
+        var transaction = hasExistingTransaction
+            ? null
+            : await _context.Database.BeginTransactionAsync(cancellationToken);
         try
         {
             // 1. TopicRolePermissionをコピー
@@ -264,7 +267,7 @@ public class TopicPermissionManager
             }
 
             await _context.SaveChangesAsync(cancellationToken);
-            await transaction.CommitAsync(cancellationToken);
+            if (transaction != null) await transaction.CommitAsync(cancellationToken);
 
             _logger.LogInformation(
                 "Permissions copied from parent topic {ParentTopicId} to child topic {ChildTopicId}: {RoleCount} role permissions, {UserCount} user permissions",
@@ -272,10 +275,14 @@ public class TopicPermissionManager
         }
         catch (Exception ex)
         {
-            await transaction.RollbackAsync(cancellationToken);
+            if (transaction != null) await transaction.RollbackAsync(cancellationToken);
             _logger.LogError(ex, "Failed to copy permissions from parent topic {ParentTopicId} to child topic {ChildTopicId}. Transaction rolled back.",
                 parentTopicId, childTopicId);
             throw;
+        }
+        finally
+        {
+            if (transaction != null) await transaction.DisposeAsync();
         }
     }
 

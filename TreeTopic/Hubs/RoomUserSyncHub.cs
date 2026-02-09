@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 using TreeTopic.Dtos;
 using MaskedUUID.AspNetCore.Types;
+using TreeTopic.Models;
 using TreeTopic.Services;
 
 namespace TreeTopic.Hubs;

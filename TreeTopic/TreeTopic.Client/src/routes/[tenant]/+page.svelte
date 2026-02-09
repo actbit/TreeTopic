@@ -6,6 +6,8 @@
   import { roomList, setRooms, setCurrentRoom } from '$lib/stores/rooms';
   import { ui } from '$lib/stores/ui';
   import RoomCreateModal from '$lib/components/rooms/RoomCreateModal.svelte';
+  import RoomSettingsModal from '$lib/components/rooms/RoomSettingsModal.svelte';
+  import TenantRolePermissionModal from '$lib/components/modals/TenantRolePermissionModal.svelte';
   import { api, getCurrentTenant } from '$lib/api/client';
   import type { RawRoom } from '$lib/types/signalr';
 
@@ -82,6 +84,15 @@
     goto(`/${tenant}/room/${roomId}`);
   }
 
+  function openRoomSettings(roomId: string, e: Event) {
+    e.stopPropagation();
+    const room = $roomList.find((r) => r.id === roomId);
+    if (room) {
+      setCurrentRoom(room);
+      ui.openModal({ id: 'room-settings', title: `${room.name} Settings`, type: 'custom' });
+    }
+  }
+
   onMount(() => {
     loadTenantData();
   });
@@ -112,9 +123,14 @@
     <div class="panel w-full max-w-lg room-select-panel">
       <div class="panel-header">
         <h1 class="panel-title">Select a room</h1>
-        <button class="button button-secondary button-small" onclick={openCreateModal}>
-          New Room
-        </button>
+        <div class="flex gap-2">
+          <button class="button button-secondary button-small" onclick={() => ui.openModal({ id: 'tenant-role-permission', title: 'Tenant Settings' })}>
+            ⚙️ Settings
+          </button>
+          <button class="button button-secondary button-small" onclick={openCreateModal}>
+            New Room
+          </button>
+        </div>
       </div>
 
       <div class="panel-body">
@@ -133,27 +149,36 @@
         {:else}
           <div class="list">
             {#each $roomList as room (room.id)}
-              <button
-                class="list-item clickable hoverable w-full text-left"
-                class:disabled={room.canJoin === false}
-                onclick={() => enterRoom(room.id)}
-                disabled={room.canJoin === false}
-              >
-                <div class="flex items-center justify-between">
-                  <div class="min-w-0">
-                    <div class="text-bold text-base">{room.name}</div>
-                    {#if room.description}
-                      <div class="text-small text-light truncate">{room.description}</div>
-                    {/if}
-                    {#if room.canJoin === false}
-                      <div class="text-small text-light">You cannot join this room</div>
+              <div class="list-item w-full flex items-center justify-between gap-2">
+                <button
+                  class="flex-1 clickable hoverable text-left px-3 py-2"
+                  class:disabled={room.canJoin === false}
+                  onclick={() => enterRoom(room.id)}
+                  disabled={room.canJoin === false}
+                >
+                  <div class="flex items-center justify-between">
+                    <div class="min-w-0">
+                      <div class="text-bold text-base">{room.name}</div>
+                      {#if room.description}
+                        <div class="text-small text-light truncate">{room.description}</div>
+                      {/if}
+                      {#if room.canJoin === false}
+                        <div class="text-small text-light">You cannot join this room</div>
+                      {/if}
+                    </div>
+                    {#if room.unreadCount > 0}
+                      <span class="badge badge-error">{room.unreadCount}</span>
                     {/if}
                   </div>
-                  {#if room.unreadCount > 0}
-                    <span class="badge badge-error">{room.unreadCount}</span>
-                  {/if}
-                </div>
-              </button>
+                </button>
+                <button
+                  class="button button-icon button-small"
+                  onclick={(e) => openRoomSettings(room.id, e)}
+                  title="Room settings"
+                >
+                  ⚙️
+                </button>
+              </div>
             {/each}
           </div>
         {/if}
@@ -162,6 +187,8 @@
   </div>
 
   <RoomCreateModal />
+  <RoomSettingsModal />
+  <TenantRolePermissionModal />
 {:else}
   <div class="flex items-center justify-center h-screen bg-gradient-to-br from-primary to-secondary">
     <div class="text-center text-white">

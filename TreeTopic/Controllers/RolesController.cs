@@ -22,7 +22,6 @@ public class RolesController : ControllerBase
     }
 
     [HttpGet]
-    [Authorize]
     [RequireAny(PermissionScope.Role, TenantPermissions.RoleRead, TenantPermissions.UserAdmin)]
     public async Task<ActionResult<List<RoleDto>>> List()
     {

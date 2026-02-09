@@ -8,6 +8,8 @@ using Microsoft.AspNetCore.SignalR;
 using MaskedUUID.AspNetCore.Services;
 using TreeTopic.Hubs;
 using TreeTopic;
+using Finbuckle.MultiTenant;
+using Finbuckle.MultiTenant.Abstractions;
 
 namespace TreeTopic.Services;
 
@@ -45,6 +47,7 @@ public class TopicManagementService : BaseService, ITopicManagementService
     private readonly ApplicationDbContext _dbContext;
     private readonly ILogger<TopicDtoBuilder> _topicDtoBuilderLogger;
     private readonly ILogger<TopicPermissionManager> _permissionManagerLogger;
+    private readonly IMultiTenantContextAccessor<ApplicationTenantInfo> _tenantAccessor;
 
     public TopicManagementService(
         ITopicRepository topicRepository,
@@ -54,6 +57,7 @@ public class TopicManagementService : BaseService, ITopicManagementService
         ApplicationDbContext dbContext,
         ILogger<TopicDtoBuilder> topicDtoBuilderLogger,
         ILogger<TopicPermissionManager> permissionManagerLogger,
+        IMultiTenantContextAccessor<ApplicationTenantInfo> tenantAccessor,
         ILogger<TopicManagementService> logger) : base(logger)
     {
         _topicRepository = topicRepository;
@@ -63,6 +67,7 @@ public class TopicManagementService : BaseService, ITopicManagementService
         _dbContext = dbContext;
         _topicDtoBuilderLogger = topicDtoBuilderLogger;
         _permissionManagerLogger = permissionManagerLogger;
+        _tenantAccessor = tenantAccessor;
     }
 
     public async Task<Result<List<TopicBasicDto>>> GetAllTopicsAsync(Guid? userId = null, CancellationToken cancellationToken = default)
@@ -468,7 +473,8 @@ public class TopicManagementService : BaseService, ITopicManagementService
 
     private async Task BroadcastTopicCreatedAsync(Guid topicId, TopicDetailDto dto, CancellationToken cancellationToken)
     {
-        var groupName = RoomTopicHubGroups.Room(_maskedUuidService.EncodeSynchronous((Guid)dto.RoomId));
+        var tenantKey = ResolveTenantKey();
+        var groupName = RoomTopicHubGroups.Room(tenantKey, dto.RoomId.ToString());
         var payload = await MapToRealtimeAsync(topicId, dto, cancellationToken);
         Logger.LogInformation("[RoomTopicHub] Broadcast TopicCreated topic={TopicId} room={RoomId} group={Group}", dto.Id, dto.RoomId, groupName);
         await _roomTopicHub.Clients.Group(groupName).TopicCreated(payload);
@@ -476,7 +482,8 @@ public class TopicManagementService : BaseService, ITopicManagementService
 
     private async Task BroadcastTopicUpdatedAsync(Guid topicId, TopicDetailDto dto, CancellationToken cancellationToken)
     {
-        var groupName = RoomTopicHubGroups.Room(_maskedUuidService.EncodeSynchronous((Guid)dto.RoomId));
+        var tenantKey = ResolveTenantKey();
+        var groupName = RoomTopicHubGroups.Room(tenantKey, dto.RoomId.ToString());
         var payload = await MapToRealtimeAsync(topicId, dto, cancellationToken);
         Logger.LogInformation("[RoomTopicHub] Broadcast TopicUpdated topic={TopicId} room={RoomId} group={Group}", dto.Id, dto.RoomId, groupName);
         await _roomTopicHub.Clients.Group(groupName).TopicUpdated(payload);
@@ -484,9 +491,10 @@ public class TopicManagementService : BaseService, ITopicManagementService
 
     private Task BroadcastTopicDeletedAsync(Topic topic)
     {
+        var tenantKey = ResolveTenantKey();
         var roomId = topic.RoomId;
         var topicId = topic.Id;
-        var groupName = RoomTopicHubGroups.Room(_maskedUuidService.EncodeSynchronous(roomId));
+        var groupName = RoomTopicHubGroups.Room(tenantKey, roomId.ToString());
         var payload = new TopicDeletedEvent(
             topicId,
             roomId,
@@ -782,5 +790,10 @@ public class TopicManagementService : BaseService, ITopicManagementService
             var dtos = await builder.BuildTreeAsync(cancellationToken);
             return Result<List<TopicTreeDto>>.Success(dtos);
         }, nameof(GetAllTopicsWithUnreadAsync));
+    }
+
+    private string ResolveTenantKey()
+    {
+        return RoomTopicHubGroups.ResolveTenantKey(_tenantAccessor.MultiTenantContext?.TenantInfo);
     }
 }
