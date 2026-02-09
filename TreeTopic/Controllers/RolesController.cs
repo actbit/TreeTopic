@@ -23,7 +23,7 @@ public class RolesController : ControllerBase
 
     [HttpGet]
     [Authorize]
-    [RequireAny(TenantPermissions.RoleRead, TenantPermissions.UserAdmin)]
+    [RequireAny(PermissionScope.Role, TenantPermissions.RoleRead, TenantPermissions.UserAdmin)]
     public async Task<ActionResult<List<RoleDto>>> List()
     {
         var roles = await _roleManager.Roles
@@ -34,7 +34,7 @@ public class RolesController : ControllerBase
     }
 
     [HttpPost]
-    [RequireAny(TenantPermissions.RoleManage)]
+    [RequireAny(PermissionScope.Role, TenantPermissions.RoleManage)]
     public async Task<ActionResult<RoleDto>> Create([FromBody] RoleCreationRequest request)
     {
         if (!ModelState.IsValid)
@@ -59,7 +59,7 @@ public class RolesController : ControllerBase
     }
 
     [HttpDelete("{roleName}")]
-    [RequireAny(TenantPermissions.RoleManage)]
+    [RequireAny(PermissionScope.Role, TenantPermissions.RoleManage)]
     public async Task<IActionResult> Delete(string roleName)
     {
         if (string.IsNullOrWhiteSpace(roleName))

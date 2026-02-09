@@ -302,13 +302,9 @@ internal static class PermissionFilterHelper
                 return rolePermissions.Contains(requirement.Name);
 
             case PermissionScope.Room:
-                if (!HasRoomAccess(roomUser, roomPermissions, rolePermissions))
-                    return false;
-                return roomPermissions!.Contains(requirement.Name);
+                return roomPermissions?.Contains(requirement.Name) ?? false;
 
             case PermissionScope.Topic:
-                if (!HasRoomAccess(roomUser, roomPermissions, rolePermissions))
-                    return false;
                 if (topicPermissions != null)
                     return topicPermissions.Contains(requirement.Name);
                 return false;
@@ -319,9 +315,36 @@ internal static class PermissionFilterHelper
     }
 
     /// <summary>
+    /// Room/Topicスコープの権限を要求する場合、room.read 相当の権限があるかチェック
+    /// </summary>
+    internal static bool CheckRoomAccessIfNeeded(
+        PermissionScope methodScope,
+        PermissionContext permissionContext,
+        ILogger logger,
+        string attributeName)
+    {
+        if (methodScope != PermissionScope.Room && methodScope != PermissionScope.Topic)
+            return true;
+
+        var hasRoomAccess = HasRoomAccess(
+            permissionContext.RoomUser,
+            permissionContext.RoomPermissions,
+            permissionContext.RolePermissions);
+
+        if (!hasRoomAccess)
+        {
+            logger.LogWarning(
+                "[{AttributeName}] Room access denied: UserId={UserId}, MethodScope={MethodScope}",
+                attributeName, permissionContext.UserId, methodScope);
+        }
+
+        return hasRoomAccess;
+    }
+
+    /// <summary>
     /// Room配下のリソースへのアクセス権があるか判定
     /// </summary>
-    private static bool HasRoomAccess(
+    internal static bool HasRoomAccess(
         RoomUser? roomUser,
         HashSet<string>? roomPermissions,
         HashSet<string> rolePermissions)

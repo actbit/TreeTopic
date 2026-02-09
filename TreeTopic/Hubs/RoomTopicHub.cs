@@ -1,7 +1,8 @@
-using Finbuckle.MultiTenant.Abstractions;
+using Finbuckle.MultiTenant;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.AspNetCore.Routing;
+using MaskedUUID.AspNetCore.Types;
 using TreeTopic.Dtos;
 using TreeTopic.Models;
 using TreeTopic.Services;
@@ -21,16 +22,13 @@ public interface IRoomTopicHubClient
 [Authorize]
 public class RoomTopicHub : Hub<IRoomTopicHubClient>
 {
-    private readonly IMultiTenantContextAccessor<ApplicationTenantInfo> _tenantAccessor;
     private readonly IRealtimeAccessService _realtimeAccessService;
     private readonly ILogger<RoomTopicHub> _logger;
 
     public RoomTopicHub(
-        IMultiTenantContextAccessor<ApplicationTenantInfo> tenantAccessor,
         IRealtimeAccessService realtimeAccessService,
         ILogger<RoomTopicHub> logger)
     {
-        _tenantAccessor = tenantAccessor;
         _realtimeAccessService = realtimeAccessService;
         _logger = logger;
     }
@@ -42,12 +40,14 @@ public class RoomTopicHub : Hub<IRoomTopicHubClient>
             if (string.IsNullOrWhiteSpace(tenantId))
                 return;
 
-            var routeTenant = Context.GetHttpContext()?.GetRouteValue("tenant")?.ToString();
-            if (!string.IsNullOrWhiteSpace(routeTenant) &&
-                !string.Equals(routeTenant, tenantId, StringComparison.OrdinalIgnoreCase))
+            var tenantInfo = Context.GetHttpContext()?.GetMultiTenantContext<ApplicationTenantInfo>()?.TenantInfo;
+            var currentTenant = RoomTopicHubGroups.ResolveTenantKey(tenantInfo);
+
+            if (!string.IsNullOrWhiteSpace(currentTenant) &&
+                !string.Equals(currentTenant, tenantId, StringComparison.OrdinalIgnoreCase))
             {
-                _logger.LogWarning("[RoomTopicHub] JoinTenant denied by tenant mismatch connection={ConnectionId} routeTenant={RouteTenant} requestedTenant={RequestedTenant}",
-                    Context.ConnectionId, routeTenant, tenantId);
+                _logger.LogWarning("[RoomTopicHub] JoinTenant denied by tenant mismatch connection={ConnectionId} currentTenant={CurrentTenant} requestedTenant={RequestedTenant}",
+                    Context.ConnectionId, currentTenant, tenantId);
                 return;
             }
 
@@ -65,27 +65,23 @@ public class RoomTopicHub : Hub<IRoomTopicHubClient>
         }
     }
 
-    public async Task JoinRoom(string roomId)
+    public async Task JoinRoom(MaskedGuid roomId)
     {
         try
         {
-            if (string.IsNullOrWhiteSpace(roomId))
-                return;
-
             if (!await _realtimeAccessService.CanJoinRoomAsync(roomId, Context.User, Context.ConnectionAborted))
             {
-                _logger.LogWarning("[RoomTopicHub] JoinRoom denied connection={ConnectionId} room={RoomId} user={UserId}",
+                _logger.LogWarning("[RoomTopicHub] JoinRoom denied: no permission connection={ConnectionId} room={RoomId} user={UserId}",
                     Context.ConnectionId, roomId, Context.UserIdentifier);
                 return;
             }
 
-            var groupName = RoomTopicHubGroups.Room(roomId);
-            var httpContext = Context.GetHttpContext();
-            if (httpContext != null)
-            {
-                _logger.LogInformation("[RoomTopicHub] JoinRoom connection={ConnectionId} room={Room} group={Group}", Context.ConnectionId, roomId, groupName);
-            }
+            var tenantInfo = Context.GetHttpContext()?.GetMultiTenantContext<ApplicationTenantInfo>()?.TenantInfo;
+            var tenant = RoomTopicHubGroups.ResolveTenantKey(tenantInfo);
+            var groupName = RoomTopicHubGroups.Room(tenant, roomId.ToString());
             await Groups.AddToGroupAsync(Context.ConnectionId, groupName);
+            _logger.LogInformation("[RoomTopicHub] JoinRoom allowed connection={ConnectionId} room={Room} user={UserId}",
+                Context.ConnectionId, roomId, Context.UserIdentifier);
         }
         catch (Exception ex)
         {
@@ -93,14 +89,13 @@ public class RoomTopicHub : Hub<IRoomTopicHubClient>
         }
     }
 
-    public async Task LeaveRoom(string roomId)
+    public async Task LeaveRoom(MaskedGuid roomId)
     {
         try
         {
-            if (string.IsNullOrWhiteSpace(roomId))
-                return;
-
-            var groupName = RoomTopicHubGroups.Room(roomId);
+            var tenantInfo = Context.GetHttpContext()?.GetMultiTenantContext<ApplicationTenantInfo>()?.TenantInfo;
+            var tenant = RoomTopicHubGroups.ResolveTenantKey(tenantInfo);
+            var groupName = RoomTopicHubGroups.Room(tenant, roomId.ToString());
             var httpContext = Context.GetHttpContext();
             if (httpContext != null)
             {
@@ -112,17 +107,6 @@ public class RoomTopicHub : Hub<IRoomTopicHubClient>
         {
             _logger.LogError(ex, "[RoomTopicHub] Error in LeaveRoom: {Message}", ex.Message);
         }
-    }
-
-    private string ResolveTenantKey()
-    {
-        var tenantFromRoute = Context.GetHttpContext()?.GetRouteValue("tenant")?.ToString();
-        if (!string.IsNullOrWhiteSpace(tenantFromRoute))
-        {
-            return tenantFromRoute;
-        }
-
-        return RoomTopicHubGroups.ResolveTenantKey(_tenantAccessor.MultiTenantContext?.TenantInfo);
     }
 
     public override async Task OnDisconnectedAsync(Exception? exception)

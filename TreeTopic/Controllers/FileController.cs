@@ -101,7 +101,7 @@ public class FileController : ControllerBase
     );
 
     [HttpGet]
-    [RequireAny(TenantPermissions.RoomRead)]
+    [RequireAny(PermissionScope.Role, TenantPermissions.RoomRead)]
     public async Task<IActionResult> GetAll(CancellationToken cancellationToken)
     {
         var result = await _fileManagementService.GetAllFilesAsync(cancellationToken);
@@ -109,7 +109,7 @@ public class FileController : ControllerBase
     }
 
     [HttpGet("message/{messageId}")]
-    [RequireAny(TopicPermissions.ReadMessages, TenantPermissions.TopicReadMessages)]
+    [RequireAny(PermissionScope.Topic, TopicPermissions.ReadMessages, TenantPermissions.TopicReadMessages)]
     public async Task<IActionResult> GetByMessage([FromRoute] MaskedGuid messageId, CancellationToken cancellationToken)
     {
         var result = await _fileManagementService.GetFilesByMessageAsync((Guid)messageId, cancellationToken);
@@ -117,7 +117,7 @@ public class FileController : ControllerBase
     }
 
     [HttpGet("{fileId}")]
-    [RequireAny(TopicPermissions.ReadMessages, TenantPermissions.TopicReadMessages)]
+    [RequireAny(PermissionScope.Topic, TopicPermissions.ReadMessages, TenantPermissions.TopicReadMessages)]
     public async Task<IActionResult> GetById([FromRoute] MaskedGuid fileId, CancellationToken cancellationToken)
     {
         var result = await _fileManagementService.GetFileByIdAsync((Guid)fileId, cancellationToken);
@@ -125,7 +125,7 @@ public class FileController : ControllerBase
     }
 
     [HttpGet("room/{roomId}")]
-    [RequireAny(RoomPermissions.Read, TenantPermissions.RoomRead)]
+    [RequireAny(PermissionScope.Room, RoomPermissions.Read, TenantPermissions.RoomRead)]
     public IActionResult GetByRoom([FromRoute] MaskedGuid roomId)
     {
         var tenant = RouteData.Values["tenant"]?.ToString() ?? "default";
@@ -182,7 +182,7 @@ public class FileController : ControllerBase
 
     [HttpPost("room/{roomId}")]
     [Consumes("multipart/form-data")]
-    [RequireAny(RoomPermissions.Write, TenantPermissions.RoomManage)]
+    [RequireAny(PermissionScope.Room, RoomPermissions.Write, TenantPermissions.RoomManage)]
     public async Task<IActionResult> UploadToRoom(
         [FromRoute] MaskedGuid roomId,
         [FromForm] IFormFile file,
@@ -259,7 +259,7 @@ public class FileController : ControllerBase
     }
 
     [HttpPost]
-    [RequireAny(TopicPermissions.WriteMessages, TenantPermissions.TopicWriteMessages)]
+    [RequireAny(PermissionScope.Topic, TopicPermissions.WriteMessages, TenantPermissions.TopicWriteMessages)]
     public async Task<IActionResult> Create([FromBody] CreateFileRequest request, CancellationToken cancellationToken)
     {
         if (!ModelState.IsValid)
@@ -270,7 +270,7 @@ public class FileController : ControllerBase
     }
 
     [HttpPut("{fileId}")]
-    [RequireAny(TopicPermissions.WriteMessages, TenantPermissions.TopicWriteMessages)]
+    [RequireAny(PermissionScope.Topic, TopicPermissions.WriteMessages, TenantPermissions.TopicWriteMessages)]
     public async Task<IActionResult> Update([FromRoute] MaskedGuid fileId, [FromBody] UpdateFileRequest request, CancellationToken cancellationToken)
     {
         if (!ModelState.IsValid)
@@ -281,7 +281,7 @@ public class FileController : ControllerBase
     }
 
     [HttpDelete("{fileId}")]
-    [RequireAny(TopicPermissions.WriteMessages, TenantPermissions.TopicWriteMessages)]
+    [RequireAny(PermissionScope.Topic, TopicPermissions.WriteMessages, TenantPermissions.TopicWriteMessages)]
     public async Task<IActionResult> Delete([FromRoute] MaskedGuid fileId, CancellationToken cancellationToken)
     {
         var result = await _fileManagementService.DeleteFileAsync(fileId, cancellationToken);
@@ -293,7 +293,7 @@ public class FileController : ControllerBase
     /// /uploads 静的配信の代わりに使用
     /// </summary>
     [HttpGet("download/{roomId}/{fileName}")]
-    [RequireAny(RoomPermissions.Read, TenantPermissions.RoomRead)]
+    [RequireAny(PermissionScope.Room, RoomPermissions.Read, TenantPermissions.RoomRead)]
     public async Task<IActionResult> DownloadFile(
         [FromRoute] MaskedGuid roomId,
         [FromRoute] string fileName,

@@ -316,6 +316,7 @@ public class Program
         var altchaService = Altcha.CreateServiceBuilder()
             .UseSha256(altchaKey)
             .UseInMemoryStore()
+            .SetComplexity(20000, 30000)  // デフォルト50000-100000から厳しく（約2.5-3.3倍の難易度）
             .SetExpiryInSeconds(180)
             .Build();
         builder.Services.AddSingleton(altchaService);

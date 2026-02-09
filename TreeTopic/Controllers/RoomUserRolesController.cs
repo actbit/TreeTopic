@@ -36,7 +36,7 @@ public class RoomUserRolesController : ControllerBase
     /// RoomUserに割り当てられているRoomRole一覧を取得
     /// </summary>
     [HttpGet]
-    [RequireAny(RoomPermissions.ManageUsers, TenantPermissions.RoomManage)]
+    [RequireAny(PermissionScope.Room, RoomPermissions.ManageUsers, TenantPermissions.RoomManage)]
     public async Task<IActionResult> GetUserRoles(
         [FromRoute] MaskedGuid roomUserId,
         CancellationToken cancellationToken)
@@ -63,7 +63,7 @@ public class RoomUserRolesController : ControllerBase
     /// RoomUserにRoomRoleを追加
     /// </summary>
     [HttpPost("{roleName}")]
-    [RequireAny(RoomPermissions.ManageUsers, TenantPermissions.RoomManage)]
+    [RequireAny(PermissionScope.Room, RoomPermissions.ManageUsers, TenantPermissions.RoomManage)]
     public async Task<IActionResult> AddRoleToUser(
         [FromRoute] MaskedGuid roomUserId,
         [FromRoute] string roleName,
@@ -96,7 +96,7 @@ public class RoomUserRolesController : ControllerBase
     /// RoomUserからRoomRoleを削除
     /// </summary>
     [HttpDelete("{roleName}")]
-    [RequireAny(RoomPermissions.ManageUsers, TenantPermissions.RoomManage)]
+    [RequireAny(PermissionScope.Room, RoomPermissions.ManageUsers, TenantPermissions.RoomManage)]
     public async Task<IActionResult> RemoveRoleFromUser(
         [FromRoute] MaskedGuid roomUserId,
         [FromRoute] string roleName,
@@ -129,7 +129,7 @@ public class RoomUserRolesController : ControllerBase
     /// RoomUserのRoomRoleを一括設定（置き換え）
     /// </summary>
     [HttpPut]
-    [RequireAny(RoomPermissions.ManageUsers, TenantPermissions.RoomManage)]
+    [RequireAny(PermissionScope.Room, RoomPermissions.ManageUsers, TenantPermissions.RoomManage)]
     public async Task<IActionResult> SetUserRoles(
         [FromRoute] MaskedGuid roomUserId,
         [FromBody] SetUserRolesRequest request,

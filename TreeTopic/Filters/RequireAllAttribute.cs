@@ -11,6 +11,12 @@ namespace TreeTopic.Filters;
 /// <summary>
 /// すべての権限を持っているかチェック（AND条件）
 /// </summary>
+/// <example>
+/// // スコープを明示的に指定
+/// [RequireAll(PermissionScope.Role, "tenant.user.read")]
+/// [RequireAll(PermissionScope.Room, "room.read", "room.write")]
+/// [RequireAll(PermissionScope.Topic, "topic.read", "topic.delete")]
+/// </example>
 [AttributeUsage(AttributeTargets.Method | AttributeTargets.Class, AllowMultiple = true)]
 public class RequireAllAttribute : Attribute, IAsyncActionFilter
 {
@@ -26,11 +32,18 @@ public class RequireAllAttribute : Attribute, IAsyncActionFilter
     public bool ResolveRoomIdFromTopic { get; set; } = true;
     public bool ResolveRoomIdFromRoomUser { get; set; } = true;
     public bool ResolveTopicIdFromBoard { get; set; } = true;
+    PermissionScope MethodScope = PermissionScope.Role;
 
-    public RequireAllAttribute(params string[] permissions)
+    /// <summary>
+    /// コンストラクタ
+    /// </summary>
+    /// <param name="scope">権限スコープ（Role/Room/Topic）</param>
+    /// <param name="permissions">権限名のリスト</param>
+    public RequireAllAttribute(PermissionScope scope, params string[] permissions)
     {
         _requirements = permissions?.Select(ParsePermissionRequirement).ToArray()
             ?? Array.Empty<PermissionRequirement>();
+        MethodScope = scope;
     }
 
     private static PermissionRequirement ParsePermissionRequirement(string permission)
@@ -85,6 +98,13 @@ public class RequireAllAttribute : Attribute, IAsyncActionFilter
             permContext.TopicId,
             topicPermissionManager,
             httpContext.RequestAborted);
+
+        // Room/Topicスコープの権限を要求する場合、まず room.read 相当の権限をチェック
+        if (!PermissionFilterHelper.CheckRoomAccessIfNeeded(MethodScope, permContext, logger, "RequireAll"))
+        {
+            context.Result = new ForbidResult();
+            return;
+        }
 
         var missingPermissions = new List<PermissionRequirement>();
 

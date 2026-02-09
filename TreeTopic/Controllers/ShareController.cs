@@ -228,7 +228,7 @@ public class ShareController : ControllerBase
     }
 
     [HttpGet("room/{roomId}")]
-    [RequireAny(RoomPermissions.Read, TenantPermissions.RoomRead)]
+    [RequireAny(PermissionScope.Room, RoomPermissions.Read, TenantPermissions.RoomRead)]
     public async Task<IActionResult> GetByRoom(
         [FromRoute] MaskedGuid roomId,
         [FromQuery] MaskedGuid? topicId,
@@ -298,7 +298,7 @@ public class ShareController : ControllerBase
 
     [HttpPost("room/{roomId}")]
     [Consumes("multipart/form-data")]
-    [RequireAny(RoomPermissions.Write, TenantPermissions.RoomManage)]
+    [RequireAny(PermissionScope.Room, RoomPermissions.Write, TenantPermissions.RoomManage)]
     public async Task<IActionResult> UploadToRoom(
         [FromRoute] MaskedGuid roomId,
         [FromForm] IFormFile file,
@@ -487,7 +487,7 @@ public class ShareController : ControllerBase
     }
 
     [HttpPost("room/{roomId}/brainstorm")]
-    [RequireAny(RoomPermissions.Write, TenantPermissions.RoomManage)]
+    [RequireAny(PermissionScope.Room, RoomPermissions.Write, TenantPermissions.RoomManage)]
     public async Task<IActionResult> ShareBrainstorm(
         [FromRoute] MaskedGuid roomId,
         [FromBody] CreateBrainstormShareRequest request,
@@ -516,7 +516,7 @@ public class ShareController : ControllerBase
     }
 
     [HttpDelete("room/{roomId}/{shareId}")]
-    [RequireAny(RoomPermissions.Delete, TenantPermissions.RoomManage)]
+    [RequireAny(PermissionScope.Room, RoomPermissions.Delete, TenantPermissions.RoomManage)]
     public async Task<IActionResult> DeleteShare(
         [FromRoute] MaskedGuid roomId,
         [FromRoute] MaskedGuid shareId,
@@ -553,7 +553,7 @@ public class ShareController : ControllerBase
     /// /uploads 静的配信の代わりに使用
     /// </summary>
     [HttpGet("room/{roomId}/download/{shareId}/{fileName}")]
-    [RequireAny(RoomPermissions.Read, TenantPermissions.RoomRead)]
+    [RequireAny(PermissionScope.Room, RoomPermissions.Read, TenantPermissions.RoomRead)]
     public async Task<IActionResult> DownloadShareFile(
         [FromRoute] MaskedGuid roomId,
         [FromRoute] MaskedGuid shareId,

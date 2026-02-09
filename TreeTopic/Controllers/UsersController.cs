@@ -40,7 +40,7 @@ public class UsersController : ControllerBase
 
     [HttpGet]
     [Authorize]
-    [RequireAny(TenantPermissions.UserRead)]
+    [RequireAny(PermissionScope.Role, TenantPermissions.UserRead)]
     public async Task<ActionResult<List<UserSummaryDto>>> GetAll([FromRoute] string tenant, CancellationToken cancellationToken)
     {
         var result = await _userManagementService.GetAllUsersAsync();
@@ -55,7 +55,7 @@ public class UsersController : ControllerBase
     }
 
     [HttpGet("{userId}")]
-    [RequireAny(TenantPermissions.UserRead)]
+    [RequireAny(PermissionScope.Role, TenantPermissions.UserRead)]
     public async Task<ActionResult<UserSummaryDto>> GetById([FromRoute] MaskedGuid userId)
     {
         var result = await _userManagementService.GetUserByIdAsync((Guid)userId);
@@ -97,7 +97,7 @@ public class UsersController : ControllerBase
 
     [HttpPost("{userId}/roles")]
     [Authorize]
-    [RequireAny(TenantPermissions.UserManage)]
+    [RequireAny(PermissionScope.Role, TenantPermissions.UserManage)]
     public async Task<ActionResult<UserSummaryDto>> AddRole(
         [FromRoute] string tenant,
         [FromRoute] MaskedGuid userId,
@@ -131,7 +131,7 @@ public class UsersController : ControllerBase
 
     [HttpDelete("{userId}/roles")]
     [Authorize]
-    [RequireAny(TenantPermissions.UserManage)]
+    [RequireAny(PermissionScope.Role, TenantPermissions.UserManage)]
     public async Task<ActionResult<UserSummaryDto>> RemoveRole(
         [FromRoute] string tenant,
         [FromRoute] MaskedGuid userId,
@@ -278,7 +278,7 @@ public class UsersController : ControllerBase
     /// </summary>
     [HttpPost]
     [Authorize]
-    [RequireAny(TenantPermissions.UserAdmin)]
+    [RequireAny(PermissionScope.Role, TenantPermissions.UserAdmin)]
     public async Task<ActionResult<UserSummaryDto>> CreateUser(
         [FromRoute] string tenant,
         [FromBody] CreateUserRequest request)
@@ -316,7 +316,7 @@ public class UsersController : ControllerBase
     /// </summary>
     [HttpPost("{userId}/ban")]
     [Authorize]
-    [RequireAny(TenantPermissions.UserAdmin)]
+    [RequireAny(PermissionScope.Role, TenantPermissions.UserAdmin)]
     public async Task<ActionResult<UserSummaryDto>> BanUser(
         [FromRoute] string tenant,
         [FromRoute] MaskedGuid userId,
@@ -349,7 +349,7 @@ public class UsersController : ControllerBase
     /// </summary>
     [HttpDelete("{userId}/ban")]
     [Authorize]
-    [RequireAny(TenantPermissions.UserAdmin)]
+    [RequireAny(PermissionScope.Role, TenantPermissions.UserAdmin)]
     public async Task<ActionResult<UserSummaryDto>> UnbanUser(
         [FromRoute] string tenant,
         [FromRoute] MaskedGuid userId)

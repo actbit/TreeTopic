@@ -35,7 +35,7 @@ public class RoomRolesController : ControllerBase
     /// すべてのロールを取得
     /// </summary>
     [HttpGet]
-    [RequireAny(RoomPermissions.ManageRoles, TenantPermissions.RoomManage)]
+    [RequireAny(PermissionScope.Room, RoomPermissions.ManageRoles, TenantPermissions.RoomManage)]
     public async Task<ActionResult<List<RoomRoleDto>>> List(
         [FromRoute] MaskedGuid roomId,
         CancellationToken cancellationToken)
@@ -66,7 +66,7 @@ public class RoomRolesController : ControllerBase
     /// IDでロールを取得
     /// </summary>
     [HttpGet("{id}")]
-    [RequireAny(RoomPermissions.ManageRoles, TenantPermissions.RoomManage)]
+    [RequireAny(PermissionScope.Room, RoomPermissions.ManageRoles, TenantPermissions.RoomManage)]
     public async Task<ActionResult<RoomRoleDto>> GetById(
         [FromRoute] MaskedGuid roomId,
         [FromRoute] MaskedGuid id,
@@ -96,7 +96,7 @@ public class RoomRolesController : ControllerBase
     /// ロールを作成
     /// </summary>
     [HttpPost]
-    [RequireAny(RoomPermissions.ManageRoles, TenantPermissions.RoomManage)]
+    [RequireAny(PermissionScope.Room, RoomPermissions.ManageRoles, TenantPermissions.RoomManage)]
     public async Task<ActionResult<RoomRoleDto>> Create(
         [FromRoute] MaskedGuid roomId,
         [FromBody] CreateRoomRoleRequest request,
@@ -129,7 +129,7 @@ public class RoomRolesController : ControllerBase
     /// ロールを更新
     /// </summary>
     [HttpPut("{id}")]
-    [RequireAny(RoomPermissions.ManageRoles, TenantPermissions.RoomManage)]
+    [RequireAny(PermissionScope.Room, RoomPermissions.ManageRoles, TenantPermissions.RoomManage)]
     public async Task<ActionResult<RoomRoleDto>> Update(
         [FromRoute] MaskedGuid roomId,
         [FromRoute] MaskedGuid id,
@@ -165,7 +165,7 @@ public class RoomRolesController : ControllerBase
     /// ロールを削除
     /// </summary>
     [HttpDelete("{id}")]
-    [RequireAny(RoomPermissions.ManageRoles, TenantPermissions.RoomManage)]
+    [RequireAny(PermissionScope.Room, RoomPermissions.ManageRoles, TenantPermissions.RoomManage)]
     public async Task<IActionResult> Delete(
         [FromRoute] MaskedGuid roomId,
         [FromRoute] MaskedGuid id,

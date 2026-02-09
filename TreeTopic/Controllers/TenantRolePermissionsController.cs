@@ -34,7 +34,7 @@ public class TenantRolePermissionsController : ControllerBase
     /// Tenant権限一覧を取得（PermissionScanServiceで動的取得）
     /// </summary>
     [HttpGet("available")]
-    [RequireAny(TenantPermissions.PermissionRead)]
+    [RequireAny(PermissionScope.Role, TenantPermissions.PermissionRead)]
     public IActionResult GetAvailablePermissions([FromServices] PermissionScanService permissionScanService)
     {
         var permissions = permissionScanService.GetTenantPermissions();
@@ -50,7 +50,7 @@ public class TenantRolePermissionsController : ControllerBase
     /// ApplicationRoleに割り当てられている権限一覧を取得
     /// </summary>
     [HttpGet]
-    [RequireAny(TenantPermissions.RoleRead)]
+    [RequireAny(PermissionScope.Role, TenantPermissions.RoleRead)]
     public async Task<IActionResult> GetRolePermissions(
         [FromRoute] string roleName,
         CancellationToken cancellationToken)
@@ -77,7 +77,7 @@ public class TenantRolePermissionsController : ControllerBase
     /// ApplicationRoleに権限を割り当て
     /// </summary>
     [HttpPost]
-    [RequireAny(TenantPermissions.RoleManage)]
+    [RequireAny(PermissionScope.Role, TenantPermissions.RoleManage)]
     public async Task<IActionResult> AddPermissionToRole(
         [FromRoute] string roleName,
         [FromBody] AddTenantPermissionRequest request,
@@ -125,7 +125,7 @@ public class TenantRolePermissionsController : ControllerBase
     /// ApplicationRoleから権限を削除
     /// </summary>
     [HttpDelete("{permissionName}")]
-    [RequireAny(TenantPermissions.RoleManage)]
+    [RequireAny(PermissionScope.Role, TenantPermissions.RoleManage)]
     public async Task<IActionResult> RemovePermissionFromRole(
         [FromRoute] string roleName,
         [FromRoute] string permissionName,

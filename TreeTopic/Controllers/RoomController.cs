@@ -59,7 +59,7 @@ public class RoomController : ControllerBase
     }
 
     [HttpGet]
-    [RequireAny(TenantPermissions.RoomRead)]
+    [RequireAny(PermissionScope.Role, TenantPermissions.RoomRead)]
     public async Task<IActionResult> GetAll(CancellationToken cancellationToken)
     {
         var appUser = await _userManager.FindByIdAsync(CurrentUserId.ToString());
@@ -80,7 +80,7 @@ public class RoomController : ControllerBase
     }
 
     [HttpGet("{roomId}")]
-    [RequireAny(RoomPermissions.Read, TenantPermissions.RoomRead)]
+    [RequireAny(PermissionScope.Room, RoomPermissions.Read, TenantPermissions.RoomRead)]
     public async Task<IActionResult> GetById([FromRoute] MaskedGuid roomId, CancellationToken cancellationToken)
     {
         var result = await _roomManagementService.GetRoomByIdAsync((Guid)roomId, cancellationToken);
@@ -145,7 +145,7 @@ public class RoomController : ControllerBase
     }
 
     [HttpPost]
-    [RequireAny(RoomPermissions.Manage, TenantPermissions.RoomManage)]
+    [RequireAny(PermissionScope.Room, RoomPermissions.Manage, TenantPermissions.RoomManage)]
     public async Task<IActionResult> Create([FromBody] CreateRoomRequest request, CancellationToken cancellationToken)
     {
         if (!ModelState.IsValid)
@@ -156,7 +156,7 @@ public class RoomController : ControllerBase
     }
 
     [HttpPut("{roomId}")]
-    [RequireAny(RoomPermissions.Manage, TenantPermissions.RoomManage)]
+    [RequireAny(PermissionScope.Room, RoomPermissions.Manage, TenantPermissions.RoomManage)]
     public async Task<IActionResult> Update([FromRoute] MaskedGuid roomId, [FromBody] UpdateRoomRequest request, CancellationToken cancellationToken)
     {
         if (!ModelState.IsValid)
@@ -167,7 +167,7 @@ public class RoomController : ControllerBase
     }
 
     [HttpDelete("{roomId}")]
-    [RequireAny(RoomPermissions.Manage, TenantPermissions.RoomManage)]
+    [RequireAny(PermissionScope.Room, RoomPermissions.Manage, TenantPermissions.RoomManage)]
     public async Task<IActionResult> Delete([FromRoute] MaskedGuid roomId, CancellationToken cancellationToken)
     {
         var result = await _roomManagementService.DeleteRoomAsync((Guid)roomId, cancellationToken);
@@ -178,7 +178,7 @@ public class RoomController : ControllerBase
     /// Roomに追加可能なユーザー候補を取得（Roomメンバー以外のユーザー）
     /// </summary>
     [HttpGet("{roomId}/users/candidates")]
-    [RequireAny(RoomPermissions.ManageUsers, TenantPermissions.RoomManage)]
+    [RequireAny(PermissionScope.Room, RoomPermissions.ManageUsers, TenantPermissions.RoomManage)]
     public async Task<IActionResult> GetUserCandidates(
         [FromRoute] MaskedGuid roomId,
         [FromQuery] string? search = null,

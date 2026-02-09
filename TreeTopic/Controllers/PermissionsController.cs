@@ -18,7 +18,7 @@ public class PermissionsController : ControllerBase
     /// 利用可能なすべての権限一覧を取得（PermissionScanServiceで動的取得）
     /// </summary>
     [HttpGet("available")]
-    [RequireAny(TenantPermissions.PermissionRead)]
+    [RequireAny(PermissionScope.Role, TenantPermissions.PermissionRead)]
     public IActionResult GetAvailablePermissions([FromServices] PermissionCatalogService permissionCatalogService)
     {
         return Ok(permissionCatalogService.GetAllByCategory());

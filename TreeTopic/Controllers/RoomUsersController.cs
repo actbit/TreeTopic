@@ -63,7 +63,7 @@ public class RoomUsersController : ControllerBase
     }
 
     [HttpGet("room/{roomId}")]
-    [RequireAny(RoomPermissions.ManageUsers, TenantPermissions.RoomManage)]
+    [RequireAny(PermissionScope.Room, RoomPermissions.ManageUsers, TenantPermissions.RoomManage)]
     public async Task<IActionResult> ListByRoom([FromRoute] MaskedGuid roomId, CancellationToken cancellationToken)
     {
         var entities = await _roomUserRepository.GetByRoomIdAsync((Guid)roomId, cancellationToken);
@@ -92,7 +92,7 @@ public class RoomUsersController : ControllerBase
     }
 
     [HttpGet("user/{userId}")]
-    [RequireAny(RoomPermissions.ManageUsers, TenantPermissions.RoomManage)]
+    [RequireAny(PermissionScope.Room, RoomPermissions.ManageUsers, TenantPermissions.RoomManage)]
     public async Task<IActionResult> ListByUser([FromRoute] MaskedGuid userId, CancellationToken cancellationToken)
     {
         var entities = await _roomUserRepository.GetByUserIdAsync((Guid)userId, cancellationToken);
@@ -202,7 +202,7 @@ public class RoomUsersController : ControllerBase
     }
 
     [HttpPost("room/{roomId}")]
-    [RequireAny(RoomPermissions.ManageUsers, TenantPermissions.RoomManage)]
+    [RequireAny(PermissionScope.Room, RoomPermissions.ManageUsers, TenantPermissions.RoomManage)]
     public async Task<IActionResult> Create([FromRoute] MaskedGuid roomId, [FromBody] CreateRoomUserRequest request)
     {
         if (!ModelState.IsValid)
@@ -225,7 +225,7 @@ public class RoomUsersController : ControllerBase
     }
 
     [HttpGet("{id}")]
-    [RequireAny(RoomPermissions.ManageUsers, TenantPermissions.RoomManage)]
+    [RequireAny(PermissionScope.Room, RoomPermissions.ManageUsers, TenantPermissions.RoomManage)]
     public async Task<IActionResult> GetById([FromRoute] MaskedGuid id, CancellationToken cancellationToken)
     {
         var entity = await _roomUserRepository.Query()
@@ -370,7 +370,7 @@ public class RoomUsersController : ControllerBase
     }
 
     [HttpDelete("{id}")]
-    [RequireAny(RoomPermissions.ManageUsers, TenantPermissions.RoomManage)]
+    [RequireAny(PermissionScope.Room, RoomPermissions.ManageUsers, TenantPermissions.RoomManage)]
     public async Task<IActionResult> Delete([FromRoute] MaskedGuid id)
     {
         var entity = await _roomUserRepository.GetByIdAsync(id);
@@ -458,7 +458,7 @@ public class RoomUsersController : ControllerBase
     /// RoomUserのRoomRoleを設定（既存のロールをすべて置き換え）
     /// </summary>
     [HttpPut("{roomUserId}/role")]
-    [RequireAny(RoomPermissions.ManageUsers, TenantPermissions.RoomManage)]
+    [RequireAny(PermissionScope.Room, RoomPermissions.ManageUsers, TenantPermissions.RoomManage)]
     public async Task<IActionResult> SetUserRole(
         [FromRoute] MaskedGuid roomUserId,
         [FromBody] SetRoomUserRoleRequest request,
