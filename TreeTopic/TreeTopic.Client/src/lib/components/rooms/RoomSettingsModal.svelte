@@ -1,86 +1,86 @@
 <script lang="ts">
   import Modal from '../common/Modal.svelte';
-  import Button from '../common/Button.svelte';
-  import Input from '../common/Input.svelte';
-  import ErrorMessage from '../common/ErrorMessage.svelte';
-  import { ui, activeModals, modals } from '$lib/stores/ui';
+  import RoomRolePermissionsPanel from './RoomRolePermissionsPanel.svelte';
+  import RoomUserPermissionsPanel from './RoomUserPermissionsPanel.svelte';
+  import RoomUserDirectPermissionsPanel from './RoomUserDirectPermissionsPanel.svelte';
+  import { ui, activeModals } from '$lib/stores/ui';
   import { currentRoom, updateRoom, deleteRoom as deleteRoomStore } from '$lib/stores/rooms';
-  import { isRequired } from '$lib/utils/validation';
   import { api } from '$lib/api/client';
   import { page } from '$app/stores';
 
   const modalId = 'room-settings';
-  let isOpen = $derived.by(() => $activeModals.some((m) => m.id === modalId));
+  let modal = $derived.by(() => $activeModals.find((m) => m.id === modalId) ?? null);
+  let isOpen = $derived.by(() => modal !== null);
 
-  let name = $state($currentRoom?.name ?? '');
-  let description = $state($currentRoom?.description ?? '');
-  let joinPolicy = $state<number>($currentRoom?.joinPolicy ?? 0);
+  // Tab state
+  type Tab = 'general' | 'rolePermissions' | 'userRoles' | 'userPermissions';
+  let activeTab = $state<Tab>('general');
+
+
+  // Room settings
+  let name = $state('');
+  let description = $state('');
+  let joinPolicy = $state(0);
   let isLoading = $state(false);
   let isDeleting = $state(false);
-  let error = $state<string | null>(null);
   let nameError = $state<string | null>(null);
+  let error = $state<string | null>(null);
+
+  // Permissions state
   let canManageRoom = $state(false);
-  let canManageRoles = $state(false);
-  let canManageUsers = $state(false);
-  let canManageJoinPermissions = $state(false);
-
-  // タブ状態を永続化
-  const getStoredTab = (): string => {
-    if (typeof window === 'undefined') return 'general';
-    return localStorage.getItem('room_settings_active_tab') || 'general';
-  };
-  const setStoredTab = (tab: string) => {
-    if (typeof window === 'undefined') return;
-    localStorage.setItem('room_settings_active_tab', tab);
-  };
-  let activeTab = $state(getStoredTab());
-
-  // タブ変更時に保存
-  $effect(() => {
-    setStoredTab(activeTab);
-  });
 
   $effect(() => {
-    if ($currentRoom) {
-      name = $currentRoom.name;
-      description = $currentRoom.description ?? '';
-      joinPolicy = $currentRoom?.joinPolicy ?? 0;
-      void loadCapabilities();
+    if (isOpen && $currentRoom) {
+      loadData();
+      return () => resetState();
     }
   });
+
+  function resetState() {
+    name = '';
+    description = '';
+    joinPolicy = 0;
+    nameError = null;
+    error = null;
+    isLoading = false;
+    canManageRoom = false;
+  }
+
+  async function loadData() {
+    if (!$currentRoom) return;
+    try {
+      isLoading = true;
+      name = $currentRoom.name;
+      description = $currentRoom.description ?? '';
+      joinPolicy = $currentRoom.joinPolicy ?? 0;
+
+      await loadCapabilities();
+      error = null;
+    } catch (err) {
+      error = err instanceof Error ? err.message : 'Failed to load data';
+    } finally {
+      isLoading = false;
+    }
+  }
 
   async function loadCapabilities() {
     if (!$currentRoom) return;
     try {
       const tenant = api.getCurrentTenant();
-      const [roomPermRes, tenantPermRes] = await Promise.all([
-        api.get<{ permissions?: string[] }>(`/${tenant}/api/room/${$currentRoom.id}/my/permissions`),
-        api.get<{ permissions?: string[] }>(`/${tenant}/auth/me/permissions`)
-      ]);
-
+      const roomPermRes = await api.get<{ permissions?: string[] }>(`/${tenant}/api/room/${$currentRoom.id}/my/permissions`, { cache: false });
       const roomPerms = new Set(roomPermRes?.permissions ?? []);
-      const tenantPerms = new Set(tenantPermRes?.permissions ?? []);
-      const isTenantRoomManage = tenantPerms.has('tenant.room.manage');
-
-      canManageRoom = isTenantRoomManage || roomPerms.has('room.manage');
-      canManageRoles = isTenantRoomManage || roomPerms.has('room.manageRoles');
-      canManageUsers = isTenantRoomManage || roomPerms.has('room.manageUsers');
-      canManageJoinPermissions = isTenantRoomManage || roomPerms.has('room.manage');
+      canManageRoom = roomPerms.has('room.manage');
     } catch {
       canManageRoom = false;
-      canManageRoles = false;
-      canManageUsers = false;
-      canManageJoinPermissions = false;
     }
   }
 
   async function handleSave(e: Event) {
     e.preventDefault();
-
     nameError = null;
     error = null;
 
-    if (!isRequired(name)) {
+    if (!name.trim()) {
       nameError = 'Room name is required';
       return;
     }
@@ -90,7 +90,6 @@
     }
 
     isLoading = true;
-
     try {
       if ($currentRoom) {
         const tenant = api.getCurrentTenant();
@@ -106,7 +105,6 @@
           joinPolicy: Number(joinPolicy),
         });
       }
-
       ui.closeModal(modalId);
     } catch (err) {
       error = err instanceof Error ? err.message : 'Failed to update room';
@@ -142,74 +140,85 @@
   }
 </script>
 
-<Modal {isOpen} title="Room Settings" onClose={handleClose} size="large">
-  <div class="flex flex-col bg-white">
+<Modal {isOpen} title="Room Settings" onClose={handleClose} size="xlarge" closeButton={!isLoading}>
+  <div class="rsm-root">
     <!-- Error message -->
     {#if error}
-      <div class="p-4 bg-red-50 border-b border-red-200 text-red-800 text-sm flex justify-between items-center">
+      <div class="rsm-error">
         <span>{error}</span>
-        <button onclick={() => (error = null)} class="underline hover:no-underline">Close</button>
+        <button onclick={() => (error = null)}>Dismiss</button>
       </div>
     {/if}
 
     <!-- Tabs -->
-    <div class="flex border-b border-border">
+    <div class="rsm-tabs">
       <button
-        onclick={() => activeTab = 'general'}
-        class="px-6 py-3 text-sm font-medium {activeTab === 'general'
-          ? 'border-b-2 border-primary text-primary'
-          : 'text-text hover:text-text-light'}"
+        onclick={() => (activeTab = 'general')}
+        class="rsm-tab {activeTab === 'general' ? 'rsm-tab--active' : ''}"
       >
         General
       </button>
-      {#if canManageRoles || canManageUsers || canManageJoinPermissions}
-        <button
-          onclick={() => activeTab = 'permissions'}
-          class="px-6 py-3 text-sm font-medium {activeTab === 'permissions'
-            ? 'border-b-2 border-primary text-primary'
-            : 'text-text hover:text-text-light'}"
-        >
-          Permissions
-        </button>
-      {/if}
+      <button
+        onclick={() => (activeTab = 'rolePermissions')}
+        class="rsm-tab {activeTab === 'rolePermissions' ? 'rsm-tab--active' : ''}"
+      >
+        Role Permissions
+      </button>
+      <button
+        onclick={() => (activeTab = 'userRoles')}
+        class="rsm-tab {activeTab === 'userRoles' ? 'rsm-tab--active' : ''}"
+      >
+        User Roles
+      </button>
+      <button
+        onclick={() => (activeTab = 'userPermissions')}
+        class="rsm-tab {activeTab === 'userPermissions' ? 'rsm-tab--active' : ''}"
+      >
+        User Permissions
+      </button>
     </div>
 
     <!-- Content -->
-    <div class="overflow-auto p-6" style="max-height: calc(100vh - 220px);">
-      {#if activeTab === 'general'}
-        <form onsubmit={handleSave} class="space-y-6">
-          <div>
-            <label class="block text-sm font-medium text-text mb-2">Room Name</label>
+    <div class="rsm-content">
+      {#if isLoading}
+        <div class="rsm-loading">
+          <div class="rsm-spinner"></div>
+          <p>Loading...</p>
+        </div>
+      {:else if activeTab === 'general'}
+        <form onsubmit={handleSave} class="rsm-form">
+          <div class="rsm-form-group">
+            <label class="rsm-label">Room Name</label>
             <input
               type="text"
               bind:value={name}
               placeholder="Enter room name"
               disabled={isLoading || isDeleting || !canManageRoom}
-              class="w-full px-3 py-2 border border-border rounded focus:outline-none focus:border-primary disabled:opacity-50"
+              class="rsm-input"
               required
             />
             {#if nameError}
-              <p class="text-sm text-red-600 mt-1">{nameError}</p>
+              <p class="rsm-error-text">{nameError}</p>
             {/if}
           </div>
 
-          <div>
-            <label class="block text-sm font-medium text-text mb-2">Description</label>
+          <div class="rsm-form-group">
+            <label class="rsm-label">Description</label>
             <textarea
               bind:value={description}
               placeholder="Enter room description (optional)"
               disabled={isLoading || isDeleting || !canManageRoom}
-              class="w-full px-3 py-2 border border-border rounded focus:outline-none focus:border-primary disabled:opacity-50 resize-vertical"
+              class="rsm-textarea"
               rows="3"
             ></textarea>
           </div>
 
-          <div>
-            <label class="block text-sm font-medium text-text mb-2">Join Policy</label>
+          <div class="rsm-form-group">
+            <label class="rsm-label">Join Policy</label>
             <select
               bind:value={joinPolicy}
               disabled={isLoading || isDeleting || !canManageRoom}
-              class="w-full px-3 py-2 border border-border rounded focus:outline-none focus:border-primary disabled:opacity-50"
+              class="rsm-select"
             >
               <option value={0}>Public (any authenticated user can join)</option>
               <option value={1}>Invite Only (only allowed users/roles can join)</option>
@@ -217,102 +226,265 @@
           </div>
 
           {#if $currentRoom?.memberCount}
-            <div class="text-sm text-text-light bg-surface rounded-lg p-3">
-              <span class="font-semibold text-text">{$currentRoom.memberCount}</span> member{$currentRoom
-                .memberCount !== 1
-                ? 's'
-                : ''} in this room
+            <div class="rsm-info">
+              <span class="rsm-info-label">{$currentRoom.memberCount}</span> member{$currentRoom.memberCount !== 1 ? 's' : ''} in this room
             </div>
           {/if}
 
-          <div class="flex gap-3 pt-4 border-t border-border">
-            <Button
+          <div class="rsm-actions">
+            <button
               type="submit"
-              variant="primary"
               disabled={isLoading || isDeleting || !canManageRoom}
+              class="rsm-btn rsm-btn--primary"
             >
               {isLoading ? 'Saving...' : 'Save Changes'}
-            </Button>
-            <Button
+            </button>
+            <button
               type="button"
-              variant="secondary"
               disabled={isLoading || isDeleting}
               onclick={handleClose}
+              class="rsm-btn rsm-btn--secondary"
             >
               Cancel
-            </Button>
+            </button>
           </div>
 
           {#if $currentRoom?.canDelete}
-            <div class="pt-4 border-t border-border">
-              <Button
+            <div class="rsm-danger-zone">
+              <button
                 type="button"
-                variant="danger"
                 disabled={isLoading || isDeleting}
                 onclick={handleDelete}
+                class="rsm-btn rsm-btn--danger"
               >
                 {isDeleting ? 'Deleting...' : 'Delete Room'}
-              </Button>
+              </button>
             </div>
           {/if}
         </form>
 
-      {:else if activeTab === 'permissions' && (canManageRoles || canManageUsers || canManageJoinPermissions)}
-        <div class="space-y-6">
-          <p class="text-sm text-text-light">Manage room permissions and access control.</p>
-
-          <div class="grid grid-cols-1 {canManageRoles && canManageUsers && canManageJoinPermissions
-            ? 'lg:grid-cols-3'
-            : 'md:grid-cols-2'} gap-4">
-            {#if canManageRoles}
-              <button
-                onclick={() => modals.open('room-role-permission', 'Role Permissions', {
-                  tenant: $page.params.tenant,
-                  roomId: $currentRoom?.id
-                })}
-                class="p-4 border border-border rounded-lg hover:bg-surface transition-colors text-left"
-              >
-                <h3 class="font-semibold text-text mb-1">Role Permissions</h3>
-                <p class="text-sm text-text-light">Manage permissions for room roles</p>
-              </button>
-            {/if}
-
-            {#if canManageUsers}
-              <button
-                onclick={() => modals.open('room-user-permission', 'User Permissions', {
-                  tenant: $page.params.tenant,
-                  roomId: $currentRoom?.id
-                })}
-                class="p-4 border border-border rounded-lg hover:bg-surface transition-colors text-left"
-              >
-                <h3 class="font-semibold text-text mb-1">User Permissions</h3>
-                <p class="text-sm text-text-light">Manage individual user permissions</p>
-              </button>
-            {/if}
-
-            {#if canManageJoinPermissions}
-              <button
-                onclick={() => modals.open('room-join-permission', 'Join Permissions', {
-                  tenant: $page.params.tenant,
-                  roomId: $currentRoom?.id
-                })}
-                class="p-4 border border-border rounded-lg hover:bg-surface transition-colors text-left"
-              >
-                <h3 class="font-semibold text-text mb-1">Join Permissions</h3>
-                <p class="text-sm text-text-light">Manage who can join this room</p>
-              </button>
-            {/if}
-          </div>
-        </div>
+      {:else if activeTab === 'rolePermissions' && $currentRoom}
+        <RoomRolePermissionsPanel tenant={$page.params.tenant ?? ''} roomId={$currentRoom.id} />
+      {:else if activeTab === 'userRoles' && $currentRoom}
+        <RoomUserPermissionsPanel tenant={$page.params.tenant ?? ''} roomId={$currentRoom.id} />
+      {:else if activeTab === 'userPermissions' && $currentRoom}
+        <RoomUserDirectPermissionsPanel tenant={$page.params.tenant ?? ''} roomId={$currentRoom.id} />
       {/if}
     </div>
   </div>
 </Modal>
 
 <style>
-  textarea {
-    font-family: var(--font-family-base);
-    resize: vertical;
-    min-height: 80px;
+  :global {
+    .rsm-root {
+      display: flex;
+      flex-direction: column;
+      height: 600px;
+    }
+
+    .rsm-error {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 16px;
+      background-color: #fee;
+      border-bottom: 1px solid #fcc;
+      color: #c33;
+      font-size: 14px;
+    }
+
+    .rsm-error button {
+      background: none;
+      border: none;
+      color: inherit;
+      text-decoration: underline;
+      cursor: pointer;
+    }
+
+    .rsm-tabs {
+      display: flex;
+      gap: 0;
+      border-bottom: 1px solid var(--color-border);
+      padding: 0;
+      background-color: var(--color-surface);
+    }
+
+    .rsm-tab {
+      flex: 1;
+      padding: 12px 16px;
+      border: none;
+      background: transparent;
+      color: var(--color-text-light);
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+      border-bottom: 2px solid transparent;
+    }
+
+    .rsm-tab:hover {
+      color: var(--color-text);
+    }
+
+    .rsm-tab--active {
+      color: var(--color-primary);
+      border-bottom-color: var(--color-primary);
+    }
+
+    .rsm-content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 0;
+    }
+
+    .rsm-loading {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      gap: 16px;
+      color: var(--color-text-light);
+    }
+
+    .rsm-spinner {
+      width: 40px;
+      height: 40px;
+      border: 3px solid var(--color-border);
+      border-top-color: var(--color-primary);
+      border-radius: 50%;
+      animation: rsm-spin 1s linear infinite;
+    }
+
+    @keyframes rsm-spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .rsm-form {
+      padding: 24px;
+      max-width: 600px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .rsm-form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .rsm-label {
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--color-text);
+    }
+
+    .rsm-input,
+    .rsm-select,
+    .rsm-textarea {
+      padding: 8px 12px;
+      border: 1px solid var(--color-border);
+      border-radius: 6px;
+      font-size: 14px;
+      color: var(--color-text);
+      background-color: var(--color-background);
+      font-family: inherit;
+    }
+
+    .rsm-input:focus,
+    .rsm-select:focus,
+    .rsm-textarea:focus {
+      outline: none;
+      border-color: var(--color-primary);
+      box-shadow: 0 0 0 3px rgba(var(--color-primary-rgb), 0.1);
+    }
+
+    .rsm-input:disabled,
+    .rsm-select:disabled,
+    .rsm-textarea:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .rsm-textarea {
+      resize: vertical;
+    }
+
+    .rsm-error-text {
+      font-size: 12px;
+      color: #c33;
+    }
+
+    .rsm-info {
+      padding: 12px;
+      background-color: var(--color-surface);
+      border-radius: 6px;
+      font-size: 14px;
+      color: var(--color-text-light);
+    }
+
+    .rsm-info-label {
+      font-weight: 600;
+      color: var(--color-text);
+    }
+
+    .rsm-actions {
+      display: flex;
+      gap: 12px;
+      padding-top: 12px;
+      border-top: 1px solid var(--color-border);
+    }
+
+    .rsm-danger-zone {
+      padding-top: 12px;
+      border-top: 1px solid var(--color-border);
+    }
+
+    .rsm-btn {
+      padding: 8px 16px;
+      border: 1px solid var(--color-border);
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .rsm-btn--primary {
+      background-color: var(--color-primary);
+      color: white;
+      border-color: var(--color-primary);
+    }
+
+    .rsm-btn--primary:hover:not(:disabled) {
+      opacity: 0.9;
+    }
+
+    .rsm-btn--secondary {
+      background-color: transparent;
+      color: var(--color-text);
+      border-color: var(--color-border);
+    }
+
+    .rsm-btn--secondary:hover:not(:disabled) {
+      background-color: var(--color-surface);
+    }
+
+    .rsm-btn--danger {
+      background-color: #dc2626;
+      color: white;
+      border-color: #dc2626;
+    }
+
+    .rsm-btn--danger:hover:not(:disabled) {
+      opacity: 0.9;
+    }
+
+    .rsm-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
   }
 </style>

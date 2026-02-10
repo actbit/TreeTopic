@@ -59,7 +59,7 @@ public class RoomController : ControllerBase
     }
 
     [HttpGet]
-    [RequireAny(PermissionScope.Role, TenantPermissions.RoomRead)]
+    [Authorize]
     public async Task<IActionResult> GetAll(CancellationToken cancellationToken)
     {
         var appUser = await _userManager.FindByIdAsync(CurrentUserId.ToString());

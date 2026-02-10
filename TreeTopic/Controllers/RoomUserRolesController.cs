@@ -72,7 +72,7 @@ public class RoomUserRolesController : ControllerBase
         var roomUserGuid = (Guid)roomUserId;
 
         // RoomUserの存在確認
-        var roomUser = await _db.RoomUsers.FindAsync(new[] { roomUserGuid }, cancellationToken);
+        var roomUser = await _db.RoomUsers.FindAsync(roomUserGuid, cancellationToken);
         if (roomUser == null)
         {
             return NotFound(new { message = "RoomUser not found" });
@@ -89,7 +89,7 @@ public class RoomUserRolesController : ControllerBase
         // ロールを追加
         await _roomUserManager.AddRoleAsync(roomUser, role.Id, cancellationToken);
 
-        return CreatedAtAction(nameof(GetUserRoles), new { roomUserId }, new { message = "Role added to user", roomUserId = roomUserGuid, roleName });
+        return StatusCode(StatusCodes.Status201Created, new { message = "Role added to user", roomUserId = roomUserGuid, roleName });
     }
 
     /// <summary>
@@ -105,7 +105,7 @@ public class RoomUserRolesController : ControllerBase
         var roomUserGuid = (Guid)roomUserId;
 
         // RoomUserの存在確認
-        var roomUser = await _db.RoomUsers.FindAsync(new[] { roomUserGuid }, cancellationToken);
+        var roomUser = await _db.RoomUsers.FindAsync(roomUserGuid, cancellationToken);
         if (roomUser == null)
         {
             return NotFound(new { message = "RoomUser not found" });
@@ -138,7 +138,7 @@ public class RoomUserRolesController : ControllerBase
         var roomUserGuid = (Guid)roomUserId;
 
         // RoomUserの存在確認
-        var roomUser = await _db.RoomUsers.FindAsync(new[] { roomUserGuid }, cancellationToken);
+        var roomUser = await _db.RoomUsers.FindAsync(roomUserGuid, cancellationToken);
         if (roomUser == null)
         {
             return NotFound(new { message = "RoomUser not found" });

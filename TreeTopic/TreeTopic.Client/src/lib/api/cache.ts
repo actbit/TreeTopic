@@ -149,22 +149,41 @@ export function invalidateByResource(method: string, path: string): void {
 		invalidate(/^GET:.*\/api\/File/i);
 	}
 
-	// 権限変更時はユーザー関連のキャッシュもクリア
-	if (normalizedPath.includes('/users/') && normalizedPath.includes('/roles')) {
-		// ユーザーロールが変更された場合、認証・ユーザー関連のキャッシュをクリア
-		invalidate(/^GET:.*\/auth\//i);
-		invalidate(/^GET:.*\/api\/Users/i);
-		invalidate(/^GET:.*\/api\/Roles/i);
-		invalidate(/^GET:.*\/api\/Room/i); // Roomアクセス権限が変わる可能性
-		invalidate(/^GET:.*\/api\/Topic/i); // Topicアクセス権限が変わる可能性
-	}
-	if (normalizedPath.includes('/api/room') && (normalizedPath.includes('/users') || normalizedPath.includes('/roles'))) {
-		// Roomユーザー/ロールが変更された場合
+	// テナントロール権限が変更された場合
+	if (normalizedPath.includes('/api/tenantroles') && normalizedPath.includes('/permissions')) {
+		invalidate(/^GET:.*\/api\/tenantroles/i);
+		invalidate(/^GET:.*\/api\/permissions/i);
+		invalidate(/^GET:.*\/auth\//i); // 権限が変わるとユーザーのクレームにも影響
 		invalidate(/^GET:.*\/api\/Room/i);
 		invalidate(/^GET:.*\/api\/Topic/i);
 	}
-	if (normalizedPath.includes('/api/topic') && normalizedPath.includes('/permissions')) {
-		// Topic権限が変更された場合
+
+	// ルームロール権限が変更された場合
+	if (normalizedPath.includes('/api/rooms') && normalizedPath.includes('/roomroles') && normalizedPath.includes('/permissions')) {
+		invalidate(/^GET:.*\/api\/rooms\/[^/]+\/roomroles/i);
+		invalidate(/^GET:.*\/api\/permissions/i);
+		invalidate(/^GET:.*\/api\/Room/i);
+		invalidate(/^GET:.*\/api\/Topic/i);
+	}
+
+	// ユーザーロールが変更された場合
+	if (normalizedPath.includes('/users/') && normalizedPath.includes('/roles')) {
+		invalidate(/^GET:.*\/auth\//i);
+		invalidate(/^GET:.*\/api\/Users/i);
+		invalidate(/^GET:.*\/api\/Roles/i);
+		invalidate(/^GET:.*\/api\/Room/i);
+		invalidate(/^GET:.*\/api\/Topic/i);
+	}
+
+	// Roomユーザー/ロールが変更された場合
+	if (normalizedPath.includes('/api/room') && (normalizedPath.includes('/users') || normalizedPath.includes('/roles'))) {
+		invalidate(/^GET:.*\/api\/Room/i);
+		invalidate(/^GET:.*\/api\/Topic/i);
+	}
+
+	// Topicユーザー権限が変更された場合
+	if (normalizedPath.includes('/api/topics') && normalizedPath.includes('/permissions')) {
+		invalidate(/^GET:.*\/api\/topics\/[^/]+\/permissions/i);
 		invalidate(/^GET:.*\/api\/Topic/i);
 	}
 }

@@ -703,6 +703,9 @@ export async function removeUserRole(tenant: string, userId: string, roleName: s
   return handleResponse(response);
 }
 
+// User role management exports
+export { removeUserRole as deleteUserRole };
+
 // Room user candidates for adding to room
 export async function getRoomUserCandidates(tenant: string, roomId: string, search?: string) {
   const params = search ? { search } : undefined;

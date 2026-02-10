@@ -2,6 +2,9 @@ using MaskedUUID.AspNetCore.Types;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
+using Finbuckle.MultiTenant;
+using Finbuckle.MultiTenant.Abstractions;
 using TreeTopic.Dtos;
 using TreeTopic.Filters;
 using TreeTopic.Permissions;
@@ -21,13 +24,28 @@ public class TenantRolePermissionsController : ControllerBase
 {
     private readonly ApplicationDbContext _db;
     private readonly ILogger<TenantRolePermissionsController> _logger;
+    private readonly IMemoryCache _cache;
+    private readonly IMultiTenantContextAccessor<ApplicationTenantInfo> _tenantAccessor;
 
     public TenantRolePermissionsController(
         ApplicationDbContext db,
-        ILogger<TenantRolePermissionsController> logger)
+        ILogger<TenantRolePermissionsController> logger,
+        IMemoryCache cache,
+        IMultiTenantContextAccessor<ApplicationTenantInfo> tenantAccessor)
     {
         _db = db;
         _logger = logger;
+        _cache = cache;
+        _tenantAccessor = tenantAccessor;
+    }
+
+    private void InvalidateRolePermissionCache(string roleName)
+    {
+        var tenantId = _tenantAccessor.MultiTenantContext?.TenantInfo?.Id;
+        if (tenantId != null)
+        {
+            _cache.Remove($"tenant_{tenantId}_role_perms_{roleName}");
+        }
     }
 
     /// <summary>
@@ -116,6 +134,7 @@ public class TenantRolePermissionsController : ControllerBase
         _db.Permissions.Add(permission);
         await _db.SaveChangesAsync(cancellationToken);
 
+        InvalidateRolePermissionCache(roleName);
         _logger.LogInformation("Permission {Permission} added to Role {RoleName}", request.PermissionName, roleName);
 
         return Ok(new { permissionId = new MaskedGuid(permission.Id), name = permission.Name });
@@ -150,6 +169,7 @@ public class TenantRolePermissionsController : ControllerBase
         _db.Permissions.Remove(permission);
         await _db.SaveChangesAsync(cancellationToken);
 
+        InvalidateRolePermissionCache(roleName);
         _logger.LogInformation("Permission {Permission} removed from Role {RoleName}", permissionName, roleName);
 
         return NoContent();

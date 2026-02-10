@@ -4,7 +4,7 @@
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
   import { auth, isAuthenticated } from '$lib/stores/auth';
-  import { currentRoom, setRooms, setCurrentRoom, addRoom, updateRoom, deleteRoom, roomList, rooms, currentRoomUser } from '$lib/stores/rooms';
+  import { currentRoom, setRooms, setCurrentRoom, addRoom, updateRoom, deleteRoom, roomList, rooms, rooms as roomsStore, currentRoomUser } from '$lib/stores/rooms';
   import type { Room } from '$lib/stores/rooms';
   import type { CurrentRoomUser } from '$lib/stores/rooms';
   import {
@@ -1292,10 +1292,12 @@
       // Step 1: 認証（必ず最初）
       await auth.fetchCurrentUser(tenant);
 
-      // Step 2: 並列実行 - SignalR接続開始 + Rooms取得
+      // Step 2: 並列実行 - SignalR + Rooms + RoomUserチェック(URLにroomIdがあれば)
       signalRStarted = true;
+      const roomIdFromUrl = $page.params.roomId;
+      const shouldPrecheckRoomUser = !!roomIdFromUrl && !options?.skipRoomUserCheck;
 
-      const [roomsResponse] = await Promise.all([
+      const [roomsResponse, , , precheckRoomUser] = await Promise.all([
         api.get<any[]>(`/${tenant}/api/Room`),
         startMessageHub(tenant).catch(err => {
           console.error('Failed to start message hub:', err);
@@ -1303,42 +1305,69 @@
         startRoomTopicHub(tenant).catch(err => {
           console.error('Failed to start room topic hub:', err);
         }),
+        // URLにroomIdがある場合、Rooms取得と並列でRoomUserチェックを開始
+        shouldPrecheckRoomUser
+          ? api.get<RawRoomUser>(`/${tenant}/api/roomusers/room/${roomIdFromUrl}/me`).catch((err: unknown) => {
+              if (err instanceof api.ApiError && err.status === 401) throw err;
+              return null;
+            })
+          : Promise.resolve(undefined as RawRoomUser | null | undefined),
       ]);
 
       const rooms = Array.isArray(roomsResponse) ? roomsResponse.map(normalizeRoom) : [];
       setRooms(rooms);
 
-      const roomId = $page.params.roomId;
+      const roomId = roomIdFromUrl;
       console.log('[RoomPage] URL roomId:', roomId, 'Type:', typeof roomId);
       console.log('[RoomPage] Loaded rooms:', rooms.length, rooms);
       console.log('[RoomPage] First room id:', rooms[0]?.id, 'Type:', typeof rooms[0]?.id);
 
       const initialRoom = rooms.find((room) => room.id === roomId) ?? rooms[0] ?? null;
       console.log('[RoomPage] Selected initialRoom:', initialRoom);
+
+      // Step 3: RoomUserチェック（setCurrentRoomより先に行う）
+      if (initialRoom && !options?.skipRoomUserCheck) {
+        let roomUserData: CurrentRoomUser | null = null;
+
+        if (precheckRoomUser !== undefined && initialRoom.id === roomIdFromUrl) {
+          // 並列チェックの結果を利用（URLのroomIdと一致）
+          checkedRoomUserId = initialRoom.id;
+          if (precheckRoomUser) {
+            roomUserData = {
+              id: precheckRoomUser.id ?? (precheckRoomUser as any).Id ?? '',
+              displayName: precheckRoomUser.displayName ?? (precheckRoomUser as any).DisplayName ?? '',
+              iconUrl: precheckRoomUser.iconUrl ?? (precheckRoomUser as any).IconUrl,
+              useMainIcon: precheckRoomUser.useMainIcon ?? (precheckRoomUser as any).UseMainIcon ?? false,
+            };
+            roomsStore.setCurrentRoomUser(roomUserData);
+          } else {
+            roomsStore.setCurrentRoomUser(null);
+          }
+        } else {
+          // URLのroomIdと異なるroomが選択された場合、改めてチェック
+          checkedRoomUserId = null;
+          roomUserData = await loadRoomUser(tenant, initialRoom.id);
+        }
+
+        if (!roomUserData) {
+          console.log('[RoomPage] RoomUser not found, showing join modal');
+          isLoading = false;
+          ui.openModal({
+            id: 'room-user-join',
+            title: 'Join Room',
+            type: 'custom',
+            data: { roomId: initialRoom.id }
+          });
+          return;
+        }
+      }
+
       setCurrentRoom(initialRoom);
 
       // ここでローディング解除 - Roomが表示される
       isLoading = false;
 
       if (initialRoom) {
-        // Step 3: RoomUserチェック（最初に行う）
-        if (!options?.skipRoomUserCheck) {
-          checkedRoomUserId = null; // リセットして再チェックを強制
-          const roomUserData = await loadRoomUser(tenant, initialRoom.id);
-
-          if (!roomUserData) {
-            // RoomUserが存在しない場合：参加モーダルを表示して中断
-            console.log('[RoomPage] RoomUser not found, showing join modal');
-            ui.openModal({
-              id: 'room-user-join',
-              title: 'Join Room',
-              type: 'custom',
-              data: { roomId: initialRoom.id }
-            });
-            return;
-          }
-        }
-
         // Step 4: RoomUserが存在する場合のみ、Topics + Files + RoomUserSyncHubを並列実行
         const userId = $auth?.user?.id ?? '';
         const [topicsResponse, filesResponse] = await Promise.all([
@@ -1694,6 +1723,57 @@
     const roomId = $currentRoom?.id ?? null;
     if (!tenant || !roomId || isLoading) return;
     void loadRoomUser(tenant, roomId);
+  });
+
+  // Room変更時にTopicsを再読み込み
+  let lastLoadedRoomId = $state<string | null>(null);
+
+  $effect(() => {
+    const tenant = $page.params.tenant ?? getCurrentTenant();
+    const roomId = $currentRoom?.id ?? null;
+    if (!tenant || !roomId || isLoading || roomId === lastLoadedRoomId) return;
+
+    // Roomが変更された場合、Topicsを再読み込み
+    console.log('[RoomPage] Room changed, reloading topics for room:', roomId);
+    lastLoadedRoomId = roomId;
+
+    (async () => {
+      try {
+        const [topicsResponse, filesResponse] = await Promise.all([
+          api.get<any[]>(`/${tenant}/api/topic/room/${roomId}/root-with-unread`).catch(err => {
+            console.error('Failed to load root topics with unread:', err);
+            // フォールバックとして通常のAPIを使用
+            return api.get<any[]>(`/${tenant}/api/topic/room/${roomId}/root`).catch(err => {
+              console.error('Failed to load root topics (fallback):', err);
+              return [];
+            });
+          }),
+          loadRoomFiles(tenant, roomId).catch(err => {
+            console.error('Failed to load room files:', err);
+            return [];
+          }),
+        ]);
+
+        console.log('[RoomPage] Topics API response:', topicsResponse);
+        const topics = Array.isArray(topicsResponse) ? topicsResponse.map(normalizeTopic) : [];
+        console.log('[RoomPage] Normalized topics:', topics);
+
+        // 新しいAPIではすでにunreadCountが含まれている
+        const topicsWithUnread = topics.map(topic => {
+          const unreadCount = topic.unreadCount || 0;
+          console.log(`[RoomPage] Topic ${topic.id} (${topic.title}): unread count = ${unreadCount}, hasChildren = ${topic.hasChildren}`);
+          return topic;
+        });
+
+        console.log('[RoomPage] Topics with unread counts:', topicsWithUnread.map(t => ({ id: t.id, title: t.title, unreadCount: t.unreadCount, hasChildren: t.hasChildren })));
+        setTopics(topicsWithUnread);
+
+        // 子孫ロードも実行
+        await loadDescendantsForExpandedTopics(tenant);
+      } catch (err) {
+        console.error('[RoomPage] Failed to reload topics after room change:', err);
+      }
+    })();
   });
 
   // document.visibilitychangeイベントを監視

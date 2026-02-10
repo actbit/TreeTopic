@@ -29,13 +29,14 @@ public class UserManagementService : BaseService
                 .OrderBy(u => u.UserName)
                 .ToListAsync();
 
-            var userWithRoles = await Task.WhenAll(users.Select(async user =>
+            var userWithRoles = new List<(ApplicationUser user, IList<string> roles)>();
+            foreach (var user in users)
             {
                 var roles = await _userManager.GetRolesAsync(user);
-                return (user, roles);
-            }));
+                userWithRoles.Add((user, roles));
+            }
 
-            return Result<List<(ApplicationUser user, IList<string> roles)>>.Success(userWithRoles.ToList());
+            return Result<List<(ApplicationUser user, IList<string> roles)>>.Success(userWithRoles);
         }, nameof(GetAllUsersAsync));
     }
 

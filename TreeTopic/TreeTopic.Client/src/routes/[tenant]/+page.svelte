@@ -124,7 +124,7 @@
       <div class="panel-header">
         <h1 class="panel-title">Select a room</h1>
         <div class="flex gap-2">
-          <button class="button button-secondary button-small" onclick={() => ui.openModal({ id: 'tenant-role-permission', title: 'Tenant Settings' })}>
+          <button class="button button-secondary button-small" onclick={() => ui.openModal({ id: 'tenant-role-permission', title: 'Tenant Settings', type: 'custom' })}>
             ⚙️ Settings
           </button>
           <button class="button button-secondary button-small" onclick={openCreateModal}>

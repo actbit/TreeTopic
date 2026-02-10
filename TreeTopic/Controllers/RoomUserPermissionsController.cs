@@ -85,7 +85,7 @@ public class RoomUserPermissionsController : ControllerBase
         var roomUserGuid = (Guid)roomUserId;
 
         // RoomUserの存在確認
-        var roomUser = await _db.RoomUsers.FindAsync(new[] { roomUserGuid }, cancellationToken);
+        var roomUser = await _db.RoomUsers.FindAsync(roomUserGuid, cancellationToken);
         if (roomUser == null)
         {
             return NotFound(new { message = "RoomUser not found" });

@@ -119,10 +119,7 @@ public class RoomRolesController : ControllerBase
             return result.ToActionResult(RoomRoleManagementService.ToDto);
         }
 
-        return CreatedAtAction(
-            nameof(GetById),
-            new { roomId, id = result.Data!.Id },
-            RoomRoleManagementService.ToDto(result.Data));
+        return StatusCode(StatusCodes.Status201Created, RoomRoleManagementService.ToDto(result.Data));
     }
 
     /// <summary>

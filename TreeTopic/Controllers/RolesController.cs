@@ -54,7 +54,7 @@ public class RolesController : ControllerBase
             return ValidationProblem(new ValidationProblemDetails(result.Errors.ToDictionary(e => e.Code, e => new[] { e.Description })));
         }
 
-        return CreatedAtAction(nameof(List), new { id = role.Id }, MapRoleToDto(role));
+        return StatusCode(StatusCodes.Status201Created, MapRoleToDto(role));
     }
 
     [HttpDelete("{roleName}")]
