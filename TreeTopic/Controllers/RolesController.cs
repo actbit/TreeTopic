@@ -10,6 +10,7 @@ using TreeTopic.Models;
 namespace TreeTopic.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("{tenant}/api/[controller]")]
 public class RolesController : ControllerBase
 {
@@ -21,8 +22,7 @@ public class RolesController : ControllerBase
     }
 
     [HttpGet]
-    [Authorize]
-    [RequireAny(TenantPermissions.RoleRead, TenantPermissions.UserManagement)]
+    [RequireAny(PermissionScope.Role, TenantPermissions.RoleRead, TenantPermissions.UserAdmin)]
     public async Task<ActionResult<List<RoleDto>>> List()
     {
         var roles = await _roleManager.Roles
@@ -33,7 +33,7 @@ public class RolesController : ControllerBase
     }
 
     [HttpPost]
-    [RequireAny(TenantPermissions.RoleManage)]
+    [RequireAny(PermissionScope.Role, TenantPermissions.RoleManage)]
     public async Task<ActionResult<RoleDto>> Create([FromBody] RoleCreationRequest request)
     {
         if (!ModelState.IsValid)
@@ -54,11 +54,11 @@ public class RolesController : ControllerBase
             return ValidationProblem(new ValidationProblemDetails(result.Errors.ToDictionary(e => e.Code, e => new[] { e.Description })));
         }
 
-        return CreatedAtAction(nameof(List), new { id = role.Id }, MapRoleToDto(role));
+        return StatusCode(StatusCodes.Status201Created, MapRoleToDto(role));
     }
 
     [HttpDelete("{roleName}")]
-    [RequireAny(TenantPermissions.RoleManage)]
+    [RequireAny(PermissionScope.Role, TenantPermissions.RoleManage)]
     public async Task<IActionResult> Delete(string roleName)
     {
         if (string.IsNullOrWhiteSpace(roleName))

@@ -63,7 +63,7 @@ public class RoomUsersController : ControllerBase
     }
 
     [HttpGet("room/{roomId}")]
-    [RequireAny(RoomPermissions.ManageUsers, TenantPermissions.RoomManage)]
+    [RequireAny(PermissionScope.Room, RoomPermissions.ManageUsers, TenantPermissions.RoomManage)]
     public async Task<IActionResult> ListByRoom([FromRoute] MaskedGuid roomId, CancellationToken cancellationToken)
     {
         var entities = await _roomUserRepository.GetByRoomIdAsync((Guid)roomId, cancellationToken);
@@ -92,7 +92,7 @@ public class RoomUsersController : ControllerBase
     }
 
     [HttpGet("user/{userId}")]
-    [RequireAny(RoomPermissions.ManageUsers, TenantPermissions.RoomManage)]
+    [RequireAny(PermissionScope.Room, RoomPermissions.ManageUsers, TenantPermissions.RoomManage)]
     public async Task<IActionResult> ListByUser([FromRoute] MaskedGuid userId, CancellationToken cancellationToken)
     {
         var entities = await _roomUserRepository.GetByUserIdAsync((Guid)userId, cancellationToken);
@@ -158,8 +158,7 @@ public class RoomUsersController : ControllerBase
             toCreate.IconFileName = await _iconService.EnsureDefaultRoomUserIconAsync(toCreate, seedName, cancellationToken);
         }
 
-        await _roomUserRepository.AddAsync(toCreate, cancellationToken);
-        await _roomUserRepository.SaveChangesAsync(cancellationToken);
+        await _roomUserManager.CreateMemberAsync(toCreate, cancellationToken);
 
         // Ensure ApplicationUser has icon
         if (toCreate.UseMainIcon)
@@ -203,7 +202,7 @@ public class RoomUsersController : ControllerBase
     }
 
     [HttpPost("room/{roomId}")]
-    [RequireAny(RoomPermissions.ManageUsers, TenantPermissions.RoomManage)]
+    [RequireAny(PermissionScope.Room, RoomPermissions.ManageUsers, TenantPermissions.RoomManage)]
     public async Task<IActionResult> Create([FromRoute] MaskedGuid roomId, [FromBody] CreateRoomUserRequest request)
     {
         if (!ModelState.IsValid)
@@ -220,14 +219,13 @@ public class RoomUsersController : ControllerBase
 
         ApplyNameSettings(toCreate, request.Name, request.UseMainName);
 
-        await _roomUserRepository.AddAsync(toCreate);
-        await _roomUserRepository.SaveChangesAsync();
+        await _roomUserManager.CreateMemberAsync(toCreate);
 
         return Ok(MapToDto(toCreate));
     }
 
     [HttpGet("{id}")]
-    [RequireAny(RoomPermissions.ManageUsers, TenantPermissions.RoomManage)]
+    [RequireAny(PermissionScope.Room, RoomPermissions.ManageUsers, TenantPermissions.RoomManage)]
     public async Task<IActionResult> GetById([FromRoute] MaskedGuid id, CancellationToken cancellationToken)
     {
         var entity = await _roomUserRepository.Query()
@@ -254,13 +252,53 @@ public class RoomUsersController : ControllerBase
             return Forbid();
         }
 
-        var fileName = await _iconService.SaveRoomUserIconAsync(roomUser, file, cancellationToken);
-        roomUser.IconFileName = fileName;
-        roomUser.UseMainIcon = false;
-        _roomUserRepository.Update(roomUser);
-        await _roomUserRepository.SaveChangesAsync(cancellationToken);
+        string? newFileName = null;
+        var fileCreated = false;
+        try
+        {
+            newFileName = await _iconService.SaveRoomUserIconAsync(roomUser, file, cancellationToken);
+            fileCreated = true;
 
-        return Ok(new { iconUrl = _iconService.GetRoomUserIconUrl(roomUser) });
+            var oldFileName = roomUser.IconFileName;
+            roomUser.IconFileName = newFileName;
+            roomUser.UseMainIcon = false;
+            _roomUserRepository.Update(roomUser);
+            await _roomUserRepository.SaveChangesAsync(cancellationToken);
+
+            // 古いアイコンファイルを削除
+            if (!string.IsNullOrEmpty(oldFileName))
+            {
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await _iconService.DeleteRoomUserIconAsync(roomUser, oldFileName, cancellationToken);
+                    }
+                    catch
+                    {
+                        // 削除に失敗しても無視
+                    }
+                }, cancellationToken);
+            }
+
+            return Ok(new { iconUrl = _iconService.GetRoomUserIconUrl(roomUser) });
+        }
+        catch
+        {
+            // エラー時にファイルを削除
+            if (fileCreated && !string.IsNullOrEmpty(newFileName))
+            {
+                try
+                {
+                    await _iconService.DeleteRoomUserIconAsync(roomUser, newFileName, cancellationToken);
+                }
+                catch
+                {
+                    // ファイル削除に失敗しても無視
+                }
+            }
+            throw;
+        }
     }
 
     [HttpPut("room/{roomId}/me")]
@@ -332,7 +370,7 @@ public class RoomUsersController : ControllerBase
     }
 
     [HttpDelete("{id}")]
-    [RequireAny(RoomPermissions.ManageUsers, TenantPermissions.RoomManage)]
+    [RequireAny(PermissionScope.Room, RoomPermissions.ManageUsers, TenantPermissions.RoomManage)]
     public async Task<IActionResult> Delete([FromRoute] MaskedGuid id)
     {
         var entity = await _roomUserRepository.GetByIdAsync(id);
@@ -420,7 +458,7 @@ public class RoomUsersController : ControllerBase
     /// RoomUserのRoomRoleを設定（既存のロールをすべて置き換え）
     /// </summary>
     [HttpPut("{roomUserId}/role")]
-    [RequireAny(RoomPermissions.ManageUsers, TenantPermissions.RoomManage)]
+    [RequireAny(PermissionScope.Room, RoomPermissions.ManageUsers, TenantPermissions.RoomManage)]
     public async Task<IActionResult> SetUserRole(
         [FromRoute] MaskedGuid roomUserId,
         [FromBody] SetRoomUserRoleRequest request,

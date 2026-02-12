@@ -40,7 +40,7 @@ public class UsersController : ControllerBase
 
     [HttpGet]
     [Authorize]
-    [RequireAny(TenantPermissions.UserRead)]
+    [RequireAny(PermissionScope.Role, TenantPermissions.UserRead)]
     public async Task<ActionResult<List<UserSummaryDto>>> GetAll([FromRoute] string tenant, CancellationToken cancellationToken)
     {
         var result = await _userManagementService.GetAllUsersAsync();
@@ -55,7 +55,7 @@ public class UsersController : ControllerBase
     }
 
     [HttpGet("{userId}")]
-    [RequireAny(TenantPermissions.UserRead)]
+    [RequireAny(PermissionScope.Role, TenantPermissions.UserRead)]
     public async Task<ActionResult<UserSummaryDto>> GetById([FromRoute] MaskedGuid userId)
     {
         var result = await _userManagementService.GetUserByIdAsync((Guid)userId);
@@ -97,7 +97,7 @@ public class UsersController : ControllerBase
 
     [HttpPost("{userId}/roles")]
     [Authorize]
-    [RequireAny(TenantPermissions.UserManage)]
+    [RequireAny(PermissionScope.Role, TenantPermissions.UserManage)]
     public async Task<ActionResult<UserSummaryDto>> AddRole(
         [FromRoute] string tenant,
         [FromRoute] MaskedGuid userId,
@@ -131,7 +131,7 @@ public class UsersController : ControllerBase
 
     [HttpDelete("{userId}/roles")]
     [Authorize]
-    [RequireAny(TenantPermissions.UserManage)]
+    [RequireAny(PermissionScope.Role, TenantPermissions.UserManage)]
     public async Task<ActionResult<UserSummaryDto>> RemoveRole(
         [FromRoute] string tenant,
         [FromRoute] MaskedGuid userId,
@@ -216,11 +216,61 @@ public class UsersController : ControllerBase
         if (user == null)
             return NotFound();
 
-        var fileName = await _iconService.SaveUserIconAsync(user, file, cancellationToken);
-        user.IconFileName = fileName;
-        await _userManager.UpdateAsync(user);
+        string? newFileName = null;
+        var fileCreated = false;
+        try
+        {
+            newFileName = await _iconService.SaveUserIconAsync(user, file, cancellationToken);
+            fileCreated = true;
 
-        return Ok(new { iconUrl = _iconService.GetUserIconUrl(user), iconFileName = fileName });
+            var oldFileName = user.IconFileName;
+            user.IconFileName = newFileName;
+            var result = await _userManager.UpdateAsync(user);
+
+            if (!result.Succeeded)
+            {
+                // DB更新失敗時にファイルを削除
+                if (!string.IsNullOrEmpty(newFileName))
+                {
+                    await _iconService.DeleteUserIconAsync(user, newFileName, cancellationToken);
+                }
+                return BadRequest(new { message = "Failed to update user icon." });
+            }
+
+            // 古いアイコンファイルを削除
+            if (!string.IsNullOrEmpty(oldFileName))
+            {
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await _iconService.DeleteUserIconAsync(user, oldFileName, cancellationToken);
+                    }
+                    catch
+                    {
+                        // 削除に失敗しても無視
+                    }
+                }, cancellationToken);
+            }
+
+            return Ok(new { iconUrl = _iconService.GetUserIconUrl(user), iconFileName = newFileName });
+        }
+        catch
+        {
+            // エラー時にファイルを削除
+            if (fileCreated && !string.IsNullOrEmpty(newFileName))
+            {
+                try
+                {
+                    await _iconService.DeleteUserIconAsync(user, newFileName, cancellationToken);
+                }
+                catch
+                {
+                    // ファイル削除に失敗しても無視
+                }
+            }
+            throw;
+        }
     }
 
     /// <summary>
@@ -228,7 +278,7 @@ public class UsersController : ControllerBase
     /// </summary>
     [HttpPost]
     [Authorize]
-    [RequireAny(TenantPermissions.UserManagement)]
+    [RequireAny(PermissionScope.Role, TenantPermissions.UserAdmin)]
     public async Task<ActionResult<UserSummaryDto>> CreateUser(
         [FromRoute] string tenant,
         [FromBody] CreateUserRequest request)
@@ -238,7 +288,7 @@ public class UsersController : ControllerBase
             .Include(t => t.Detail)
             .FirstOrDefaultAsync(t => t.Identifier == tenant);
 
-        if (!tenantInfo?.Detail?.CanCreateUsers() ?? false)
+        if (tenantInfo?.Detail?.CanCreateUsers() != true)
         {
             var hasOidcRoleSync = tenantInfo?.Detail.HasOidcRoleSync() ?? false;
             var message = hasOidcRoleSync
@@ -266,7 +316,7 @@ public class UsersController : ControllerBase
     /// </summary>
     [HttpPost("{userId}/ban")]
     [Authorize]
-    [RequireAny(TenantPermissions.UserManagement)]
+    [RequireAny(PermissionScope.Role, TenantPermissions.UserAdmin)]
     public async Task<ActionResult<UserSummaryDto>> BanUser(
         [FromRoute] string tenant,
         [FromRoute] MaskedGuid userId,
@@ -275,6 +325,12 @@ public class UsersController : ControllerBase
         var currentUserId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         if (string.IsNullOrWhiteSpace(currentUserId))
             return Unauthorized();
+
+        // 自己BANを禁止
+        if (Guid.TryParse(currentUserId, out var currentUserIdGuid) && currentUserIdGuid == (Guid)userId)
+        {
+            return BadRequest(new { message = "You cannot ban yourself." });
+        }
 
         var result = await _userManagementService.BanUserAsync((Guid)userId, request, currentUserId);
 
@@ -293,7 +349,7 @@ public class UsersController : ControllerBase
     /// </summary>
     [HttpDelete("{userId}/ban")]
     [Authorize]
-    [RequireAny(TenantPermissions.UserManagement)]
+    [RequireAny(PermissionScope.Role, TenantPermissions.UserAdmin)]
     public async Task<ActionResult<UserSummaryDto>> UnbanUser(
         [FromRoute] string tenant,
         [FromRoute] MaskedGuid userId)

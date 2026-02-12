@@ -12,8 +12,8 @@ using TreeTopic.Data;
 namespace TreeTopic.Migrations.PostgreSQL
 {
     [DbContext(typeof(ApplicationDbContextPostgreSQL))]
-    [Migration("20260206062035_AddRoomJoinPermissionScopes")]
-    partial class AddRoomJoinPermissionScopes
+    [Migration("20260208104532_InitialCreate")]
+    partial class InitialCreate
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -427,7 +427,7 @@ namespace TreeTopic.Migrations.PostgreSQL
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<bool>("IsLatast")
+                    b.Property<bool>("IsLatest")
                         .HasColumnType("boolean");
 
                     b.Property<Guid?>("MessageId")
@@ -498,7 +498,7 @@ namespace TreeTopic.Migrations.PostgreSQL
 
                     b.HasIndex("RoomUserId");
 
-                    b.HasIndex("TopicId");
+                    b.HasIndex("TopicId", "CreatedAt", "Id");
 
                     b.ToTable("Messages");
 
@@ -831,7 +831,8 @@ namespace TreeTopic.Migrations.PostgreSQL
 
                     b.HasIndex("ApplicationUserId");
 
-                    b.HasIndex("RoomId");
+                    b.HasIndex("RoomId", "ApplicationUserId")
+                        .IsUnique();
 
                     b.ToTable("RoomUsers");
 

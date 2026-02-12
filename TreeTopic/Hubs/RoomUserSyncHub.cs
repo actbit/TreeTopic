@@ -1,7 +1,9 @@
+using Finbuckle.MultiTenant;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 using TreeTopic.Dtos;
 using MaskedUUID.AspNetCore.Types;
+using TreeTopic.Models;
 using TreeTopic.Services;
 
 namespace TreeTopic.Hubs;
@@ -31,13 +33,10 @@ public class RoomUserSyncHub : Hub<IRoomUserSyncHubClient>
         _realtimeAccessService = realtimeAccessService;
     }
 
-    public async Task JoinRoomUserGroup(string roomId, string userId)
+    public async Task JoinRoomUserGroup(MaskedGuid roomId, MaskedGuid userId)
     {
         try
         {
-            if (string.IsNullOrWhiteSpace(roomId) || string.IsNullOrWhiteSpace(userId))
-                return;
-
             if (!await _realtimeAccessService.CanJoinRoomUserGroupAsync(roomId, userId, Context.User, Context.ConnectionAborted))
             {
                 _logger.LogWarning("[RoomUserSyncHub] JoinRoomUserGroup denied connection={ConnectionId} room={Room} user={User}",
@@ -45,7 +44,9 @@ public class RoomUserSyncHub : Hub<IRoomUserSyncHubClient>
                 return;
             }
 
-            var groupName = RoomUserSyncHubGroups.RoomUser(roomId, userId);
+            var tenantInfo = Context.GetHttpContext()?.GetMultiTenantContext<ApplicationTenantInfo>()?.TenantInfo;
+            var tenant = RoomUserSyncHubGroups.ResolveTenantKey(tenantInfo);
+            var groupName = RoomUserSyncHubGroups.RoomUser(tenant, roomId.ToString(), userId.ToString());
             _logger.LogInformation("[RoomUserSyncHub] JoinRoomUserGroup connection={ConnectionId} room={Room} user={User} group={Group}", Context.ConnectionId, roomId, userId, groupName);
             await Groups.AddToGroupAsync(Context.ConnectionId, groupName);
         }
@@ -55,14 +56,13 @@ public class RoomUserSyncHub : Hub<IRoomUserSyncHubClient>
         }
     }
 
-    public async Task LeaveRoomUserGroup(string roomId, string userId)
+    public async Task LeaveRoomUserGroup(MaskedGuid roomId, MaskedGuid userId)
     {
         try
         {
-            if (string.IsNullOrWhiteSpace(roomId) || string.IsNullOrWhiteSpace(userId))
-                return;
-
-            var groupName = RoomUserSyncHubGroups.RoomUser(roomId, userId);
+            var tenantInfo = Context.GetHttpContext()?.GetMultiTenantContext<ApplicationTenantInfo>()?.TenantInfo;
+            var tenant = RoomUserSyncHubGroups.ResolveTenantKey(tenantInfo);
+            var groupName = RoomUserSyncHubGroups.RoomUser(tenant, roomId.ToString(), userId.ToString());
             _logger.LogInformation("[RoomUserSyncHub] LeaveRoomUserGroup connection={ConnectionId} room={Room} user={User} group={Group}", Context.ConnectionId, roomId, userId, groupName);
             await Groups.RemoveFromGroupAsync(Context.ConnectionId, groupName);
         }
@@ -93,5 +93,10 @@ public class RoomUserSyncHub : Hub<IRoomUserSyncHubClient>
 
 public static class RoomUserSyncHubGroups
 {
-    public static string RoomUser(string roomId, string userId) => $"room_{roomId}_user_{userId}";
+    public static string ResolveTenantKey(ApplicationTenantInfo? tenantInfo)
+    {
+        return tenantInfo?.Identifier ?? "default";
+    }
+
+    public static string RoomUser(string tenantKey, string roomId, string userId) => $"tenant:{tenantKey}:room_{roomId}_user_{userId}";
 }

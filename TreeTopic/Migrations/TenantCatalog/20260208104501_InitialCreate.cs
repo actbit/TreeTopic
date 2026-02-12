@@ -3,7 +3,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
-namespace TreeTopic.Migrations.TenantCatalog.PostgreSQL
+namespace TreeTopic.Migrations.TenantCatalog
 {
     /// <inheritdoc />
     public partial class InitialCreate : Migration

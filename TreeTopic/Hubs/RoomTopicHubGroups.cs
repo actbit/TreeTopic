@@ -6,9 +6,7 @@ public static class RoomTopicHubGroups
 {
     public static string ResolveTenantKey(ApplicationTenantInfo? tenantInfo)
     {
-        return tenantInfo?.Identifier
-               ?? tenantInfo?.Id
-               ?? "default";
+        return tenantInfo?.Identifier ?? "default";
     }
 
     public static string Tenant(string tenantKey)
@@ -16,8 +14,8 @@ public static class RoomTopicHubGroups
         return $"tenant:{tenantKey}";
     }
 
-    public static string Room(string maskedRoomId)
+    public static string Room(string tenantKey, string maskedRoomId)
     {
-        return $"room:{maskedRoomId}";
+        return $"tenant:{tenantKey}:room:{maskedRoomId}";
     }
 }

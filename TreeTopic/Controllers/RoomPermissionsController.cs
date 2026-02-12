@@ -34,7 +34,7 @@ public class RoomPermissionsController : BaseController
     /// Room権限一覧を取得（PermissionScanServiceで動的取得）
     /// </summary>
     [HttpGet("available")]
-    [RequireAny(TenantPermissions.PermissionRead)]
+    [RequireAny(PermissionScope.Role, TenantPermissions.PermissionRead)]
     public IActionResult GetAvailablePermissions([FromServices] PermissionCatalogService permissionCatalogService)
     {
         return Ok(permissionCatalogService.GetRoomPermissions());
@@ -44,7 +44,7 @@ public class RoomPermissionsController : BaseController
     /// RoomRoleに割り当てられている権限一覧を取得
     /// </summary>
     [HttpGet]
-    [RequireAny(RoomPermissions.ManageRoles, TenantPermissions.RoomManage)]
+    [RequireAny(PermissionScope.Room, RoomPermissions.ManageRoles, TenantPermissions.RoomManage)]
     public async Task<IActionResult> GetRolePermissions(
         [FromRoute] MaskedGuid roomId,
         [FromRoute] string roleName,
@@ -80,7 +80,7 @@ public class RoomPermissionsController : BaseController
     /// RoomRoleに権限を割り当て
     /// </summary>
     [HttpPost]
-    [RequireAny(RoomPermissions.ManageRoles, TenantPermissions.RoomManage)]
+    [RequireAny(PermissionScope.Room, RoomPermissions.ManageRoles, TenantPermissions.RoomManage)]
     public async Task<IActionResult> AddPermissionToRole(
         [FromRoute] MaskedGuid roomId,
         [FromRoute] string roleName,
@@ -128,7 +128,7 @@ public class RoomPermissionsController : BaseController
     /// RoomRoleから権限を削除
     /// </summary>
     [HttpDelete("{permissionName}")]
-    [RequireAny(RoomPermissions.ManageRoles, TenantPermissions.RoomManage)]
+    [RequireAny(PermissionScope.Room, RoomPermissions.ManageRoles, TenantPermissions.RoomManage)]
     public async Task<IActionResult> RemovePermissionFromRole(
         [FromRoute] MaskedGuid roomId,
         [FromRoute] string roleName,
@@ -170,7 +170,7 @@ public class RoomPermissionsController : BaseController
     /// RoomRoleの全権限をクリア
     /// </summary>
     [HttpDelete("clear")]
-    [RequireAny(RoomPermissions.ManageRoles, TenantPermissions.RoomManage)]
+    [RequireAny(PermissionScope.Room, RoomPermissions.ManageRoles, TenantPermissions.RoomManage)]
     public async Task<IActionResult> ClearRolePermissions(
         [FromRoute] MaskedGuid roomId,
         [FromRoute] string roleName,

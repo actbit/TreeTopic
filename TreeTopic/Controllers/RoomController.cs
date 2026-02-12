@@ -45,7 +45,21 @@ public class RoomController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// SQL LIKE の特殊文字をエスケープする（%, _, [, ], \）
+    /// </summary>
+    private static string EscapeLikePattern(string pattern)
+    {
+        return pattern
+            .Replace("\\", "\\\\")
+            .Replace("%", "\\%")
+            .Replace("_", "\\_")
+            .Replace("[", "\\[")
+            .Replace("]", "\\]");
+    }
+
     [HttpGet]
+    [Authorize]
     public async Task<IActionResult> GetAll(CancellationToken cancellationToken)
     {
         var appUser = await _userManager.FindByIdAsync(CurrentUserId.ToString());
@@ -53,20 +67,20 @@ public class RoomController : ControllerBase
             return Unauthorized();
 
         var identityRoles = await _userManager.GetRolesAsync(appUser);
-        var claimRoles = User.FindAll(ClaimTypes.Role).Select(c => c.Value);
+        var claimRolesFromClaims = User.FindAll(ClaimTypes.Role).Select(c => c.Value);
         var roleNames = new HashSet<string>(identityRoles, StringComparer.OrdinalIgnoreCase);
-        foreach (var claimRole in claimRoles)
+        foreach (var claimRole in claimRolesFromClaims)
         {
             if (!string.IsNullOrWhiteSpace(claimRole))
                 roleNames.Add(claimRole);
         }
 
-        var result = await _roomManagementService.GetAllRoomsAsync(CurrentUserId, roleNames.ToList(), cancellationToken);
+        var result = await _roomManagementService.GetAllRoomsAsync(CurrentUserId, roleNames, cancellationToken);
         return result.ToApiResult();
     }
 
     [HttpGet("{roomId}")]
-    [RequireAny(RoomPermissions.Join, TenantPermissions.RoomRead)]
+    [RequireAny(PermissionScope.Room, RoomPermissions.Read, TenantPermissions.RoomRead)]
     public async Task<IActionResult> GetById([FromRoute] MaskedGuid roomId, CancellationToken cancellationToken)
     {
         var result = await _roomManagementService.GetRoomByIdAsync((Guid)roomId, cancellationToken);
@@ -131,7 +145,7 @@ public class RoomController : ControllerBase
     }
 
     [HttpPost]
-    [RequireAny(RoomPermissions.Manage, TenantPermissions.RoomManage)]
+    [RequireAny(PermissionScope.Role, TenantPermissions.RoomManage)]
     public async Task<IActionResult> Create([FromBody] CreateRoomRequest request, CancellationToken cancellationToken)
     {
         if (!ModelState.IsValid)
@@ -142,7 +156,7 @@ public class RoomController : ControllerBase
     }
 
     [HttpPut("{roomId}")]
-    [RequireAny(RoomPermissions.Manage, TenantPermissions.RoomManage)]
+    [RequireAny(PermissionScope.Room, RoomPermissions.Manage, TenantPermissions.RoomManage)]
     public async Task<IActionResult> Update([FromRoute] MaskedGuid roomId, [FromBody] UpdateRoomRequest request, CancellationToken cancellationToken)
     {
         if (!ModelState.IsValid)
@@ -153,10 +167,57 @@ public class RoomController : ControllerBase
     }
 
     [HttpDelete("{roomId}")]
-    [RequireAny(RoomPermissions.Manage, TenantPermissions.RoomManage)]
+    [RequireAny(PermissionScope.Room, RoomPermissions.Manage, TenantPermissions.RoomManage)]
     public async Task<IActionResult> Delete([FromRoute] MaskedGuid roomId, CancellationToken cancellationToken)
     {
         var result = await _roomManagementService.DeleteRoomAsync((Guid)roomId, cancellationToken);
         return result.ToApiResult();
+    }
+
+    /// <summary>
+    /// Roomに追加可能なユーザー候補を取得（Roomメンバー以外のユーザー）
+    /// </summary>
+    [HttpGet("{roomId}/users/candidates")]
+    [RequireAny(PermissionScope.Room, RoomPermissions.ManageUsers, TenantPermissions.RoomManage)]
+    public async Task<IActionResult> GetUserCandidates(
+        [FromRoute] MaskedGuid roomId,
+        [FromQuery] string? search = null,
+        CancellationToken cancellationToken = default)
+    {
+        var roomGuid = (Guid)roomId;
+
+        // LEFT JOINを使用してRoomメンバー以外のユーザーを取得（パフォーマンス改善）
+        var query = from u in _db.Users
+                    join ru in _db.RoomUsers
+                        on u.Id equals ru.ApplicationUserId into roomUsers
+                    from existing in roomUsers.Where(ru => ru.RoomId == roomGuid).DefaultIfEmpty()
+                    where existing == null // Roomに参加していないユーザーのみ
+                    select u;
+
+        // 検索フィルタ（データベース側で大文字小文字を区別しない検索）
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var escapedSearch = EscapeLikePattern(search);
+            query = query.Where(u =>
+                (u.DisplayName != null && EF.Functions.Like(u.DisplayName, $"%{escapedSearch}%")) ||
+                (u.UserName != null && EF.Functions.Like(u.UserName, $"%{escapedSearch}%")) ||
+                (u.Email != null && EF.Functions.Like(u.Email, $"%{escapedSearch}%")));
+        }
+
+        // 結果を取得（ID、UserName、DisplayNameのみ）
+        var candidates = await query
+            .OrderBy(u => u.DisplayName)
+            .ThenBy(u => u.UserName)
+            .Select(u => new
+            {
+                u.Id,
+                u.UserName,
+                u.DisplayName,
+                u.Email
+            })
+            .Take(50) // 最大50件
+            .ToListAsync(cancellationToken);
+
+        return Ok(candidates);
     }
 }

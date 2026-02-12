@@ -102,7 +102,9 @@ function createUIStore() {
     openModal: (modal: ModalConfig) => {
       update((state) => ({
         ...state,
-        activeModals: [...state.activeModals, modal],
+        activeModals: state.activeModals.some((m) => m.id === modal.id)
+          ? state.activeModals
+          : [...state.activeModals, modal],
       }));
     },
     /**

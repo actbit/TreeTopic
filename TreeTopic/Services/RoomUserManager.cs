@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using TreeTopic.Models;
+using TreeTopic.Permissions;
 using TreeTopic.Repositories;
 
 namespace TreeTopic.Services;
@@ -14,6 +15,16 @@ public class RoomUserManager
     private readonly RoomRoleManager _roleManager;
     private readonly IRoomPermissionRepository _permissionRepository;
     private readonly ILogger<RoomUserManager> _logger;
+
+    /// <summary>
+    /// 新規メンバーに付与するデフォルト権限
+    /// システムが正常に動作するために必要な最小限の権限
+    /// </summary>
+    private static readonly string[] DefaultMemberPermissions =
+    {
+        RoomPermissions.Read,
+        RoomPermissions.TopicRead
+    };
 
     public RoomUserManager(
         ApplicationDbContext context,
@@ -63,6 +74,11 @@ public class RoomUserManager
         RoomUser roomUser,
         CancellationToken cancellationToken = default)
     {
+        if (roomUser == null)
+        {
+            throw new ArgumentNullException(nameof(roomUser), "RoomUser cannot be null");
+        }
+
         if (roomUser.Id == Guid.Empty)
         {
             roomUser.Id = Guid.CreateVersion7();
@@ -74,6 +90,29 @@ public class RoomUserManager
         _logger.LogInformation("RoomUser created: RoomId={RoomId}, UserId={UserId}",
             roomUser.RoomId, roomUser.ApplicationUserId);
         return roomUser;
+    }
+
+    /// <summary>
+    /// RoomUserを作成し、標準メンバー権限を付与
+    /// </summary>
+    public async Task<RoomUser> CreateMemberAsync(
+        RoomUser roomUser,
+        CancellationToken cancellationToken = default)
+    {
+        var created = await CreateAsync(roomUser, cancellationToken);
+        await EnsurePermissionsAsync(created, DefaultMemberPermissions, cancellationToken);
+        return created;
+    }
+
+    public async Task EnsurePermissionsAsync(
+        RoomUser roomUser,
+        IEnumerable<string> permissionNames,
+        CancellationToken cancellationToken = default)
+    {
+        foreach (var permissionName in permissionNames.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            await AddPermissionAsync(roomUser, permissionName, cancellationToken);
+        }
     }
 
     /// <summary>
@@ -276,7 +315,7 @@ public class RoomUserManager
         RoomUser roomUser,
         CancellationToken cancellationToken = default)
     {
-        return await HasPermissionAsync(roomUser, "read", cancellationToken);
+        return await HasPermissionAsync(roomUser, RoomPermissions.Read, cancellationToken);
     }
 
     /// <summary>
@@ -286,7 +325,7 @@ public class RoomUserManager
         RoomUser roomUser,
         CancellationToken cancellationToken = default)
     {
-        return await HasPermissionAsync(roomUser, "write", cancellationToken);
+        return await HasPermissionAsync(roomUser, RoomPermissions.Write, cancellationToken);
     }
 
     /// <summary>
@@ -296,7 +335,7 @@ public class RoomUserManager
         RoomUser roomUser,
         CancellationToken cancellationToken = default)
     {
-        return await HasPermissionAsync(roomUser, "delete", cancellationToken);
+        return await HasPermissionAsync(roomUser, RoomPermissions.Delete, cancellationToken);
     }
 
     /// <summary>
@@ -306,49 +345,7 @@ public class RoomUserManager
         RoomUser roomUser,
         CancellationToken cancellationToken = default)
     {
-        return await HasPermissionAsync(roomUser, "manage", cancellationToken);
-    }
-
-    // ========== Topic権限チェック ==========
-
-    /// <summary>
-    /// ユーザーがトピック読み取り権限を持っているか
-    /// </summary>
-    public async Task<bool> CanReadTopicAsync(
-        RoomUser roomUser,
-        CancellationToken cancellationToken = default)
-    {
-        return await HasPermissionAsync(roomUser, "topic.read", cancellationToken);
-    }
-
-    /// <summary>
-    /// ユーザーがトピック書き込み権限を持っているか
-    /// </summary>
-    public async Task<bool> CanWriteTopicAsync(
-        RoomUser roomUser,
-        CancellationToken cancellationToken = default)
-    {
-        return await HasPermissionAsync(roomUser, "topic.write", cancellationToken);
-    }
-
-    /// <summary>
-    /// ユーザーがトピック削除権限を持っているか
-    /// </summary>
-    public async Task<bool> CanDeleteTopicAsync(
-        RoomUser roomUser,
-        CancellationToken cancellationToken = default)
-    {
-        return await HasPermissionAsync(roomUser, "topic.delete", cancellationToken);
-    }
-
-    /// <summary>
-    /// ユーザーがトピック管理権限を持っているか
-    /// </summary>
-    public async Task<bool> CanManageTopicAsync(
-        RoomUser roomUser,
-        CancellationToken cancellationToken = default)
-    {
-        return await HasPermissionAsync(roomUser, "topic.manage", cancellationToken);
+        return await HasPermissionAsync(roomUser, RoomPermissions.Manage, cancellationToken);
     }
 
     /// <summary>

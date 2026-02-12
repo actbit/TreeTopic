@@ -330,7 +330,7 @@ export async function updateFile(fileId: string, updates: Partial<Material>, ten
 export async function deleteFile(fileId: string, tenant: string) {
   try {
     // Call backend API to delete file
-    await api.del(`/${tenant}/api/File/${fileId}`);
+    await api.delete(`/${tenant}/api/File/${fileId}`);
 
     // Update local store after successful API call
     files.deleteFile(fileId);

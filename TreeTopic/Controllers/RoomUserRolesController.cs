@@ -36,7 +36,7 @@ public class RoomUserRolesController : ControllerBase
     /// RoomUserに割り当てられているRoomRole一覧を取得
     /// </summary>
     [HttpGet]
-    [RequireAny(RoomPermissions.ManageUsers, TenantPermissions.RoomManage)]
+    [RequireAny(PermissionScope.Room, RoomPermissions.ManageUsers, TenantPermissions.RoomManage)]
     public async Task<IActionResult> GetUserRoles(
         [FromRoute] MaskedGuid roomUserId,
         CancellationToken cancellationToken)
@@ -63,7 +63,7 @@ public class RoomUserRolesController : ControllerBase
     /// RoomUserにRoomRoleを追加
     /// </summary>
     [HttpPost("{roleName}")]
-    [RequireAny(RoomPermissions.ManageUsers, TenantPermissions.RoomManage)]
+    [RequireAny(PermissionScope.Room, RoomPermissions.ManageUsers, TenantPermissions.RoomManage)]
     public async Task<IActionResult> AddRoleToUser(
         [FromRoute] MaskedGuid roomUserId,
         [FromRoute] string roleName,
@@ -72,7 +72,7 @@ public class RoomUserRolesController : ControllerBase
         var roomUserGuid = (Guid)roomUserId;
 
         // RoomUserの存在確認
-        var roomUser = await _db.RoomUsers.FindAsync(new[] { roomUserGuid }, cancellationToken);
+        var roomUser = await _db.RoomUsers.FindAsync(roomUserGuid, cancellationToken);
         if (roomUser == null)
         {
             return NotFound(new { message = "RoomUser not found" });
@@ -89,14 +89,14 @@ public class RoomUserRolesController : ControllerBase
         // ロールを追加
         await _roomUserManager.AddRoleAsync(roomUser, role.Id, cancellationToken);
 
-        return CreatedAtAction(nameof(GetUserRoles), new { roomUserId }, new { message = "Role added to user", roomUserId = roomUserGuid, roleName });
+        return StatusCode(StatusCodes.Status201Created, new { message = "Role added to user", roomUserId = roomUserGuid, roleName });
     }
 
     /// <summary>
     /// RoomUserからRoomRoleを削除
     /// </summary>
     [HttpDelete("{roleName}")]
-    [RequireAny(RoomPermissions.ManageUsers, TenantPermissions.RoomManage)]
+    [RequireAny(PermissionScope.Room, RoomPermissions.ManageUsers, TenantPermissions.RoomManage)]
     public async Task<IActionResult> RemoveRoleFromUser(
         [FromRoute] MaskedGuid roomUserId,
         [FromRoute] string roleName,
@@ -105,7 +105,7 @@ public class RoomUserRolesController : ControllerBase
         var roomUserGuid = (Guid)roomUserId;
 
         // RoomUserの存在確認
-        var roomUser = await _db.RoomUsers.FindAsync(new[] { roomUserGuid }, cancellationToken);
+        var roomUser = await _db.RoomUsers.FindAsync(roomUserGuid, cancellationToken);
         if (roomUser == null)
         {
             return NotFound(new { message = "RoomUser not found" });
@@ -129,7 +129,7 @@ public class RoomUserRolesController : ControllerBase
     /// RoomUserのRoomRoleを一括設定（置き換え）
     /// </summary>
     [HttpPut]
-    [RequireAny(RoomPermissions.ManageUsers, TenantPermissions.RoomManage)]
+    [RequireAny(PermissionScope.Room, RoomPermissions.ManageUsers, TenantPermissions.RoomManage)]
     public async Task<IActionResult> SetUserRoles(
         [FromRoute] MaskedGuid roomUserId,
         [FromBody] SetUserRolesRequest request,
@@ -138,7 +138,7 @@ public class RoomUserRolesController : ControllerBase
         var roomUserGuid = (Guid)roomUserId;
 
         // RoomUserの存在確認
-        var roomUser = await _db.RoomUsers.FindAsync(new[] { roomUserGuid }, cancellationToken);
+        var roomUser = await _db.RoomUsers.FindAsync(roomUserGuid, cancellationToken);
         if (roomUser == null)
         {
             return NotFound(new { message = "RoomUser not found" });

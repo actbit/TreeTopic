@@ -338,11 +338,11 @@
   }
 
   function openCreateChildTopicModal() {
-    createTopicParentId.set(node.id);
     const modal: ModalConfig = {
       id: 'topic-create',
       title: 'Create Topic',
       type: 'custom',
+      data: { parentId: node.id },
     };
     ui.openModal(modal);
   }

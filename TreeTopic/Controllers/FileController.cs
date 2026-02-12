@@ -101,7 +101,7 @@ public class FileController : ControllerBase
     );
 
     [HttpGet]
-    [RequireAny(RoomPermissions.Join, TenantPermissions.RoomRead)]
+    [RequireAny(PermissionScope.Role, TenantPermissions.RoomRead)]
     public async Task<IActionResult> GetAll(CancellationToken cancellationToken)
     {
         var result = await _fileManagementService.GetAllFilesAsync(cancellationToken);
@@ -109,7 +109,7 @@ public class FileController : ControllerBase
     }
 
     [HttpGet("message/{messageId}")]
-    [RequireAny(TopicPermissions.ReadMessages, TenantPermissions.TopicReadMessages)]
+    [RequireAny(PermissionScope.Topic, TopicPermissions.ReadMessages, TenantPermissions.TopicReadMessages)]
     public async Task<IActionResult> GetByMessage([FromRoute] MaskedGuid messageId, CancellationToken cancellationToken)
     {
         var result = await _fileManagementService.GetFilesByMessageAsync((Guid)messageId, cancellationToken);
@@ -117,7 +117,7 @@ public class FileController : ControllerBase
     }
 
     [HttpGet("{fileId}")]
-    [RequireAny(TopicPermissions.ReadMessages, TenantPermissions.TopicReadMessages)]
+    [RequireAny(PermissionScope.Topic, TopicPermissions.ReadMessages, TenantPermissions.TopicReadMessages)]
     public async Task<IActionResult> GetById([FromRoute] MaskedGuid fileId, CancellationToken cancellationToken)
     {
         var result = await _fileManagementService.GetFileByIdAsync((Guid)fileId, cancellationToken);
@@ -125,7 +125,7 @@ public class FileController : ControllerBase
     }
 
     [HttpGet("room/{roomId}")]
-    [RequireAny(RoomPermissions.Join, TenantPermissions.RoomRead)]
+    [RequireAny(PermissionScope.Room, RoomPermissions.Read, TenantPermissions.RoomRead)]
     public IActionResult GetByRoom([FromRoute] MaskedGuid roomId)
     {
         var tenant = RouteData.Values["tenant"]?.ToString() ?? "default";
@@ -182,7 +182,7 @@ public class FileController : ControllerBase
 
     [HttpPost("room/{roomId}")]
     [Consumes("multipart/form-data")]
-    [RequireAny(RoomPermissions.Write, TenantPermissions.RoomManage)]
+    [RequireAny(PermissionScope.Room, RoomPermissions.Write, TenantPermissions.RoomManage)]
     public async Task<IActionResult> UploadToRoom(
         [FromRoute] MaskedGuid roomId,
         [FromForm] IFormFile file,
@@ -201,43 +201,65 @@ public class FileController : ControllerBase
         var savedFileName = $"{id:N}_{originalFileName}";
         var savePath = Path.Combine(roomDir, savedFileName);
 
-        await using (var stream = System.IO.File.Create(savePath))
+        // ファイル保存前にパスを記録（エラー時のクリア用）
+        var fileCreated = false;
+        try
         {
-            await file.CopyToAsync(stream, cancellationToken);
+            await using (var stream = System.IO.File.Create(savePath))
+            {
+                await file.CopyToAsync(stream, cancellationToken);
+            }
+            fileCreated = true;
+
+            var mime = !string.IsNullOrWhiteSpace(file.ContentType)
+                ? file.ContentType
+                : (_contentTypeProvider.TryGetContentType(originalFileName, out var ct)
+                    ? ct
+                    : "application/octet-stream");
+
+            // 認可付きダウンロードエンドポイントを使用
+            var url = $"/{tenant}/api/file/download/{roomId}/{savedFileName}".Replace("\\", "/");
+
+            var roomUserName = await GetRoomUserDisplayNameAsync((Guid)roomId, cancellationToken);
+            var dto = new RoomMaterialDto(
+                Id: id.ToString(),
+                RoomId: roomId.ToString(),
+                MessageId: null,
+                FileName: originalFileName,
+                OriginalFileName: originalFileName,
+                MimeType: mime,
+                Size: file.Length,
+                Url: url,
+                FileType: GetFileType(originalFileName, mime),
+                UploadedAt: DateTime.UtcNow,
+                UploadedBy: CurrentUserId.ToString(),
+                UploadedByName: roomUserName,
+                Versions: Array.Empty<object>(),
+                IsArchived: false
+            );
+
+            return Ok(dto);
         }
-
-        var mime = !string.IsNullOrWhiteSpace(file.ContentType)
-            ? file.ContentType
-            : (_contentTypeProvider.TryGetContentType(originalFileName, out var ct)
-                ? ct
-                : "application/octet-stream");
-
-        // 認可付きダウンロードエンドポイントを使用
-        var url = $"/{tenant}/api/file/download/{roomId}/{savedFileName}".Replace("\\", "/");
-
-        var roomUserName = await GetRoomUserDisplayNameAsync((Guid)roomId, cancellationToken);
-        var dto = new RoomMaterialDto(
-            Id: id.ToString(),
-            RoomId: roomId.ToString(),
-            MessageId: null,
-            FileName: originalFileName,
-            OriginalFileName: originalFileName,
-            MimeType: mime,
-            Size: file.Length,
-            Url: url,
-            FileType: GetFileType(originalFileName, mime),
-            UploadedAt: DateTime.UtcNow,
-            UploadedBy: CurrentUserId.ToString(),
-            UploadedByName: roomUserName,
-            Versions: Array.Empty<object>(),
-            IsArchived: false
-        );
-
-        return Ok(dto);
+        catch
+        {
+            // DB保存失敗時やエラー時にファイルを削除
+            if (fileCreated && System.IO.File.Exists(savePath))
+            {
+                try
+                {
+                    System.IO.File.Delete(savePath);
+                }
+                catch
+                {
+                    // ファイル削除に失敗しても無視
+                }
+            }
+            throw;
+        }
     }
 
     [HttpPost]
-    [RequireAny(TopicPermissions.WriteMessages, TenantPermissions.TopicWriteMessages)]
+    [RequireAny(PermissionScope.Topic, TopicPermissions.WriteMessages, TenantPermissions.TopicWriteMessages)]
     public async Task<IActionResult> Create([FromBody] CreateFileRequest request, CancellationToken cancellationToken)
     {
         if (!ModelState.IsValid)
@@ -248,7 +270,7 @@ public class FileController : ControllerBase
     }
 
     [HttpPut("{fileId}")]
-    [RequireAny(TopicPermissions.WriteMessages, TenantPermissions.TopicWriteMessages)]
+    [RequireAny(PermissionScope.Topic, TopicPermissions.WriteMessages, TenantPermissions.TopicWriteMessages)]
     public async Task<IActionResult> Update([FromRoute] MaskedGuid fileId, [FromBody] UpdateFileRequest request, CancellationToken cancellationToken)
     {
         if (!ModelState.IsValid)
@@ -259,7 +281,7 @@ public class FileController : ControllerBase
     }
 
     [HttpDelete("{fileId}")]
-    [RequireAny(TopicPermissions.WriteMessages, TenantPermissions.TopicWriteMessages)]
+    [RequireAny(PermissionScope.Topic, TopicPermissions.WriteMessages, TenantPermissions.TopicWriteMessages)]
     public async Task<IActionResult> Delete([FromRoute] MaskedGuid fileId, CancellationToken cancellationToken)
     {
         var result = await _fileManagementService.DeleteFileAsync(fileId, cancellationToken);
@@ -271,7 +293,7 @@ public class FileController : ControllerBase
     /// /uploads 静的配信の代わりに使用
     /// </summary>
     [HttpGet("download/{roomId}/{fileName}")]
-    [RequireAny(RoomPermissions.Join, TenantPermissions.RoomRead)]
+    [RequireAny(PermissionScope.Room, RoomPermissions.Read, TenantPermissions.RoomRead)]
     public async Task<IActionResult> DownloadFile(
         [FromRoute] MaskedGuid roomId,
         [FromRoute] string fileName,
@@ -286,8 +308,10 @@ public class FileController : ControllerBase
             return BadRequest(new { message = "Invalid file name." });
         }
 
+        if (!roomRoot.EndsWith(Path.DirectorySeparatorChar))
+            roomRoot += Path.DirectorySeparatorChar;
         var filePath = Path.GetFullPath(Path.Combine(roomRoot, safeFileName));
-        if (!filePath.StartsWith(roomRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+        if (!filePath.StartsWith(roomRoot, StringComparison.OrdinalIgnoreCase))
         {
             return BadRequest(new { message = "Invalid file path." });
         }

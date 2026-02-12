@@ -91,12 +91,38 @@ public class Program
                 options.ExpireTimeSpan = TimeSpan.FromHours(AuthenticationConstants.Cookie.ExpirationHours);
                 options.SlidingExpiration = true;
                 options.Cookie.HttpOnly = true;
-                // SameSite=None is required for the cross-site OIDC redirect round-trip
-                options.Cookie.SameSite = SameSiteMode.None;
-                // Always use Secure policy (Secure=true for HTTPS, can be relaxed in dev if HTTPS is not available)
-                options.Cookie.SecurePolicy = builder.Environment.IsDevelopment()
-                    ? CookieSecurePolicy.SameAsRequest  // 開発環境：HTTP許可（SameSite=Noneの警告を受け入れ）
-                    : CookieSecurePolicy.Always;         // 本番環境：HTTPS必須
+
+                // Session CookieのSameSite設定
+                // デフォルト: Lax（CSRF保護のため）
+                // OIDC Correlation/Nonce Cookieとは別設定
+                var sessionCookieSameSiteStr = builder.Configuration["Authentication:SessionCookieSameSite"];
+
+                SameSiteMode sameSiteMode;
+                if (!string.IsNullOrEmpty(sessionCookieSameSiteStr) && Enum.TryParse<SameSiteMode>(sessionCookieSameSiteStr, true, out var configuredMode))
+                {
+                    sameSiteMode = configuredMode;
+                }
+                else
+                {
+                    // デフォルト: Lax（CSRF保護に必要、クロスサイトPOSTでCookie送信を防ぐ）
+                    sameSiteMode = SameSiteMode.Lax;
+                }
+
+                // SameSite=Noneを使用する場合はSecureが必須
+                CookieSecurePolicy securePolicy;
+                if (sameSiteMode == SameSiteMode.None)
+                {
+                    securePolicy = CookieSecurePolicy.Always;
+                }
+                else
+                {
+                    securePolicy = builder.Environment.IsDevelopment()
+                        ? CookieSecurePolicy.SameAsRequest
+                        : CookieSecurePolicy.Always;
+                }
+
+                options.Cookie.SameSite = sameSiteMode;
+                options.Cookie.SecurePolicy = securePolicy;
 
                 // Set cookie path per tenant to allow multiple tenant logins
                 options.Events = new CookieAuthenticationEvents
@@ -234,7 +260,7 @@ public class Program
                             var cookieOptions = new CookieOptions
                             {
                                 HttpOnly = true,
-                                SameSite = SameSiteMode.None,
+                                SameSite = SameSiteMode.Lax,
                                 Secure = isSecure,
                                 Path = AuthenticationConstants.Cookie.CookiePath,
                                 Expires = DateTimeOffset.UtcNow.AddHours(AuthenticationConstants.Cookie.ExpirationHours)
@@ -290,6 +316,7 @@ public class Program
         var altchaService = Altcha.CreateServiceBuilder()
             .UseSha256(altchaKey)
             .UseInMemoryStore()
+            .SetComplexity(20000, 30000)  // デフォルト50000-100000から厳しく（約2.5-3.3倍の難易度）
             .SetExpiryInSeconds(180)
             .Build();
         builder.Services.AddSingleton(altchaService);

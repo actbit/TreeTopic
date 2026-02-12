@@ -8,6 +8,8 @@
   import TenantRolePermissionModal from './TenantRolePermissionModal.svelte';
   import TenantCreateModal from './TenantCreateModal.svelte';
   import ForbiddenAccessModal from './ForbiddenAccessModal.svelte';
+  import AddRoomMemberModal from './AddRoomMemberModal.svelte';
+  import TopicSettingsModal from '../topics/TopicSettingsModal.svelte';
 
   let activeModalsList = $derived.by(() => $activeModals);
 </script>
@@ -48,6 +50,14 @@
 
     {#if modal.id === 'forbidden-access'}
       <ForbiddenAccessModal />
+    {/if}
+
+    {#if modal.id === 'add-room-member'}
+      <AddRoomMemberModal />
+    {/if}
+
+    {#if modal.id === 'topic-settings'}
+      <TopicSettingsModal />
     {/if}
   </div>
 {/each}

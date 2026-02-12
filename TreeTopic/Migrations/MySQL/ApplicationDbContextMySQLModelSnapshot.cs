@@ -431,7 +431,7 @@ namespace TreeTopic.Migrations.MySQL
                         .IsRequired()
                         .HasColumnType("longtext");
 
-                    b.Property<bool>("IsLatast")
+                    b.Property<bool>("IsLatest")
                         .HasColumnType("tinyint(1)");
 
                     b.Property<byte[]>("MessageId")
@@ -848,7 +848,8 @@ namespace TreeTopic.Migrations.MySQL
 
                     b.HasIndex("ApplicationUserId");
 
-                    b.HasIndex("RoomId");
+                    b.HasIndex("RoomId", "ApplicationUserId")
+                        .IsUnique();
 
                     b.ToTable("RoomUsers");
 

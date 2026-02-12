@@ -2,7 +2,7 @@
  * API エクスポート
  */
 
-export { api } from './client';
+export { api, assignUserRole, removeUserRole } from './client';
 export {
   permissionsApi,
   userPermissionsApi,

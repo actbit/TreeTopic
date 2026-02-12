@@ -123,7 +123,10 @@ function createRoomsStore() {
     addRoom: (room: Room) => {
       update((state) => ({
         ...state,
-        rooms: [room, ...state.rooms],
+        rooms: [
+          room,
+          ...state.rooms.filter((r) => r.id !== room.id),
+        ],
       }));
     },
     /**

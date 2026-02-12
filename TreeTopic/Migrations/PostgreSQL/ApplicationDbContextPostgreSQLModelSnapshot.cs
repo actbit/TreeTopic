@@ -424,7 +424,7 @@ namespace TreeTopic.Migrations.PostgreSQL
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<bool>("IsLatast")
+                    b.Property<bool>("IsLatest")
                         .HasColumnType("boolean");
 
                     b.Property<Guid?>("MessageId")
@@ -828,7 +828,8 @@ namespace TreeTopic.Migrations.PostgreSQL
 
                     b.HasIndex("ApplicationUserId");
 
-                    b.HasIndex("RoomId");
+                    b.HasIndex("RoomId", "ApplicationUserId")
+                        .IsUnique();
 
                     b.ToTable("RoomUsers");
 

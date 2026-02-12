@@ -20,8 +20,8 @@ public static class TenantPermissions
     public const string UserManage = "tenant.user.manage";
     public static readonly PermissionRequirement UserManageReq = new(PermissionScope.Role, UserManage);
 
-    public const string UserManagement = "tenant.usermanagement";
-    public static readonly PermissionRequirement UserManagementReq = new(PermissionScope.Role, UserManagement);
+    public const string UserAdmin = "tenant.user.admin";
+    public static readonly PermissionRequirement UserAdminReq = new(PermissionScope.Role, UserAdmin);
 
     // ロール管理
     public const string RoleRead = "tenant.role.read";

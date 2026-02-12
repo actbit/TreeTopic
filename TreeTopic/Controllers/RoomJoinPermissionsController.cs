@@ -27,7 +27,7 @@ public class RoomJoinPermissionsController : ControllerBase
     }
 
     [HttpGet]
-    [RequireAny(RoomPermissions.Manage, TenantPermissions.RoomManage)]
+    [RequireAny(PermissionScope.Room, RoomPermissions.Manage, TenantPermissions.RoomManage)]
     public async Task<ActionResult<RoomJoinPermissionsResponse>> GetJoinPermissions(
         [FromRoute] MaskedGuid roomId,
         CancellationToken cancellationToken)
@@ -74,7 +74,7 @@ public class RoomJoinPermissionsController : ControllerBase
     }
 
     [HttpPut("policy")]
-    [RequireAny(RoomPermissions.Manage, TenantPermissions.RoomManage)]
+    [RequireAny(PermissionScope.Room, RoomPermissions.Manage, TenantPermissions.RoomManage)]
     public async Task<IActionResult> UpdateJoinPolicy(
         [FromRoute] MaskedGuid roomId,
         [FromBody] UpdateRoomJoinPolicyRequest request,
@@ -98,7 +98,7 @@ public class RoomJoinPermissionsController : ControllerBase
     }
 
     [HttpGet("available-users")]
-    [RequireAny(RoomPermissions.Manage, TenantPermissions.RoomManage)]
+    [RequireAny(PermissionScope.Room, RoomPermissions.Manage, TenantPermissions.RoomManage)]
     public async Task<ActionResult<RoomJoinAvailableUsersResponse>> GetAvailableUsers(CancellationToken cancellationToken)
     {
         var users = await _dbContext.Users
@@ -117,7 +117,7 @@ public class RoomJoinPermissionsController : ControllerBase
     }
 
     [HttpGet("available-roles")]
-    [RequireAny(RoomPermissions.Manage, TenantPermissions.RoomManage)]
+    [RequireAny(PermissionScope.Room, RoomPermissions.Manage, TenantPermissions.RoomManage)]
     public async Task<ActionResult<RoomJoinAvailableRolesResponse>> GetAvailableRoles(CancellationToken cancellationToken)
     {
         var roles = await _dbContext.Roles
@@ -134,7 +134,7 @@ public class RoomJoinPermissionsController : ControllerBase
     }
 
     [HttpPost("users")]
-    [RequireAny(RoomPermissions.Manage, TenantPermissions.RoomManage)]
+    [RequireAny(PermissionScope.Room, RoomPermissions.Manage, TenantPermissions.RoomManage)]
     public async Task<IActionResult> AddAllowedUser(
         [FromRoute] MaskedGuid roomId,
         [FromBody] AddRoomJoinAllowedUserRequest request,
@@ -182,7 +182,7 @@ public class RoomJoinPermissionsController : ControllerBase
     }
 
     [HttpDelete("users/{userId}")]
-    [RequireAny(RoomPermissions.Manage, TenantPermissions.RoomManage)]
+    [RequireAny(PermissionScope.Room, RoomPermissions.Manage, TenantPermissions.RoomManage)]
     public async Task<IActionResult> RemoveAllowedUser(
         [FromRoute] MaskedGuid roomId,
         [FromRoute] MaskedGuid userId,
@@ -206,7 +206,7 @@ public class RoomJoinPermissionsController : ControllerBase
     }
 
     [HttpPost("roles")]
-    [RequireAny(RoomPermissions.Manage, TenantPermissions.RoomManage)]
+    [RequireAny(PermissionScope.Room, RoomPermissions.Manage, TenantPermissions.RoomManage)]
     public async Task<IActionResult> AddAllowedRole(
         [FromRoute] MaskedGuid roomId,
         [FromBody] AddRoomJoinAllowedRoleRequest request,
@@ -254,7 +254,7 @@ public class RoomJoinPermissionsController : ControllerBase
     }
 
     [HttpDelete("roles/{roleId}")]
-    [RequireAny(RoomPermissions.Manage, TenantPermissions.RoomManage)]
+    [RequireAny(PermissionScope.Room, RoomPermissions.Manage, TenantPermissions.RoomManage)]
     public async Task<IActionResult> RemoveAllowedRole(
         [FromRoute] MaskedGuid roomId,
         [FromRoute] MaskedGuid roleId,

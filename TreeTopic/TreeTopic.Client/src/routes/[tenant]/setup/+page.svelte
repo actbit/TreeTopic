@@ -286,7 +286,7 @@
       isLoading = true;
       error = null;
 
-      await api.del(`/${tenant}/api/setup/rolesetup/${roleName}`, {
+      await api.delete(`/${tenant}/api/setup/rolesetup/${roleName}`, {
         headers: { 'Authorization': `Bearer ${setupToken}` }
       });
 
