@@ -237,6 +237,7 @@
       newBoardTitle = '';
       newBoardDescription = '';
 
+      brainstormBoardsLastLoadKey = '';
       await loadBrainstormBoards();
     } catch (err: unknown) {
       newBoardError = err instanceof Error ? err.message : 'Failed to create brainstorm board';

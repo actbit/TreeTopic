@@ -41,7 +41,7 @@ public class TopicPermissionsController : BaseController
     /// トピックに割り当てられているユーザー権限一覧を取得
     /// </summary>
     [HttpGet("users")]
-    [RequireAny(PermissionScope.Topic, TopicPermissions.Manage, TenantPermissions.TopicManage)]
+    [RequireAny(PermissionScope.Topic, TopicPermissions.Manage, TenantPermissions.TopicManage, RoomPermissions.TopicManage)]
     public async Task<IActionResult> GetTopicUserPermissions(
         [FromRoute] MaskedGuid topicId,
         CancellationToken cancellationToken)
@@ -59,7 +59,7 @@ public class TopicPermissionsController : BaseController
     /// 特定ユーザーのトピック権限を取得
     /// </summary>
     [HttpGet("users/{roomUserId}")]
-    [RequireAny(PermissionScope.Topic, TopicPermissions.Manage, TenantPermissions.TopicManage)]
+    [RequireAny(PermissionScope.Topic, TopicPermissions.Manage, TenantPermissions.TopicManage, RoomPermissions.TopicManage)]
     public async Task<IActionResult> GetUserTopicPermissions(
         [FromRoute] MaskedGuid topicId,
         [FromRoute] MaskedGuid roomUserId,
@@ -80,7 +80,7 @@ public class TopicPermissionsController : BaseController
     /// ユーザーにトピック権限を割り当て
     /// </summary>
     [HttpPost("users")]
-    [RequireAny(PermissionScope.Topic, TopicPermissions.Manage, TenantPermissions.TopicManage)]
+    [RequireAny(PermissionScope.Topic, TopicPermissions.Manage, TenantPermissions.TopicManage, RoomPermissions.TopicManage)]
     public async Task<IActionResult> AddPermissionToUser(
         [FromRoute] MaskedGuid topicId,
         [FromBody] AddTopicPermissionToUserRequest request,
@@ -115,7 +115,7 @@ public class TopicPermissionsController : BaseController
     /// ユーザーからトピック権限を削除
     /// </summary>
     [HttpDelete("users/{roomUserId}/{permissionName}")]
-    [RequireAny(PermissionScope.Topic, TopicPermissions.Manage, TenantPermissions.TopicManage)]
+    [RequireAny(PermissionScope.Topic, TopicPermissions.Manage, TenantPermissions.TopicManage, RoomPermissions.TopicManage)]
     public async Task<IActionResult> RemovePermissionFromUser(
         [FromRoute] MaskedGuid topicId,
         [FromRoute] MaskedGuid roomUserId,
@@ -147,7 +147,7 @@ public class TopicPermissionsController : BaseController
     /// トピックに割り当てられているTopicRolePermission（RoomRole権限）一覧を取得
     /// </summary>
     [HttpGet("role-permissions")]
-    [RequireAny(PermissionScope.Topic, TopicPermissions.Manage, TenantPermissions.TopicManage)]
+    [RequireAny(PermissionScope.Topic, TopicPermissions.Manage, TenantPermissions.TopicManage, RoomPermissions.TopicManage)]
     public async Task<IActionResult> GetTopicRolePermissions(
         [FromRoute] MaskedGuid topicId,
         CancellationToken cancellationToken)
@@ -165,7 +165,7 @@ public class TopicPermissionsController : BaseController
     /// トピックにRoomRole権限を割り当て（TopicRolePermissionとして追加）
     /// </summary>
     [HttpPost("role-permissions")]
-    [RequireAny(PermissionScope.Topic, TopicPermissions.Manage, TenantPermissions.TopicManage)]
+    [RequireAny(PermissionScope.Topic, TopicPermissions.Manage, TenantPermissions.TopicManage, RoomPermissions.TopicManage)]
     public async Task<IActionResult> AddTopicRolePermission(
         [FromRoute] MaskedGuid topicId,
         [FromBody] AddTopicRolePermissionRequest request,
@@ -204,7 +204,7 @@ public class TopicPermissionsController : BaseController
     /// トピックからRoomRole権限を削除
     /// </summary>
     [HttpDelete("role-permissions/{roleName}/{permissionName}")]
-    [RequireAny(PermissionScope.Topic, TopicPermissions.Manage, TenantPermissions.TopicManage)]
+    [RequireAny(PermissionScope.Topic, TopicPermissions.Manage, TenantPermissions.TopicManage, RoomPermissions.TopicManage)]
     public async Task<IActionResult> RemoveTopicRolePermission(
         [FromRoute] MaskedGuid topicId,
         [FromRoute] string roleName,
@@ -235,7 +235,7 @@ public class TopicPermissionsController : BaseController
     /// ユーザーのTopic権限をクリア
     /// </summary>
     [HttpDelete("users/{roomUserId}")]
-    [RequireAny(PermissionScope.Topic, TopicPermissions.Manage, TenantPermissions.TopicManage)]
+    [RequireAny(PermissionScope.Topic, TopicPermissions.Manage, TenantPermissions.TopicManage, RoomPermissions.TopicManage)]
     public async Task<IActionResult> ClearUserPermissions(
         [FromRoute] MaskedGuid topicId,
         [FromRoute] MaskedGuid roomUserId,
@@ -255,7 +255,7 @@ public class TopicPermissionsController : BaseController
     /// Topicの全RoomRole権限をクリア
     /// </summary>
     [HttpDelete("role-permissions")]
-    [RequireAny(PermissionScope.Topic, TopicPermissions.Manage, TenantPermissions.TopicManage)]
+    [RequireAny(PermissionScope.Topic, TopicPermissions.Manage, TenantPermissions.TopicManage, RoomPermissions.TopicManage)]
     public async Task<IActionResult> ClearRolePermissions(
         [FromRoute] MaskedGuid topicId,
         CancellationToken cancellationToken)

@@ -26,6 +26,18 @@ public static class RoomPermissions
     public const string TopicManage = "room.topic.manage";
     public static readonly PermissionRequirement TopicManageReq = new(PermissionScope.Room, TopicManage);
 
+    /// <summary>ルーム内トピックのメッセージ読み取り</summary>
+    public const string TopicMessageRead = "room.topic.message.read";
+    public static readonly PermissionRequirement TopicMessageReadReq = new(PermissionScope.Room, TopicMessageRead);
+
+    /// <summary>ルーム内トピックへのメッセージ送信</summary>
+    public const string TopicMessageWrite = "room.topic.message.write";
+    public static readonly PermissionRequirement TopicMessageWriteReq = new(PermissionScope.Room, TopicMessageWrite);
+
+    /// <summary>ルーム内トピックのメッセージ編集・削除</summary>
+    public const string TopicMessageManage = "room.topic.message.manage";
+    public static readonly PermissionRequirement TopicMessageManageReq = new(PermissionScope.Room, TopicMessageManage);
+
     /// <summary>ルーム内リソースの削除（シェア、ファイル等）</summary>
     public const string Delete = "room.delete";
     public static readonly PermissionRequirement DeleteReq = new(PermissionScope.Room, Delete);
