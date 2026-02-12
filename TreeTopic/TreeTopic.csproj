@@ -28,8 +28,8 @@
 		<PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="9.0.4" />
 		<PackageReference Include="NSwag.AspNetCore" Version="14.6.3" />
 		<PackageReference Include="Pomelo.EntityFrameworkCore.MySql" Version="9.0.0" />
-		<PackageReference Include="SkiaSharp" Version="3.119.1" />
-		<PackageReference Include="SkiaSharp.NativeAssets.Linux" Version="3.119.1" />
+		<PackageReference Include="SixLabors.ImageSharp" Version="3.1.12" />
+		<PackageReference Include="SixLabors.ImageSharp.Drawing" Version="2.1.7" />
 		<PackageReference Include="UUIDv47Sharp" Version="0.1.1" />
 	</ItemGroup>
 
