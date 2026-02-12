@@ -31,6 +31,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.Extensions.FileProviders;
 using TreeTopic.Hubs;
 using TreeTopic.Common.Helpers;
+using Microsoft.AspNetCore.HttpOverrides;
 namespace TreeTopic;
 
 public class Program
@@ -658,6 +659,97 @@ public class Program
             {
                 options.DocumentPath = "openapi/v1.json";
             });
+        }
+        // ForwardedHeaders設定（開発環境ではスキップ）
+        if (app.Environment.IsDevelopment())
+        {
+            app.Logger.LogInformation("ForwardedHeaders is skipped in Development environment");
+        }
+        else
+        {
+            var forwardedHeadersMode = builder.Configuration.GetValue<string>("ForwardedHeaders:Mode") ?? "Auto";
+            var shouldUseForwardedHeaders = false;
+
+            if (forwardedHeadersMode.Equals("Disabled", StringComparison.OrdinalIgnoreCase))
+            {
+                app.Logger.LogInformation("ForwardedHeaders is disabled by configuration");
+            }
+            else if (forwardedHeadersMode.Equals("Enabled", StringComparison.OrdinalIgnoreCase))
+            {
+                shouldUseForwardedHeaders = true;
+                app.Logger.LogInformation("ForwardedHeaders is enabled by configuration");
+            }
+            else // Auto mode (default)
+            {
+                // 環境変数やヘッダーの有無でリバースプロキシの有無を判定
+                // Docker環境では通常Nginx等のリバースプロキシが前に配置される
+                var hasReverseProxyEnv = !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("FORWARDEDHEADERS_ENABLED")) ||
+                                         Environment.GetEnvironmentVariable("ASPNETCORE_FORWARDEDHEADERS_ENABLED") == "true";
+
+                // X-Forwarded-For ヘッダーが存在するかどうかを判定（最初のリクエスト時には不明なので、環境変数で判定）
+                // または、Dockerネットワーク内にいるかどうかを判定
+                var isInDocker = !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("DOTNET_RUNNING_IN_CONTAINER"));
+
+                shouldUseForwardedHeaders = hasReverseProxyEnv || isInDocker;
+                app.Logger.LogInformation("ForwardedHeaders auto-detection: Enabled={ShouldUse}, EnvCheck={HasEnv}, InDocker={InDocker}",
+                    shouldUseForwardedHeaders, hasReverseProxyEnv, isInDocker);
+            }
+
+            if (shouldUseForwardedHeaders)
+            {
+                var forwardedHeadersOptions = new ForwardedHeadersOptions
+                {
+                    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
+                };
+
+                // KnownNetworksを設定
+                var knownNetworks = builder.Configuration.GetSection("ForwardedHeaders:KnownNetworks").Get<string[]>() ?? [];
+                foreach (var networkCidr in knownNetworks)
+                {
+                    if (!string.IsNullOrWhiteSpace(networkCidr))
+                    {
+                        try
+                        {
+                            var parts = networkCidr.Split('/');
+                            if (parts.Length == 2 &&
+                                System.Net.IPAddress.TryParse(parts[0].Trim(), out var ipAddress) &&
+                                int.TryParse(parts[1].Trim(), out var prefixLength))
+                            {
+                                forwardedHeadersOptions.KnownNetworks.Add(new Microsoft.AspNetCore.HttpOverrides.IPNetwork(ipAddress, prefixLength));
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            app.Logger.LogWarning(ex, "Failed to parse KnownNetwork: {NetworkCidr}", networkCidr);
+                        }
+                    }
+                }
+
+                // KnownProxiesを設定
+                var knownProxies = builder.Configuration.GetSection("ForwardedHeaders:KnownProxies").Get<string[]>() ?? [];
+                foreach (var proxyIp in knownProxies)
+                {
+                    if (!string.IsNullOrWhiteSpace(proxyIp))
+                    {
+                        try
+                        {
+                            if (System.Net.IPAddress.TryParse(proxyIp.Trim(), out var ipAddress))
+                            {
+                                forwardedHeadersOptions.KnownProxies.Add(ipAddress);
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            app.Logger.LogWarning(ex, "Failed to parse KnownProxy: {ProxyIp}", proxyIp);
+                        }
+                    }
+                }
+
+                app.UseForwardedHeaders(forwardedHeadersOptions);
+                app.Logger.LogInformation("ForwardedHeaders configured with KnownNetworks: {Networks}, KnownProxies: {Proxies}",
+                    knownNetworks.Length > 0 ? string.Join(", ", knownNetworks) : "none",
+                    knownProxies.Length > 0 ? string.Join(", ", knownProxies) : "none");
+            }
         }
 
         app.UseHttpsRedirection();

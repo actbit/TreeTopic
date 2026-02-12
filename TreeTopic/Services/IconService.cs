@@ -1,6 +1,10 @@
 using System.Security.Cryptography;
 using Finbuckle.MultiTenant.Abstractions;
-using SkiaSharp;
+using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.Drawing.Processing;
+using SixLabors.ImageSharp.PixelFormats;
+using SixLabors.ImageSharp.Processing;
+using SixLabors.Fonts;
 using TreeTopic.Models;
 
 namespace TreeTopic.Services;
@@ -72,7 +76,7 @@ public class IconService
         var initials = GetInitials(user.DisplayName ?? user.UserName ?? user.Email ?? "U");
         var fileName = $"{user.Id:N}.png";
         var path = GetUserIconPath(GetTenantUploadsFolderName(), fileName);
-        await GenerateIconAsync(initials, user.Id.ToString("N"), path, cancellationToken);
+        await GenerateIconAsync(initials, user.Id.ToString("N"), path, _environment, cancellationToken);
         return fileName;
     }
 
@@ -112,7 +116,7 @@ public class IconService
         var initials = GetInitials(seedSource);
         var fileName = $"{roomUser.Id:N}.png";
         var path = GetRoomUserIconPath(fileName);
-        await GenerateIconAsync(initials, roomUser.Id.ToString("N"), path, cancellationToken);
+        await GenerateIconAsync(initials, roomUser.Id.ToString("N"), path, _environment, cancellationToken);
         return fileName;
     }
 
@@ -216,20 +220,20 @@ public class IconService
             : trimmed.Substring(0, 1).ToUpperInvariant();
     }
 
-    private static SKColor PickColor(string seed)
+    private static Color PickColor(string seed)
     {
         var palette = new[]
         {
-            new SKColor(0xEF, 0x53, 0x50),
-            new SKColor(0xAB, 0x47, 0xBC),
-            new SKColor(0x5C, 0x6B, 0xC0),
-            new SKColor(0x29, 0xB6, 0xF6),
-            new SKColor(0x26, 0xA6, 0x9A),
-            new SKColor(0x66, 0xBB, 0x6A),
-            new SKColor(0xFF, 0xCA, 0x28),
-            new SKColor(0xFF, 0xA7, 0x26),
-            new SKColor(0x8D, 0x6E, 0x63),
-            new SKColor(0x78, 0x90, 0x9C)
+            Color.FromRgb(0xEF, 0x53, 0x50),
+            Color.FromRgb(0xAB, 0x47, 0xBC),
+            Color.FromRgb(0x5C, 0x6B, 0xC0),
+            Color.FromRgb(0x29, 0xB6, 0xF6),
+            Color.FromRgb(0x26, 0xA6, 0x9A),
+            Color.FromRgb(0x66, 0xBB, 0x6A),
+            Color.FromRgb(0xFF, 0xCA, 0x28),
+            Color.FromRgb(0xFF, 0xA7, 0x26),
+            Color.FromRgb(0x8D, 0x6E, 0x63),
+            Color.FromRgb(0x78, 0x90, 0x9C)
         };
 
         var hash = SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(seed));
@@ -237,52 +241,32 @@ public class IconService
         return palette[index];
     }
 
-    private static async Task GenerateIconAsync(string initials, string seed, string path, CancellationToken cancellationToken)
+    private static Task GenerateIconAsync(string initials, string seed, string path, IWebHostEnvironment environment, CancellationToken cancellationToken)
     {
         const int size = 256;
-        using var surface = SKSurface.Create(new SKImageInfo(size, size));
-        var canvas = surface.Canvas;
-
         var bg = PickColor(seed);
-        canvas.Clear(bg);
 
-        // 日本語対応フォントを優先的に試す
-        var fontCandidates = new[] { "Noto Sans JP", "Yu Gothic", "Hiragino Sans", "MS Gothic", "Arial" };
-        SKTypeface? typeface = null;
-        foreach (var fontName in fontCandidates)
-        {
-            var candidate = SKTypeface.FromFamilyName(fontName, SKFontStyle.Bold);
-            if (candidate != null)
-            {
-                typeface = candidate;
-                break;
-            }
-        }
-        typeface ??= SKTypeface.Default;
+        using var image = new Image<Rgba32>(size, size);
+        image.Mutate(x => x.Fill(bg));
 
-        using var paint = new SKPaint
+        // フォントを読み込む
+        var fontPath = Path.Combine(environment.ContentRootPath, "Fonts", "NotoSansJP-Bold.ttf");
+        var fontCollection = new FontCollection();
+        var fontFamily = fontCollection.Add(fontPath);
+        var font = fontFamily.CreateFont(size * 0.45f);
+
+        var textOptions = new RichTextOptions(font)
         {
-            IsAntialias = true,
-            Color = SKColors.White,
-            TextAlign = SKTextAlign.Center,
-            Typeface = typeface
+            Origin = new PointF(size / 2f, size / 2f),
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center
         };
 
-        paint.TextSize = size * 0.45f;
-
-        var bounds = new SKRect();
-        paint.MeasureText(initials, ref bounds);
-        var x = size / 2f;
-        var y = size / 2f - bounds.MidY;
-        canvas.DrawText(initials, x, y, paint);
-
-        using var image = surface.Snapshot();
-        using var data = image.Encode(SKEncodedImageFormat.Png, 100);
+        image.Mutate(x => x.DrawText(textOptions, initials, Color.White));
 
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        await using var stream = System.IO.File.Create(path);
-        data.SaveTo(stream);
-        await stream.FlushAsync(cancellationToken);
+        image.SaveAsPng(path);
+        return Task.CompletedTask;
     }
 
     private bool TryMigrateLegacyIcon(string tenantFolder, string iconFolder, string fileName, string targetPath)
