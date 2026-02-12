@@ -148,6 +148,44 @@ export function invalidateByResource(method: string, path: string): void {
 	if (normalizedPath.includes('/api/file')) {
 		invalidate(/^GET:.*\/api\/File/i);
 	}
+
+	// テナントロール権限が変更された場合
+	if (normalizedPath.includes('/api/tenantroles') && normalizedPath.includes('/permissions')) {
+		invalidate(/^GET:.*\/api\/tenantroles/i);
+		invalidate(/^GET:.*\/api\/permissions/i);
+		invalidate(/^GET:.*\/auth\//i); // 権限が変わるとユーザーのクレームにも影響
+		invalidate(/^GET:.*\/api\/Room/i);
+		invalidate(/^GET:.*\/api\/Topic/i);
+	}
+
+	// ルームロール権限が変更された場合
+	if (normalizedPath.includes('/api/rooms') && normalizedPath.includes('/roomroles') && normalizedPath.includes('/permissions')) {
+		invalidate(/^GET:.*\/api\/rooms\/[^/]+\/roomroles/i);
+		invalidate(/^GET:.*\/api\/permissions/i);
+		invalidate(/^GET:.*\/api\/Room/i);
+		invalidate(/^GET:.*\/api\/Topic/i);
+	}
+
+	// ユーザーロールが変更された場合
+	if (normalizedPath.includes('/users/') && normalizedPath.includes('/roles')) {
+		invalidate(/^GET:.*\/auth\//i);
+		invalidate(/^GET:.*\/api\/Users/i);
+		invalidate(/^GET:.*\/api\/Roles/i);
+		invalidate(/^GET:.*\/api\/Room/i);
+		invalidate(/^GET:.*\/api\/Topic/i);
+	}
+
+	// Roomユーザー/ロールが変更された場合
+	if (normalizedPath.includes('/api/room') && (normalizedPath.includes('/users') || normalizedPath.includes('/roles'))) {
+		invalidate(/^GET:.*\/api\/Room/i);
+		invalidate(/^GET:.*\/api\/Topic/i);
+	}
+
+	// Topicユーザー権限が変更された場合
+	if (normalizedPath.includes('/api/topics') && normalizedPath.includes('/permissions')) {
+		invalidate(/^GET:.*\/api\/topics\/[^/]+\/permissions/i);
+		invalidate(/^GET:.*\/api\/Topic/i);
+	}
 }
 
 /**

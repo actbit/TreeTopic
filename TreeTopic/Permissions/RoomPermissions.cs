@@ -6,13 +6,9 @@ namespace TreeTopic.Permissions;
 /// </summary>
 public static class RoomPermissions
 {
-    /// <summary>ルームへの参加（ルームアクセスの基本）</summary>
-    public const string Join = "room.join";
-    public static readonly PermissionRequirement JoinReq = new(PermissionScope.Room, Join);
-
-    /// <summary>ルームメンバーであること（メンバーシップ判定専用）</summary>
-    public const string Member = "room.member";
-    public static readonly PermissionRequirement MemberReq = new(PermissionScope.Room, Member);
+    /// <summary>ルーム情報の読み取り（Room情報、Files、Shares等）</summary>
+    public const string Read = "room.read";
+    public static readonly PermissionRequirement ReadReq = new(PermissionScope.Room, Read);
 
     /// <summary>ルーム内で書き込み（トピック作成、ファイルアップロード、シェア作成）</summary>
     public const string Write = "room.write";

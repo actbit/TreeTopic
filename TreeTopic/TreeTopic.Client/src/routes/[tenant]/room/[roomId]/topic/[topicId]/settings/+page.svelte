@@ -30,7 +30,7 @@
       isLoading = true;
 
       // トピック情報を取得
-      const topicData = await api.get<{ title?: string; description?: string | null; createdAt?: string | Date; parentId?: string | null }>(`/${tenant}/api/Topics/${topicId}`);
+      const topicData = await api.get<{ title?: string; description?: string | null; createdAt?: string | Date; parentId?: string | null }>(`/${tenant}/api/Topic/${topicId}`);
       topic = topicData;
 
       // ルーム情報を取得

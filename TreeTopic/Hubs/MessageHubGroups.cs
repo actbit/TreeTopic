@@ -6,13 +6,11 @@ public static class MessageHubGroups
 {
     public static string ResolveTenantKey(ApplicationTenantInfo? tenantInfo)
     {
-        return tenantInfo?.Identifier
-               ?? tenantInfo?.Id
-               ?? "default";
+        return tenantInfo?.Identifier ?? "default";
     }
 
     public static string Topic(string tenantKey, string maskedTopicId)
     {
-        return $"topic:{maskedTopicId}";
+        return $"tenant:{tenantKey}:topic:{maskedTopicId}";
     }
 }

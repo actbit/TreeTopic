@@ -34,30 +34,39 @@ public static class PermissionHelper
         where TEntity : class
         where TContext : DbContext
     {
-        using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+        // 既にトランザクション内の場合はトランザクションを開始しない
+        var hasExistingTransaction = context.Database.CurrentTransaction != null;
+
+        var transaction = hasExistingTransaction
+            ? null
+            : await context.Database.BeginTransactionAsync(cancellationToken);
         try
         {
             // 重複チェック
             var existing = await duplicateCheck(context, cancellationToken);
             if (existing != null)
             {
-                await transaction.CommitAsync(cancellationToken);
+                if (transaction != null) await transaction.CommitAsync(cancellationToken);
                 logger.LogInformation("Duplicate found, returning existing entity: {EntityType}", typeof(TEntity).Name);
                 return existing;
             }
 
             dbSet.Add(entity);
             await context.SaveChangesAsync(cancellationToken);
-            await transaction.CommitAsync(cancellationToken);
+            if (transaction != null) await transaction.CommitAsync(cancellationToken);
 
             logger.LogInformation(successMessage);
             return entity;
         }
         catch (Exception ex)
         {
-            await transaction.RollbackAsync(cancellationToken);
+            if (transaction != null) await transaction.RollbackAsync(cancellationToken);
             logger.LogError(ex, errorMessage);
             throw;
+        }
+        finally
+        {
+            if (transaction != null) await transaction.DisposeAsync();
         }
     }
 
@@ -91,21 +100,28 @@ public static class PermissionHelper
             return false;
         }
 
-        using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+        var hasExistingTransaction = context.Database.CurrentTransaction != null;
+        var transaction = hasExistingTransaction
+            ? null
+            : await context.Database.BeginTransactionAsync(cancellationToken);
         try
         {
             dbSet.Remove(entity);
             await context.SaveChangesAsync(cancellationToken);
-            await transaction.CommitAsync(cancellationToken);
+            if (transaction != null) await transaction.CommitAsync(cancellationToken);
 
             logger.LogInformation(successMessage);
             return true;
         }
         catch (Exception ex)
         {
-            await transaction.RollbackAsync(cancellationToken);
+            if (transaction != null) await transaction.RollbackAsync(cancellationToken);
             logger.LogError(ex, errorMessage);
             throw;
+        }
+        finally
+        {
+            if (transaction != null) await transaction.DisposeAsync();
         }
     }
 

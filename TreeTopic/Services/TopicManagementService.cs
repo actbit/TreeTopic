@@ -8,6 +8,8 @@ using Microsoft.AspNetCore.SignalR;
 using MaskedUUID.AspNetCore.Services;
 using TreeTopic.Hubs;
 using TreeTopic;
+using Finbuckle.MultiTenant;
+using Finbuckle.MultiTenant.Abstractions;
 
 namespace TreeTopic.Services;
 
@@ -45,6 +47,7 @@ public class TopicManagementService : BaseService, ITopicManagementService
     private readonly ApplicationDbContext _dbContext;
     private readonly ILogger<TopicDtoBuilder> _topicDtoBuilderLogger;
     private readonly ILogger<TopicPermissionManager> _permissionManagerLogger;
+    private readonly IMultiTenantContextAccessor<ApplicationTenantInfo> _tenantAccessor;
 
     public TopicManagementService(
         ITopicRepository topicRepository,
@@ -54,6 +57,7 @@ public class TopicManagementService : BaseService, ITopicManagementService
         ApplicationDbContext dbContext,
         ILogger<TopicDtoBuilder> topicDtoBuilderLogger,
         ILogger<TopicPermissionManager> permissionManagerLogger,
+        IMultiTenantContextAccessor<ApplicationTenantInfo> tenantAccessor,
         ILogger<TopicManagementService> logger) : base(logger)
     {
         _topicRepository = topicRepository;
@@ -63,6 +67,7 @@ public class TopicManagementService : BaseService, ITopicManagementService
         _dbContext = dbContext;
         _topicDtoBuilderLogger = topicDtoBuilderLogger;
         _permissionManagerLogger = permissionManagerLogger;
+        _tenantAccessor = tenantAccessor;
     }
 
     public async Task<Result<List<TopicBasicDto>>> GetAllTopicsAsync(Guid? userId = null, CancellationToken cancellationToken = default)
@@ -156,66 +161,90 @@ public class TopicManagementService : BaseService, ITopicManagementService
     {
         return await ExecuteAsync(async () =>
         {
-            var room = await _roomRepository.GetByIdAsync(request.RoomId, cancellationToken);
-            if (room == null)
-                return Result<TopicDetailDto>.NotFound("Room not found");
-
-            Guid? parentId = request.ParentId.HasValue ? (Guid)request.ParentId.Value : null;
-
-            if (parentId.HasValue)
+            // トランザクションを開始してデータ整合性を確保
+            using var transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
+            try
             {
-                var parent = await _topicRepository.GetByIdAsync(parentId.Value, cancellationToken);
-                if (parent == null)
-                    return Result<TopicDetailDto>.NotFound("Parent topic not found");
+                var room = await _roomRepository.GetByIdAsync(request.RoomId, cancellationToken);
+                if (room == null)
+                    return Result<TopicDetailDto>.NotFound("Room not found");
 
-                if (parent.RoomId != (Guid)request.RoomId)
-                    return Result<TopicDetailDto>.BadRequest("Parent topic must be in the same room");
-            }
+                Guid? parentId = request.ParentId.HasValue ? (Guid)request.ParentId.Value : null;
 
-            Guid? sourceMessageId = request.SourceMessageId.HasValue ? (Guid)request.SourceMessageId.Value : null;
+                if (parentId.HasValue)
+                {
+                    var parent = await _topicRepository.GetByIdAsync(parentId.Value, cancellationToken);
+                    if (parent == null)
+                        return Result<TopicDetailDto>.NotFound("Parent topic not found");
 
-            var topic = new Topic
-            {
-                RoomId = request.RoomId,
-                ParentId = parentId,
-                SourceMessageId = sourceMessageId
-            };
-            topic.Title = request.Title?.Trim() ?? string.Empty;
-            topic.Description = request.Description?.Trim();
+                    if (parent.RoomId != (Guid)request.RoomId)
+                        return Result<TopicDetailDto>.BadRequest("Parent topic must be in the same room");
+                }
 
-            await _topicRepository.AddAsync(topic, cancellationToken);
-            await _topicRepository.SaveChangesAsync(cancellationToken);
+                Guid? sourceMessageId = request.SourceMessageId.HasValue ? (Guid)request.SourceMessageId.Value : null;
 
-            // 親トピックの権限をコピー（オプション）
-            if (parentId.HasValue && request.InheritPermissions)
-            {
-                var permissionManager = new TopicPermissionManager(_dbContext, _permissionManagerLogger);
-                await permissionManager.CopyPermissionsAsync(parentId.Value, topic.Id, cancellationToken);
-            }
+                var topic = new Topic
+                {
+                    RoomId = request.RoomId,
+                    ParentId = parentId,
+                    SourceMessageId = sourceMessageId
+                };
+                topic.Title = request.Title?.Trim() ?? string.Empty;
+                topic.Description = request.Description?.Trim();
 
-            // 作成者に管理者権限を付与
-            if (userId.HasValue)
-            {
-                var roomUser = await _dbContext.RoomUsers
-                    .FirstOrDefaultAsync(ru => ru.RoomId == topic.RoomId && ru.ApplicationUserId == userId.Value, cancellationToken);
+                await _topicRepository.AddAsync(topic, cancellationToken);
+                await _topicRepository.SaveChangesAsync(cancellationToken);
 
-                if (roomUser != null)
+                // 親トピックの権限をコピー（オプション）
+                if (parentId.HasValue && request.InheritPermissions)
                 {
                     var permissionManager = new TopicPermissionManager(_dbContext, _permissionManagerLogger);
-                    await permissionManager.GrantCreatorPermissionsAsync(topic.Id, roomUser.Id, cancellationToken);
+                    await permissionManager.CopyPermissionsAsync(parentId.Value, topic.Id, cancellationToken);
                 }
+
+                // 作成者に管理者権限を付与
+                if (userId.HasValue)
+                {
+                    var roomUser = await _dbContext.RoomUsers
+                        .FirstOrDefaultAsync(ru => ru.RoomId == topic.RoomId && ru.ApplicationUserId == userId.Value, cancellationToken);
+
+                    if (roomUser != null)
+                    {
+                        var permissionManager = new TopicPermissionManager(_dbContext, _permissionManagerLogger);
+                        await permissionManager.GrantCreatorPermissionsAsync(topic.Id, roomUser.Id, cancellationToken);
+                    }
+                }
+
+                // トランザクションをコミット（ブロードキャスト前に確定）
+                await transaction.CommitAsync(cancellationToken);
+
+                var dto = await MapToTopicDetailDtoAsync(topic, null, cancellationToken);
+
+                // SignalRブロードキャスト（トランザクション外で実行）
+                try
+                {
+                    await BroadcastTopicCreatedAsync(topic.Id, dto, cancellationToken);
+
+                    // 親トピックのhasChildrenを更新してブロードキャスト
+                    if (parentId.HasValue)
+                    {
+                        await BroadcastTopicHasChildrenUpdatedAsync(parentId.Value, true);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    // ブロードキャスト失敗はログに記録するが、トピック作成処理は継続
+                    Logger.LogError(ex, "Failed to broadcast topic created for topic {TopicId}. SignalR broadcast failed but topic was created successfully.", topic.Id);
+                }
+
+                return Result<TopicDetailDto>.Success(dto, 201);
             }
-
-            var dto = await MapToTopicDetailDtoAsync(topic, null, cancellationToken);
-            await BroadcastTopicCreatedAsync(topic.Id, dto, cancellationToken);
-
-            // 親トピックのhasChildrenを更新してブロードキャスト
-            if (parentId.HasValue)
+            catch (Exception ex)
             {
-                await BroadcastTopicHasChildrenUpdatedAsync(parentId.Value, true);
+                await transaction.RollbackAsync(cancellationToken);
+                Logger.LogError(ex, "Failed to create topic. Transaction rolled back.");
+                throw;
             }
-
-            return Result<TopicDetailDto>.Success(dto, 201);
         }, nameof(CreateTopicAsync));
     }
 
@@ -226,95 +255,119 @@ public class TopicManagementService : BaseService, ITopicManagementService
     {
         return await ExecuteAsync(async () =>
         {
-            var topic = await _topicRepository.GetByIdAsync(topicId, cancellationToken);
-
-            if (topic == null)
-                return Result<TopicDetailDto>.NotFound("Topic not found");
-
-            var oldParentId = topic.ParentId;
-            Guid? parentId = request.ParentId.HasValue ? (Guid)request.ParentId.Value : null;
-            if (parentId.HasValue)
+            // トランザクションを開始してデータ整合性を確保
+            using var transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
+            try
             {
-                if (parentId.Value == topicId)
-                    return Result<TopicDetailDto>.BadRequest("A topic cannot be its own parent");
+                var topic = await _topicRepository.GetByIdAsync(topicId, cancellationToken);
 
-                var parent = await _topicRepository.GetByIdAsync(parentId.Value, cancellationToken);
-                if (parent == null)
-                    return Result<TopicDetailDto>.NotFound("Parent topic not found");
+                if (topic == null)
+                    return Result<TopicDetailDto>.NotFound("Topic not found");
 
-                if (parent.RoomId != topic.RoomId)
-                    return Result<TopicDetailDto>.BadRequest("Parent topic must be in the same room");
-
-                // Prevent cycles: the new parent cannot be a descendant of the topic.
-                var cursor = parent;
-                var visited = new HashSet<Guid> { parent.Id };
-                while (cursor.ParentId.HasValue)
+                var oldParentId = topic.ParentId;
+                Guid? parentId = request.ParentId.HasValue ? (Guid)request.ParentId.Value : null;
+                if (parentId.HasValue)
                 {
-                    var nextId = cursor.ParentId.Value;
-                    if (nextId == topicId)
-                        return Result<TopicDetailDto>.BadRequest("Cannot move a topic under its descendant");
+                    if (parentId.Value == topicId)
+                        return Result<TopicDetailDto>.BadRequest("A topic cannot be its own parent");
 
-                    if (!visited.Add(nextId))
-                        break; // Defensive: existing cycle in DB
+                    var parent = await _topicRepository.GetByIdAsync(parentId.Value, cancellationToken);
+                    if (parent == null)
+                        return Result<TopicDetailDto>.NotFound("Parent topic not found");
 
-                    var next = await _topicRepository.GetByIdAsync(nextId, cancellationToken);
-                    if (next == null)
-                        break;
+                    if (parent.RoomId != topic.RoomId)
+                        return Result<TopicDetailDto>.BadRequest("Parent topic must be in the same room");
 
-                    cursor = next;
+                    // Prevent cycles: the new parent cannot be a descendant of the topic.
+                    var cursor = parent;
+                    var visited = new HashSet<Guid> { parent.Id };
+                    while (cursor.ParentId.HasValue)
+                    {
+                        var nextId = cursor.ParentId.Value;
+                        if (nextId == topicId)
+                            return Result<TopicDetailDto>.BadRequest("Cannot move a topic under its descendant");
+
+                        if (!visited.Add(nextId))
+                            break; // Defensive: existing cycle in DB
+
+                        var next = await _topicRepository.GetByIdAsync(nextId, cancellationToken);
+                        if (next == null)
+                            break;
+
+                        cursor = next;
+                    }
+
+                    topic.ParentId = parentId;
+                }
+                else
+                {
+                    topic.ParentId = null;
                 }
 
-                topic.ParentId = parentId;
-            }
-            else
-            {
-                topic.ParentId = null;
-            }
-
-            if (request.Title != null)
-            {
-                topic.Title = request.Title.Trim();
-            }
-
-            if (request.Description != null)
-            {
-                topic.Description = request.Description.Trim();
-            }
-
-            topic.UpdatedAt = DateTime.UtcNow;
-            _topicRepository.Update(topic);
-            await _topicRepository.SaveChangesAsync(cancellationToken);
-
-            var dto = await MapToTopicDetailDtoAsync(topic, null, cancellationToken);
-            await BroadcastTopicUpdatedAsync(topic.Id, dto, cancellationToken);
-
-            // 親が変更された場合、古い親と新しい親のhasChildrenを更新してブロードキャスト
-            if (oldParentId != topic.ParentId)
-            {
-                // 古い親を更新
-                if (oldParentId.HasValue)
+                if (request.Title != null)
                 {
-                    var oldParent = await _topicRepository.GetByIdAsync(oldParentId.Value, cancellationToken);
-                    if (oldParent != null)
+                    topic.Title = request.Title.Trim();
+                }
+
+                if (request.Description != null)
+                {
+                    topic.Description = request.Description.Trim();
+                }
+
+                topic.UpdatedAt = DateTime.UtcNow;
+                _topicRepository.Update(topic);
+                await _topicRepository.SaveChangesAsync(cancellationToken);
+
+                // トランザクションをコミット（ブロードキャスト前に確定）
+                await transaction.CommitAsync(cancellationToken);
+
+                var dto = await MapToTopicDetailDtoAsync(topic, null, cancellationToken);
+
+                // SignalRブロードキャスト（トランザクション外で実行）
+                try
+                {
+                    await BroadcastTopicUpdatedAsync(topic.Id, dto, cancellationToken);
+
+                    // 親が変更された場合、古い親と新しい親のhasChildrenを更新してブロードキャスト
+                    if (oldParentId != topic.ParentId)
                     {
-                        var oldParentDto = await MapToTopicDetailDtoAsync(oldParent, null, cancellationToken);
-                        await BroadcastTopicUpdatedAsync(oldParent.Id, oldParentDto, cancellationToken);
+                        // 古い親を更新
+                        if (oldParentId.HasValue)
+                        {
+                            var oldParent = await _topicRepository.GetByIdAsync(oldParentId.Value, cancellationToken);
+                            if (oldParent != null)
+                            {
+                                var oldParentDto = await MapToTopicDetailDtoAsync(oldParent, null, cancellationToken);
+                                await BroadcastTopicUpdatedAsync(oldParent.Id, oldParentDto, cancellationToken);
+                            }
+                        }
+
+                        // 新しい親を更新
+                        if (topic.ParentId.HasValue)
+                        {
+                            var newParent = await _topicRepository.GetByIdAsync(topic.ParentId.Value, cancellationToken);
+                            if (newParent != null)
+                            {
+                                var newParentDto = await MapToTopicDetailDtoAsync(newParent, null, cancellationToken);
+                                await BroadcastTopicUpdatedAsync(newParent.Id, newParentDto, cancellationToken);
+                            }
+                        }
                     }
                 }
-
-                // 新しい親を更新
-                if (topic.ParentId.HasValue)
+                catch (Exception ex)
                 {
-                    var newParent = await _topicRepository.GetByIdAsync(topic.ParentId.Value, cancellationToken);
-                    if (newParent != null)
-                    {
-                        var newParentDto = await MapToTopicDetailDtoAsync(newParent, null, cancellationToken);
-                        await BroadcastTopicUpdatedAsync(newParent.Id, newParentDto, cancellationToken);
-                    }
+                    // ブロードキャスト失敗はログに記録するが、トピック更新処理は継続
+                    Logger.LogError(ex, "Failed to broadcast topic updated for topic {TopicId}. SignalR broadcast failed but topic was updated successfully.", topicId);
                 }
-            }
 
-            return Result<TopicDetailDto>.Success(dto);
+                return Result<TopicDetailDto>.Success(dto);
+            }
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                Logger.LogError(ex, "Failed to update topic {TopicId}. Transaction rolled back.", topicId);
+                throw;
+            }
         }, nameof(UpdateTopicAsync));
     }
 
@@ -322,56 +375,79 @@ public class TopicManagementService : BaseService, ITopicManagementService
     {
         return await ExecuteAsync(async () =>
         {
-            var topic = await _topicRepository.GetByIdAsync(topicId, cancellationToken);
-
-            if (topic == null)
-                return Result.NotFound("Topic not found");
-
-            var oldParentId = topic.ParentId;
-            List<Topic> reparentedChildren = new();
-
-            if (strategy == TopicDeleteStrategy.ReparentToParent)
+            // トランザクションを開始してデータ整合性を確保
+            using var transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
+            try
             {
-                reparentedChildren = await _topicRepository.Query()
-                    .Where(t => t.ParentId == topic.Id)
-                    .ToListAsync(cancellationToken);
+                var topic = await _topicRepository.GetByIdAsync(topicId, cancellationToken);
 
-                foreach (var child in reparentedChildren)
+                if (topic == null)
+                    return Result.NotFound("Topic not found");
+
+                var oldParentId = topic.ParentId;
+                List<Topic> reparentedChildren = new();
+
+                if (strategy == TopicDeleteStrategy.ReparentToParent)
                 {
-                    child.ParentId = topic.ParentId;
-                    child.UpdatedAt = DateTime.UtcNow;
-                    _topicRepository.Update(child);
+                    reparentedChildren = await _topicRepository.Query()
+                        .Where(t => t.ParentId == topic.Id)
+                        .ToListAsync(cancellationToken);
+
+                    foreach (var child in reparentedChildren)
+                    {
+                        child.ParentId = topic.ParentId;
+                        child.UpdatedAt = DateTime.UtcNow;
+                        _topicRepository.Update(child);
+                    }
+
+                    await _topicRepository.SaveChangesAsync(cancellationToken);
                 }
 
+                _topicRepository.Delete(topic);
                 await _topicRepository.SaveChangesAsync(cancellationToken);
-            }
 
-            _topicRepository.Delete(topic);
-            await _topicRepository.SaveChangesAsync(cancellationToken);
+                // トランザクションをコミット（ブロードキャスト前に確定）
+                await transaction.CommitAsync(cancellationToken);
 
-            await BroadcastTopicDeletedAsync(topic);
-
-            if (reparentedChildren.Count > 0)
-            {
-                foreach (var child in reparentedChildren)
+                // SignalRブロードキャスト（トランザクション外で実行）
+                try
                 {
-                    var childDto = await MapToTopicDetailDtoAsync(child, null, cancellationToken);
-                    await BroadcastTopicUpdatedAsync(child.Id, childDto, cancellationToken);
-                }
-            }
+                    await BroadcastTopicDeletedAsync(topic);
 
-            // 親トピックのhasChildrenを更新してブロードキャスト
-            if (oldParentId.HasValue)
-            {
-                var oldParent = await _topicRepository.GetByIdAsync(oldParentId.Value, cancellationToken);
-                if (oldParent != null)
+                    if (reparentedChildren.Count > 0)
+                    {
+                        foreach (var child in reparentedChildren)
+                        {
+                            var childDto = await MapToTopicDetailDtoAsync(child, null, cancellationToken);
+                            await BroadcastTopicUpdatedAsync(child.Id, childDto, cancellationToken);
+                        }
+                    }
+
+                    // 親トピックのhasChildrenを更新してブロードキャスト
+                    if (oldParentId.HasValue)
+                    {
+                        var oldParent = await _topicRepository.GetByIdAsync(oldParentId.Value, cancellationToken);
+                        if (oldParent != null)
+                        {
+                            var oldParentDto = await MapToTopicDetailDtoAsync(oldParent, null, cancellationToken);
+                            await BroadcastTopicUpdatedAsync(oldParent.Id, oldParentDto, cancellationToken);
+                        }
+                    }
+                }
+                catch (Exception ex)
                 {
-                    var oldParentDto = await MapToTopicDetailDtoAsync(oldParent, null, cancellationToken);
-                    await BroadcastTopicUpdatedAsync(oldParent.Id, oldParentDto, cancellationToken);
+                    // ブロードキャスト失敗はログに記録するが、トピック削除処理は継続
+                    Logger.LogError(ex, "Failed to broadcast topic deleted for topic {TopicId}. SignalR broadcast failed but topic was deleted successfully.", topicId);
                 }
-            }
 
-            return Result.Success();
+                return Result.Success();
+            }
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                Logger.LogError(ex, "Failed to delete topic {TopicId}. Transaction rolled back.", topicId);
+                throw;
+            }
         }, nameof(DeleteTopicAsync));
     }
 
@@ -397,7 +473,8 @@ public class TopicManagementService : BaseService, ITopicManagementService
 
     private async Task BroadcastTopicCreatedAsync(Guid topicId, TopicDetailDto dto, CancellationToken cancellationToken)
     {
-        var groupName = RoomTopicHubGroups.Room(_maskedUuidService.EncodeSynchronous((Guid)dto.RoomId));
+        var tenantKey = ResolveTenantKey();
+        var groupName = RoomTopicHubGroups.Room(tenantKey, dto.RoomId.ToString());
         var payload = await MapToRealtimeAsync(topicId, dto, cancellationToken);
         Logger.LogInformation("[RoomTopicHub] Broadcast TopicCreated topic={TopicId} room={RoomId} group={Group}", dto.Id, dto.RoomId, groupName);
         await _roomTopicHub.Clients.Group(groupName).TopicCreated(payload);
@@ -405,7 +482,8 @@ public class TopicManagementService : BaseService, ITopicManagementService
 
     private async Task BroadcastTopicUpdatedAsync(Guid topicId, TopicDetailDto dto, CancellationToken cancellationToken)
     {
-        var groupName = RoomTopicHubGroups.Room(_maskedUuidService.EncodeSynchronous((Guid)dto.RoomId));
+        var tenantKey = ResolveTenantKey();
+        var groupName = RoomTopicHubGroups.Room(tenantKey, dto.RoomId.ToString());
         var payload = await MapToRealtimeAsync(topicId, dto, cancellationToken);
         Logger.LogInformation("[RoomTopicHub] Broadcast TopicUpdated topic={TopicId} room={RoomId} group={Group}", dto.Id, dto.RoomId, groupName);
         await _roomTopicHub.Clients.Group(groupName).TopicUpdated(payload);
@@ -413,9 +491,10 @@ public class TopicManagementService : BaseService, ITopicManagementService
 
     private Task BroadcastTopicDeletedAsync(Topic topic)
     {
+        var tenantKey = ResolveTenantKey();
         var roomId = topic.RoomId;
         var topicId = topic.Id;
-        var groupName = RoomTopicHubGroups.Room(_maskedUuidService.EncodeSynchronous(roomId));
+        var groupName = RoomTopicHubGroups.Room(tenantKey, roomId.ToString());
         var payload = new TopicDeletedEvent(
             topicId,
             roomId,
@@ -711,5 +790,10 @@ public class TopicManagementService : BaseService, ITopicManagementService
             var dtos = await builder.BuildTreeAsync(cancellationToken);
             return Result<List<TopicTreeDto>>.Success(dtos);
         }, nameof(GetAllTopicsWithUnreadAsync));
+    }
+
+    private string ResolveTenantKey()
+    {
+        return RoomTopicHubGroups.ResolveTenantKey(_tenantAccessor.MultiTenantContext?.TenantInfo);
     }
 }

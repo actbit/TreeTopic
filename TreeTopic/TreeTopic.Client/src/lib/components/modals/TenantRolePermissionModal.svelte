@@ -1,6 +1,6 @@
 <script lang="ts">
   import Modal from '../common/Modal.svelte';
-  import { api, tenantRolePermissionsApi, permissionsApi } from '$lib/api';
+  import { api, tenantRolePermissionsApi, assignUserRole, removeUserRole } from '$lib/api';
   import type { AvailablePermissions, Role } from '$lib/types';
   import { ui, activeModals } from '$lib/stores/ui';
   import { page } from '$app/stores';
@@ -9,6 +9,10 @@
   let modal = $derived.by(() => $activeModals.find((m) => m.id === modalId) ?? null);
   let isOpen = $derived.by(() => modal !== null);
   let tenant = $derived.by(() => (modal?.data?.tenant ?? $page.params.tenant ?? '') as string);
+
+  // Tab state
+  type Tab = 'roles' | 'users';
+  let activeTab = $state<Tab>('roles');
 
   let roles = $state<Role[]>([]);
   let availablePermissions = $state<AvailablePermissions>({ tenant: [], topic: [], room: [] });
@@ -20,9 +24,34 @@
   // Permission assignment state
   let rolePermissions = $state<Record<string, string[]>>({});
 
+  // Selected role for master/detail view
+  let selectedRoleName = $state<string | null>(null);
+
+  // User role assignment state
+  interface UserSummary {
+    id: string;
+    userName: string;
+    email: string;
+    displayName: string;
+    iconUrl?: string;
+    roles: string[];
+    isBanned?: boolean;
+  }
+  let users = $state<UserSummary[]>([]);
+  let selectedUserId = $state<string | null>(null);
+  let isLoadingUsers = $state(false);
+
   $effect(() => {
     if (isOpen && tenant) {
       loadData();
+      return () => resetState();
+    }
+  });
+
+  $effect(() => {
+    // Auto-select first role when roles are loaded
+    if (roles.length > 0 && !selectedRoleName) {
+      selectedRoleName = roles[0].name;
     }
   });
 
@@ -31,13 +60,13 @@
       isLoading = true;
 
       // Fetch roles
-      const rolesData = await api.get<Role[]>(`/${tenant}/api/roles`);
+      const rolesData = await api.get<Role[]>(`/${tenant}/api/roles`, { cache: false });
       roles = rolesData;
 
       // Fetch permissions for each role
       const permPromises = roles.map(async (role) => {
         try {
-          const perms = await tenantRolePermissionsApi.getRolePermissions(tenant, role.name);
+          const perms = await api.get<{ permissions: string[] }>(`/${tenant}/api/tenantroles/${role.name}/permissions`, { cache: false });
           return { roleName: role.name, permissions: perms.permissions || [] };
         } catch {
           return { roleName: role.name, permissions: [] };
@@ -51,7 +80,7 @@
       });
 
       // Fetch available permissions
-      availablePermissions = await permissionsApi.getAvailablePermissions(tenant);
+      availablePermissions = await api.get<AvailablePermissions>(`/${tenant}/api/permissions/available`, { cache: false });
 
       error = null;
     } catch (err) {
@@ -60,6 +89,28 @@
       isLoading = false;
     }
   }
+
+  async function loadUsers() {
+    if (users.length > 0) return; // Already loaded
+    try {
+      isLoadingUsers = true;
+      console.log('[TenantRolePermissionModal] Loading users from:', `/${tenant}/api/users`);
+      const userData = await api.get<UserSummary[]>(`/${tenant}/api/users`, { cache: false });
+      console.log('[TenantRolePermissionModal] Users loaded:', userData.length);
+      users = userData;
+    } catch (err) {
+      console.error('[TenantRolePermissionModal] Failed to load users:', err);
+      error = err instanceof Error ? err.message : 'Failed to load users';
+    } finally {
+      isLoadingUsers = false;
+    }
+  }
+
+  $effect(() => {
+    if (activeTab === 'users' && users.length === 0) {
+      loadUsers();
+    }
+  });
 
   async function togglePermission(roleName: string, permissionName: string) {
     try {
@@ -82,25 +133,28 @@
 
   async function createRole() {
     if (!newRoleName.trim()) return;
+    const createdName = newRoleName.trim();
 
     try {
       await api.post(`/${tenant}/api/roles`, {
-        name: newRoleName.trim()
+        name: createdName
       });
 
       newRoleName = '';
       showCreateRole = false;
       await loadData();
+      selectedRoleName = createdName;
     } catch (err) {
       error = err instanceof Error ? err.message : 'Failed to create role';
     }
   }
 
   async function deleteRole(roleName: string) {
-    if (!confirm('このロールを削除しますか？')) return;
+    if (!confirm('Delete this role?')) return;
 
     try {
       await api.delete(`/${tenant}/api/roles/${roleName}`);
+      selectedRoleName = null;
       await loadData();
     } catch (err) {
       error = err instanceof Error ? err.message : 'Failed to delete role';
@@ -123,146 +177,765 @@
       .trim();
   }
 
+  let selectedRole = $derived.by(() => roles.find((r) => r.name === selectedRoleName) ?? null);
+  let selectedUser = $derived.by(() => users.find((u) => u.id === selectedUserId) ?? null);
+
+  function resetState() {
+    roles = [];
+    users = [];
+    rolePermissions = {};
+    availablePermissions = { tenant: [], topic: [], room: [] };
+    selectedRoleName = null;
+    selectedUserId = null;
+    error = null;
+    isLoading = true;
+  }
+
   function handleClose() {
     ui.closeModal(modalId);
   }
+
+  function selectRole(roleName: string) {
+    selectedRoleName = roleName;
+  }
+
+  function selectUser(userId: string) {
+    selectedUserId = userId;
+  }
+
+  async function toggleUserRole(userId: string, roleName: string) {
+    try {
+      const user = users.find(u => u.id === userId);
+      if (!user) return;
+
+      const hasRole = user.roles.includes(roleName);
+      console.log('[TenantRolePermissionModal] Toggle role:', { userId, roleName, hasRole });
+
+      if (hasRole) {
+        // Remove role - use the imported function
+        console.log('[TenantRolePermissionModal] Removing role:', { tenant, userId, roleName });
+        await removeUserRole(tenant, userId, roleName);
+        // Optimistically update UI
+        user.roles = user.roles.filter(r => r !== roleName);
+        console.log('[TenantRolePermissionModal] Role removed successfully');
+      } else {
+        // Add role - use the imported function
+        console.log('[TenantRolePermissionModal] Adding role:', { tenant, userId, roleName });
+        await assignUserRole(tenant, userId, roleName);
+        // Optimistically update UI
+        user.roles = [...user.roles, roleName];
+        console.log('[TenantRolePermissionModal] Role added successfully');
+      }
+    } catch (err) {
+      console.error('[TenantRolePermissionModal] Failed to update user role:', err);
+      error = err instanceof Error ? err.message : 'Failed to update user role';
+      // Revert by reloading user data on error
+      await refreshUser(userId);
+    }
+  }
+
+  async function refreshUser(userId: string) {
+    try {
+      console.log('[TenantRolePermissionModal] Refreshing user:', userId);
+      const userData = await api.get<UserSummary>(`/${tenant}/api/users/${userId}`, { cache: false });
+      console.log('[TenantRolePermissionModal] User refreshed:', userData);
+      const index = users.findIndex(u => u.id === userId);
+      if (index !== -1) {
+        users[index] = userData;
+      }
+    } catch (err) {
+      console.error('[TenantRolePermissionModal] Failed to refresh user data:', err);
+    }
+  }
 </script>
 
-<Modal {isOpen} title="Tenant Role Permission Management" onClose={handleClose} size="xlarge" closeButton={!isLoading}>
-  <div class="flex flex-col h-full bg-white">
+<Modal {isOpen} title="Tenant Management" onClose={handleClose} size="xlarge" closeButton={!isLoading}>
+  <div class="trm-root">
     <!-- Error message -->
     {#if error}
-      <div class="p-4 bg-red-50 border-b border-red-200 text-red-800 text-sm flex justify-between items-center">
+      <div class="trm-error">
         <span>{error}</span>
-        <button onclick={() => (error = null)} class="underline hover:no-underline">Close</button>
+        <button onclick={() => (error = null)}>Dismiss</button>
       </div>
     {/if}
 
-    <!-- Content -->
-    <div class="flex-1 overflow-auto p-6 space-y-6">
-      {#if isLoading}
-        <div class="text-center py-8">
-          <div class="inline-block w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
-          <p class="mt-2 text-sm text-text-light">Loading...</p>
-        </div>
-      {:else}
-        <!-- Create new role button -->
-        <div class="flex justify-between items-center">
-          <h3 class="text-lg font-semibold text-text">Role List</h3>
-          <button
-            onclick={() => (showCreateRole = true)}
-            disabled={showCreateRole}
-            class="px-4 py-2 bg-primary text-white rounded hover:bg-opacity-90 transition-colors text-sm font-medium disabled:opacity-50"
-          >
-            + Create Role
-          </button>
-        </div>
+    <!-- Tabs -->
+    <div class="trm-tabs">
+      <button
+        onclick={() => (activeTab = 'roles')}
+        class="trm-tab {activeTab === 'roles' ? 'trm-tab--active' : ''}"
+      >
+        ロール権限
+      </button>
+      <button
+        onclick={() => (activeTab = 'users')}
+        class="trm-tab {activeTab === 'users' ? 'trm-tab--active' : ''}"
+      >
+        ユーザーロール
+      </button>
+    </div>
 
-        {#if showCreateRole}
-          <div class="border border-border rounded-lg p-4 bg-surface">
-            <h4 class="font-medium text-text mb-3">Create New Role</h4>
-            <div class="space-y-3">
-              <div>
-                <label for="tenant-role-name-input" class="block text-sm font-medium text-text mb-1">Role Name</label>
+    <!-- Content -->
+    <div class="trm-content">
+      {#if isLoading}
+        <div class="trm-loading">
+          <div class="trm-spinner"></div>
+          <p>Loading...</p>
+        </div>
+      {:else if activeTab === 'roles'}
+        <!-- Left Panel: Role List -->
+        <div class="trm-panel trm-panel--left">
+          <div class="trm-panel-header">
+            <span class="trm-panel-title">Roles</span>
+          </div>
+
+          <div class="trm-list">
+            {#if roles.length === 0 && !showCreateRole}
+              <div class="trm-empty">
+                <p>No roles</p>
+              </div>
+            {:else}
+              {#each roles as role}
+                {@const perms = rolePermissions[role.name] || []}
+                {@const isSelected = selectedRoleName === role.name}
+                <button
+                  onclick={() => selectRole(role.name)}
+                  class="trm-list-item {isSelected ? 'trm-list-item--active' : ''}"
+                >
+                  <span class="trm-list-item-name">{role.name}</span>
+                  <span class="trm-badge">{perms.length}</span>
+                </button>
+              {/each}
+            {/if}
+
+            {#if showCreateRole}
+              <div class="trm-create-form">
                 <input
-                  id="tenant-role-name-input"
                   type="text"
                   bind:value={newRoleName}
-                  placeholder="e.g. Administrators, Moderators"
-                  class="w-full px-3 py-2 border border-border rounded focus:outline-none focus:border-primary"
+                  placeholder="Role name..."
+                  class="trm-input"
+                  onkeydown={(e) => e.key === 'Enter' && newRoleName.trim() && createRole()}
                 />
-              </div>
-              <div class="flex gap-2">
-                <button
-                  onclick={createRole}
-                  disabled={!newRoleName.trim()}
-                  class="px-4 py-2 bg-primary text-white rounded hover:bg-opacity-90 transition-colors text-sm font-medium disabled:opacity-50"
-                >
-                  Create
-                </button>
-                <button
-                  onclick={() => (showCreateRole = false)}
-                  class="px-4 py-2 bg-surface border border-border rounded hover:bg-opacity-80 transition-colors text-sm font-medium"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </div>
-        {/if}
-
-        {#if roles.length === 0}
-          <div class="border border-border rounded-lg p-8 text-center text-text-light">
-            <p>No roles available</p>
-          </div>
-        {:else}
-          <!-- Role and permission list -->
-          <div class="space-y-4">
-            {#each roles as role}
-              {@const perms = rolePermissions[role.name] || []}
-              <div class="border border-border rounded-lg overflow-hidden">
-                <div class="bg-surface p-4 border-b border-border flex justify-between items-center">
-                  <div>
-                    <p class="font-semibold text-text">{role.name}</p>
-                  </div>
-                  <button
-                    onclick={() => deleteRole(role.name)}
-                    class="text-danger hover:text-red-700 transition-colors text-sm"
-                  >
-                    Delete
+                <div class="trm-create-actions">
+                  <button onclick={createRole} disabled={!newRoleName.trim()} class="trm-btn trm-btn--primary">
+                    作成
+                  </button>
+                  <button onclick={() => { showCreateRole = false; newRoleName = ''; }} class="trm-btn trm-btn--secondary">
+                    キャンセル
                   </button>
                 </div>
+              </div>
+            {:else}
+              <button onclick={() => (showCreateRole = true)} class="trm-add-btn">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+                </svg>
+                ロールを作成
+              </button>
+            {/if}
+          </div>
+        </div>
 
-                <div class="p-4">
-                  <h4 class="text-sm font-medium text-text mb-3">Tenant Permissions</h4>
-                  <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
-                    {#each (availablePermissions.tenant || []) as perm}
-                      {@const hasPerm = hasPermission(role.name, perm.name)}
-                      <button
-                        onclick={() => togglePermission(role.name, perm.name)}
-                        class="flex items-center gap-2 p-2 rounded border transition-colors text-left text-sm {hasPerm
-                          ? 'bg-primary bg-opacity-10 border-primary text-primary'
-                          : 'border-border hover:bg-surface'}"
-                      >
-                        <span class="w-4 h-4 rounded border flex items-center justify-center {hasPerm
-                          ? 'bg-primary border-primary'
-                          : 'border-border'}">
-                          {#if hasPerm}
-                            <svg class="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
-                            </svg>
-                          {/if}
-                        </span>
-                        <span class="text-xs">{formatPermissionName(perm.name)}</span>
-                      </button>
-                    {/each}
+        <!-- Right Panel: Permission Details -->
+        <div class="trm-panel trm-panel--right">
+          {#if selectedRole}
+            {@const perms = rolePermissions[selectedRole.name] || []}
+            <div class="trm-panel-header">
+              <div>
+                <span class="trm-panel-title">{selectedRole.name}</span>
+                <span class="trm-panel-sub">{perms.length}  permission(s)</span>
+              </div>
+              <button
+                onclick={() => deleteRole(selectedRole.name)}
+                class="trm-btn trm-btn--danger"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+                削除
+              </button>
+            </div>
+
+            <div class="trm-perm-list">
+              <p class="trm-section-label">Tenant Permissions</p>
+              {#each (availablePermissions.tenant || []) as perm}
+                {@const hasPerm = hasPermission(selectedRole.name, perm.name)}
+                <button
+                  onclick={() => togglePermission(selectedRole.name, perm.name)}
+                  class="trm-perm-item {hasPerm ? 'trm-perm-item--active' : ''}"
+                >
+                  <div class="trm-checkbox {hasPerm ? 'trm-checkbox--checked' : ''}">
+                    {#if hasPerm}
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+                      </svg>
+                    {/if}
                   </div>
+                  <span>{formatPermissionName(perm.name)}</span>
+                </button>
+              {/each}
+              {#if !availablePermissions.tenant?.length}
+                <div class="trm-empty">
+                  <p>No tenant permissions available</p>
+                </div>
+              {/if}
+            </div>
+          {:else}
+            <div class="trm-empty-panel">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+              </svg>
+              <p>Select a role to edit permissions</p>
+            </div>
+          {/if}
+        </div>
 
-                  {#if perms.length > 0}
-                    <div class="mt-3 pt-3 border-t border-border">
-                      <p class="text-xs text-text-light">
-                        Permissions granted: <span class="font-medium">{perms.length}</span>
-                      </p>
-                    </div>
+      {:else}
+        <!-- Left Panel: User List -->
+        <div class="trm-panel trm-panel--left">
+          <div class="trm-panel-header">
+            <span class="trm-panel-title">Users</span>
+          </div>
+
+          <div class="trm-list">
+            {#if isLoadingUsers}
+              <div class="trm-loading">
+                <div class="trm-spinner trm-spinner--sm"></div>
+              </div>
+            {:else if users.length === 0}
+              <div class="trm-empty">
+                <p>No users</p>
+              </div>
+            {:else}
+              {#each users as user}
+                {@const isSelected = selectedUserId === user.id}
+                <button
+                  onclick={() => selectUser(user.id)}
+                  class="trm-user-item {isSelected ? 'trm-list-item--active' : ''}"
+                >
+                  <div class="trm-avatar">
+                    {#if user.iconUrl}
+                      <img src={user.iconUrl} alt={user.displayName} />
+                    {:else}
+                      {user.displayName?.charAt(0)?.toUpperCase() || user.userName?.charAt(0)?.toUpperCase() || '?'}
+                    {/if}
+                  </div>
+                  <span class="trm-user-name">{user.displayName || user.userName}</span>
+                  <span class="trm-badge">{user.roles.length}</span>
+                </button>
+              {/each}
+            {/if}
+          </div>
+        </div>
+
+        <!-- Right Panel: User Role Assignment -->
+        <div class="trm-panel trm-panel--right">
+          {#if selectedUser}
+            <div class="trm-panel-header">
+              <div class="trm-user-header">
+                <div class="trm-avatar trm-avatar--lg">
+                  {#if selectedUser.iconUrl}
+                    <img src={selectedUser.iconUrl} alt={selectedUser.displayName} />
+                  {:else}
+                    {selectedUser.displayName?.charAt(0)?.toUpperCase() || selectedUser.userName?.charAt(0)?.toUpperCase() || '?'}
                   {/if}
                 </div>
+                <div>
+                  <span class="trm-panel-title">{selectedUser.displayName || selectedUser.userName}</span>
+                  <span class="trm-panel-sub">{selectedUser.roles.length}  role(s)</span>
+                </div>
               </div>
-            {/each}
-          </div>
-        {/if}
+            </div>
+
+            <div class="trm-perm-list">
+              <p class="trm-section-label">Assign Roles</p>
+              {#each roles as role}
+                {@const hasRole = selectedUser.roles.includes(role.name)}
+                <button
+                  onclick={() => toggleUserRole(selectedUser.id, role.name)}
+                  class="trm-perm-item {hasRole ? 'trm-perm-item--active' : ''}"
+                >
+                  <div class="trm-checkbox {hasRole ? 'trm-checkbox--checked' : ''}">
+                    {#if hasRole}
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+                      </svg>
+                    {/if}
+                  </div>
+                  <span>{role.name}</span>
+                </button>
+              {/each}
+              {#if roles.length === 0}
+                <div class="trm-empty">
+                  <p>No roles</p>
+                  <p class="trm-empty-sub">Create one in the Role Permissions tab</p>
+                </div>
+              {/if}
+            </div>
+          {:else}
+            <div class="trm-empty-panel">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+              </svg>
+              <p>Select a user to manage roles</p>
+            </div>
+          {/if}
+        </div>
       {/if}
     </div>
   </div>
 </Modal>
 
 <style>
-  @keyframes spin {
-    to {
-      transform: rotate(360deg);
-    }
+  .trm-root {
+    display: flex;
+    flex-direction: column;
+    height: 600px;
   }
 
-  :global(.animate-spin) {
-    animation: spin 1s linear infinite;
+  /* Error */
+  .trm-error {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin: 16px 24px 0;
+    padding: 10px 14px;
+    background: var(--color-error-light, #fef2f2);
+    border: 1px solid var(--color-error, #ef4444);
+    border-radius: 8px;
+    font-size: 13px;
+    color: var(--color-error, #ef4444);
+  }
+  .trm-error button {
+    font-size: 12px;
+    text-decoration: underline;
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: inherit;
+    flex-shrink: 0;
+    margin-left: 12px;
+  }
+
+  /* Tabs */
+  .trm-tabs {
+    display: flex;
+    gap: 0;
+    border-bottom: 1px solid var(--color-border);
+    margin: 0 24px;
+    padding-top: 16px;
+    flex-shrink: 0;
+  }
+  .trm-tab {
+    padding: 10px 20px;
+    font-size: 13px;
+    font-weight: 500;
+    border: none;
+    background: none;
+    cursor: pointer;
+    color: var(--color-text-light);
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    transition: color 0.15s, border-color 0.15s;
+  }
+  .trm-tab:hover {
+    color: var(--color-text);
+  }
+  .trm-tab--active {
+    color: var(--color-primary);
+    border-bottom-color: var(--color-primary);
+  }
+
+  /* Content Area */
+  .trm-content {
+    flex: 1;
+    display: flex;
+    gap: 16px;
+    padding: 16px 24px 24px;
+    overflow: hidden;
+    min-height: 0;
+  }
+
+  /* Loading */
+  .trm-loading {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    color: var(--color-text-light);
+    font-size: 13px;
+  }
+  .trm-spinner {
+    width: 28px;
+    height: 28px;
+    border: 3px solid var(--color-border);
+    border-top-color: var(--color-primary);
+    border-radius: 50%;
+    animation: trm-spin 0.8s linear infinite;
+  }
+  .trm-spinner--sm {
+    width: 20px;
+    height: 20px;
+    border-width: 2px;
+  }
+
+  /* Panel */
+  .trm-panel {
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--color-border);
+    border-radius: 10px;
+    overflow: hidden;
+    background: var(--color-background);
+  }
+  .trm-panel--left {
+    width: 240px;
+    flex-shrink: 0;
+  }
+  .trm-panel--right {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .trm-panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--color-border);
+    background: var(--color-surface);
+    flex-shrink: 0;
+    gap: 8px;
+  }
+  .trm-panel-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--color-text);
+  }
+  .trm-panel-sub {
+    display: block;
+    font-size: 12px;
+    color: var(--color-text-light);
+    margin-top: 2px;
+  }
+
+  /* Create form */
+  .trm-add-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 12px;
+    width: 100%;
+    border-radius: 7px;
+    border: 1px dashed var(--color-border);
+    background: none;
+    color: var(--color-text-light);
+    font-size: 13px;
+    cursor: pointer;
+    transition: background 0.12s, color 0.12s, border-color 0.12s;
+    margin-top: 4px;
+  }
+  .trm-add-btn svg {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+  }
+  .trm-add-btn:hover {
+    background: color-mix(in srgb, var(--color-primary) 6%, transparent);
+    color: var(--color-primary);
+    border-color: var(--color-primary);
+  }
+
+  .trm-create-form {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 4px 0;
+    margin-top: 4px;
+  }
+  .trm-input {
+    width: 100%;
+    padding: 8px 10px;
+    font-size: 13px;
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    background: var(--color-background);
+    color: var(--color-text);
+    outline: none;
+    box-sizing: border-box;
+  }
+  .trm-input:focus {
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-primary) 20%, transparent);
+  }
+  .trm-create-actions {
+    display: flex;
+    gap: 8px;
+  }
+
+  /* Buttons */
+  .trm-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 14px;
+    font-size: 13px;
+    font-weight: 500;
+    border-radius: 6px;
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: background 0.15s, opacity 0.15s;
+  }
+  .trm-btn svg {
+    width: 14px;
+    height: 14px;
+  }
+  .trm-btn--primary {
+    flex: 1;
+    justify-content: center;
+    background: var(--color-primary);
+    color: white;
+    border-color: var(--color-primary);
+  }
+  .trm-btn--primary:hover:not(:disabled) {
+    opacity: 0.9;
+  }
+  .trm-btn--primary:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+  .trm-btn--secondary {
+    flex: 1;
+    justify-content: center;
+    background: var(--color-background);
+    color: var(--color-text);
+    border-color: var(--color-border);
+  }
+  .trm-btn--secondary:hover {
+    background: var(--color-surface);
+  }
+  .trm-btn--danger {
+    background: none;
+    color: var(--color-error, #ef4444);
+    border-color: var(--color-error, #ef4444);
+  }
+  .trm-btn--danger:hover {
+    background: color-mix(in srgb, var(--color-error, #ef4444) 8%, transparent);
+  }
+
+  /* List */
+  .trm-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .trm-list-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 9px 12px;
+    border-radius: 7px;
+    border: 1px solid transparent;
+    background: none;
+    cursor: pointer;
+    text-align: left;
+    transition: background 0.12s, border-color 0.12s;
+    width: 100%;
+  }
+  .trm-list-item:hover {
+    background: var(--color-surface);
+    border-color: var(--color-border);
+  }
+  .trm-list-item--active {
+    background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+    border-color: var(--color-primary);
+  }
+  .trm-list-item--active .trm-list-item-name {
+    color: var(--color-primary);
+  }
+  .trm-list-item-name {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--color-text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* User item */
+  .trm-user-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    border-radius: 7px;
+    border: 1px solid transparent;
+    background: none;
+    cursor: pointer;
+    text-align: left;
+    transition: background 0.12s, border-color 0.12s;
+    width: 100%;
+  }
+  .trm-user-item:hover {
+    background: var(--color-surface);
+    border-color: var(--color-border);
+  }
+  .trm-user-item.trm-list-item--active {
+    background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+    border-color: var(--color-primary);
+  }
+  .trm-user-name {
+    flex: 1;
+    min-width: 0;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--color-text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .trm-user-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+  }
+
+  /* Avatar */
+  .trm-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--color-primary), color-mix(in srgb, var(--color-primary) 60%, white));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    font-weight: 600;
+    color: white;
+    flex-shrink: 0;
+    overflow: hidden;
+  }
+  .trm-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  .trm-avatar--lg {
+    width: 40px;
+    height: 40px;
+    font-size: 16px;
+  }
+
+  /* Badge */
+  .trm-badge {
+    font-size: 11px;
+    color: var(--color-text-light);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 20px;
+    padding: 1px 8px;
+    flex-shrink: 0;
+  }
+
+  /* Permission list */
+  .trm-perm-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .trm-section-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--color-text-light);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 6px;
+  }
+  .trm-perm-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px;
+    border-radius: 7px;
+    border: 1px solid var(--color-border);
+    background: var(--color-background);
+    cursor: pointer;
+    text-align: left;
+    font-size: 13px;
+    color: var(--color-text);
+    transition: background 0.12s, border-color 0.12s;
+    width: 100%;
+  }
+  .trm-perm-item:hover {
+    background: var(--color-surface);
+    border-color: color-mix(in srgb, var(--color-primary) 40%, transparent);
+  }
+  .trm-perm-item--active {
+    background: color-mix(in srgb, var(--color-primary) 6%, var(--color-background));
+    border-color: var(--color-primary);
+  }
+
+  .trm-checkbox {
+    width: 18px;
+    height: 18px;
+    border-radius: 4px;
+    border: 2px solid var(--color-border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: background 0.12s, border-color 0.12s;
+  }
+  .trm-checkbox svg {
+    width: 11px;
+    height: 11px;
+    stroke: white;
+  }
+  .trm-checkbox--checked {
+    background: var(--color-primary);
+    border-color: var(--color-primary);
+  }
+
+  /* Empty states */
+  .trm-empty {
+    padding: 24px 16px;
+    text-align: center;
+    color: var(--color-text-light);
+    font-size: 13px;
+  }
+  .trm-empty-sub {
+    font-size: 11px;
+    margin-top: 4px;
+    color: var(--color-text-light);
+    opacity: 0.7;
+  }
+  .trm-empty-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    color: var(--color-text-light);
+    font-size: 13px;
+  }
+  .trm-empty-panel svg {
+    width: 48px;
+    height: 48px;
+    opacity: 0.3;
+  }
+
+  @keyframes trm-spin {
+    to { transform: rotate(360deg); }
   }
 </style>

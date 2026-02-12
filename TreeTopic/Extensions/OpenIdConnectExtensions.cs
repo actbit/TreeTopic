@@ -62,6 +62,9 @@ public static class OpenIdConnectExtensions
             options.ClientSecret = string.Empty;
 
             options.ResponseType = "code";
+            // query モードを明示: callbackはGETリダイレクトで行う
+            // （認証CookieがSameSite=Laxのため、form_post（POST）ではcorrelation以外のCookieが送信されない）
+            options.ResponseMode = "query";
             // Avoid bloating auth cookies; tokens are not needed in cookies for this app.
             options.SaveTokens = false;
 

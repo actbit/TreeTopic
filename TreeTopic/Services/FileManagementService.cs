@@ -98,7 +98,7 @@ public class FileManagementService : BaseService, IFileManagementService
                 MessageId = request.MessageId ?? Guid.Empty,
                 SourceFileId = request.SourceFileId ?? Guid.Empty,
                 SourceFile = null,
-                IsLatast = true
+                IsLatest = true
             };
 
             await _fileRepository.AddAsync(file, cancellationToken);
@@ -162,7 +162,7 @@ public class FileManagementService : BaseService, IFileManagementService
             FileType = file.FileType,
             MessageId = file.MessageId != Guid.Empty ? file.MessageId : null,
             SourceFileId = file.SourceFileId != Guid.Empty ? file.SourceFileId : null,
-            IsLatest = file.IsLatast,
+            IsLatest = file.IsLatest,
             CreatedAt = file.CreatedAt,
             UpdatedAt = file.UpdatedAt,
             Size = 0,

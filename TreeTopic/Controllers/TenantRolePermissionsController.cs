@@ -2,6 +2,9 @@ using MaskedUUID.AspNetCore.Types;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
+using Finbuckle.MultiTenant;
+using Finbuckle.MultiTenant.Abstractions;
 using TreeTopic.Dtos;
 using TreeTopic.Filters;
 using TreeTopic.Permissions;
@@ -21,20 +24,35 @@ public class TenantRolePermissionsController : ControllerBase
 {
     private readonly ApplicationDbContext _db;
     private readonly ILogger<TenantRolePermissionsController> _logger;
+    private readonly IMemoryCache _cache;
+    private readonly IMultiTenantContextAccessor<ApplicationTenantInfo> _tenantAccessor;
 
     public TenantRolePermissionsController(
         ApplicationDbContext db,
-        ILogger<TenantRolePermissionsController> logger)
+        ILogger<TenantRolePermissionsController> logger,
+        IMemoryCache cache,
+        IMultiTenantContextAccessor<ApplicationTenantInfo> tenantAccessor)
     {
         _db = db;
         _logger = logger;
+        _cache = cache;
+        _tenantAccessor = tenantAccessor;
+    }
+
+    private void InvalidateRolePermissionCache(string roleName)
+    {
+        var tenantId = _tenantAccessor.MultiTenantContext?.TenantInfo?.Id;
+        if (tenantId != null)
+        {
+            _cache.Remove($"tenant_{tenantId}_role_perms_{roleName}");
+        }
     }
 
     /// <summary>
     /// Tenant権限一覧を取得（PermissionScanServiceで動的取得）
     /// </summary>
     [HttpGet("available")]
-    [RequireAny(TenantPermissions.PermissionRead)]
+    [RequireAny(PermissionScope.Role, TenantPermissions.PermissionRead)]
     public IActionResult GetAvailablePermissions([FromServices] PermissionScanService permissionScanService)
     {
         var permissions = permissionScanService.GetTenantPermissions();
@@ -50,7 +68,7 @@ public class TenantRolePermissionsController : ControllerBase
     /// ApplicationRoleに割り当てられている権限一覧を取得
     /// </summary>
     [HttpGet]
-    [RequireAny(TenantPermissions.RoleRead)]
+    [RequireAny(PermissionScope.Role, TenantPermissions.RoleRead)]
     public async Task<IActionResult> GetRolePermissions(
         [FromRoute] string roleName,
         CancellationToken cancellationToken)
@@ -77,7 +95,7 @@ public class TenantRolePermissionsController : ControllerBase
     /// ApplicationRoleに権限を割り当て
     /// </summary>
     [HttpPost]
-    [RequireAny(TenantPermissions.RoleManage)]
+    [RequireAny(PermissionScope.Role, TenantPermissions.RoleManage)]
     public async Task<IActionResult> AddPermissionToRole(
         [FromRoute] string roleName,
         [FromBody] AddTenantPermissionRequest request,
@@ -116,6 +134,7 @@ public class TenantRolePermissionsController : ControllerBase
         _db.Permissions.Add(permission);
         await _db.SaveChangesAsync(cancellationToken);
 
+        InvalidateRolePermissionCache(roleName);
         _logger.LogInformation("Permission {Permission} added to Role {RoleName}", request.PermissionName, roleName);
 
         return Ok(new { permissionId = new MaskedGuid(permission.Id), name = permission.Name });
@@ -125,7 +144,7 @@ public class TenantRolePermissionsController : ControllerBase
     /// ApplicationRoleから権限を削除
     /// </summary>
     [HttpDelete("{permissionName}")]
-    [RequireAny(TenantPermissions.RoleManage)]
+    [RequireAny(PermissionScope.Role, TenantPermissions.RoleManage)]
     public async Task<IActionResult> RemovePermissionFromRole(
         [FromRoute] string roleName,
         [FromRoute] string permissionName,
@@ -150,6 +169,7 @@ public class TenantRolePermissionsController : ControllerBase
         _db.Permissions.Remove(permission);
         await _db.SaveChangesAsync(cancellationToken);
 
+        InvalidateRolePermissionCache(roleName);
         _logger.LogInformation("Permission {Permission} removed from Role {RoleName}", permissionName, roleName);
 
         return NoContent();

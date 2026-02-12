@@ -1,4 +1,4 @@
-using MaskedUUID.AspNetCore.Services;
+using MaskedUUID.AspNetCore.Types;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
@@ -7,39 +7,49 @@ using TreeTopic.Permissions;
 
 namespace TreeTopic.Services;
 
+/// <summary>
+/// SignalR Hub のリアルタイムアクセス制御サービス
+/// テナント分離は Finbuckle.MultiTenant のクエリフィルタにより自動適用される
+/// Hubメソッド引数のMaskedGuidは、MaskedGuidConverterによって自動的にデコードされる
+/// </summary>
 public class RealtimeAccessService : IRealtimeAccessService
 {
     private readonly ApplicationDbContext _dbContext;
-    private readonly IMaskedUUIDService _maskedUuidService;
     private readonly UserManager<ApplicationUser> _userManager;
+    private readonly ILogger<RealtimeAccessService> _logger;
 
     public RealtimeAccessService(
         ApplicationDbContext dbContext,
-        IMaskedUUIDService maskedUuidService,
-        UserManager<ApplicationUser> userManager)
+        UserManager<ApplicationUser> userManager,
+        ILogger<RealtimeAccessService> logger)
     {
         _dbContext = dbContext;
-        _maskedUuidService = maskedUuidService;
         _userManager = userManager;
+        _logger = logger;
     }
 
-    public async Task<bool> CanJoinTopicAsync(string topicId, ClaimsPrincipal? user, CancellationToken cancellationToken = default)
+    public async Task<bool> CanJoinTopicAsync(MaskedGuid topicId, ClaimsPrincipal? user, CancellationToken cancellationToken = default)
     {
-        if (!TryGetCurrentUserId(user, out var currentUserId) || !TryDecodeGuid(topicId, out var topicGuid))
+        if (!TryGetCurrentUserId(user, out var currentUserId))
         {
+            _logger.LogWarning("[RealtimeAccessService] CanJoinTopic denied: no user context");
             return false;
         }
 
+        // トピックのルームIDを取得（Finbuckleのクエリフィルタがテナント分離を自動適用）
         var roomId = await _dbContext.Topics
             .AsNoTracking()
-            .Where(t => t.Id == topicGuid)
+            .Where(t => t.Id == (Guid)topicId)
             .Select(t => (Guid?)t.RoomId)
             .FirstOrDefaultAsync(cancellationToken);
+
         if (!roomId.HasValue)
         {
+            _logger.LogWarning("[RealtimeAccessService] CanJoinTopic denied: topic not found {TopicId}", topicId);
             return false;
         }
 
+        // RoomUserとして参加しているか確認
         var isRoomUser = await _dbContext.RoomUsers
             .AsNoTracking()
             .AnyAsync(ru => ru.RoomId == roomId.Value && ru.ApplicationUserId == currentUserId, cancellationToken);
@@ -48,6 +58,7 @@ public class RealtimeAccessService : IRealtimeAccessService
             return true;
         }
 
+        // テナントレベルの権限チェック
         return await HasAnyTenantPermissionAsync(
             user,
             currentUserId,
@@ -61,29 +72,35 @@ public class RealtimeAccessService : IRealtimeAccessService
             cancellationToken);
     }
 
-    public async Task<bool> CanJoinRoomAsync(string roomId, ClaimsPrincipal? user, CancellationToken cancellationToken = default)
+    public async Task<bool> CanJoinRoomAsync(MaskedGuid roomId, ClaimsPrincipal? user, CancellationToken cancellationToken = default)
     {
-        if (!TryGetCurrentUserId(user, out var currentUserId) || !TryDecodeGuid(roomId, out var roomGuid))
+        if (!TryGetCurrentUserId(user, out var currentUserId))
         {
+            _logger.LogWarning("[RealtimeAccessService] CanJoinRoom denied: no user context");
             return false;
         }
 
+        // ルームの存在確認（Finbuckleのクエリフィルタがテナント分離を自動適用）
         var roomExists = await _dbContext.Rooms
             .AsNoTracking()
-            .AnyAsync(r => r.Id == roomGuid, cancellationToken);
+            .AnyAsync(r => r.Id == (Guid)roomId, cancellationToken);
+
         if (!roomExists)
         {
+            _logger.LogWarning("[RealtimeAccessService] CanJoinRoom denied: room not found {RoomId}", roomId);
             return false;
         }
 
+        // RoomUserとして参加しているか確認
         var isRoomUser = await _dbContext.RoomUsers
             .AsNoTracking()
-            .AnyAsync(ru => ru.RoomId == roomGuid && ru.ApplicationUserId == currentUserId, cancellationToken);
+            .AnyAsync(ru => ru.RoomId == (Guid)roomId && ru.ApplicationUserId == currentUserId, cancellationToken);
         if (isRoomUser)
         {
             return true;
         }
 
+        // テナントレベルの権限チェック
         return await HasAnyTenantPermissionAsync(
             user,
             currentUserId,
@@ -92,51 +109,35 @@ public class RealtimeAccessService : IRealtimeAccessService
     }
 
     public async Task<bool> CanJoinRoomUserGroupAsync(
-        string roomId,
-        string userId,
+        MaskedGuid roomId,
+        MaskedGuid userId,
         ClaimsPrincipal? user,
         CancellationToken cancellationToken = default)
     {
-        if (!TryGetCurrentUserId(user, out var currentUserId) ||
-            !TryDecodeGuid(roomId, out var roomGuid) ||
-            !TryDecodeGuid(userId, out var requestedUserId))
+        if (!TryGetCurrentUserId(user, out var currentUserId))
         {
+            _logger.LogWarning("[RealtimeAccessService] CanJoinRoomUserGroup denied: no user context");
             return false;
         }
 
-        if (currentUserId != requestedUserId)
+        // ユーザーID照合: 自分のグループにのみ参加可能
+        if (currentUserId != (Guid)userId)
         {
+            _logger.LogWarning("[RealtimeAccessService] CanJoinRoomUserGroup denied: userId mismatch. CurrentUserId={CurrentUserId}, RequestedUserId={RequestedUserId}",
+                currentUserId, userId);
             return false;
         }
 
+        // RoomUserとして参加しているか確認（Finbuckleのクエリフィルタがテナント分離を自動適用）
         return await _dbContext.RoomUsers
             .AsNoTracking()
-            .AnyAsync(ru => ru.RoomId == roomGuid && ru.ApplicationUserId == currentUserId, cancellationToken);
+            .AnyAsync(ru => ru.RoomId == (Guid)roomId && ru.ApplicationUserId == currentUserId, cancellationToken);
     }
 
     private bool TryGetCurrentUserId(ClaimsPrincipal? user, out Guid userId)
     {
         var userIdClaim = user?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         return Guid.TryParse(userIdClaim, out userId);
-    }
-
-    private bool TryDecodeGuid(string value, out Guid id)
-    {
-        if (Guid.TryParse(value, out id))
-        {
-            return true;
-        }
-
-        try
-        {
-            id = _maskedUuidService.DecodeSynchronous(value);
-            return true;
-        }
-        catch
-        {
-            id = Guid.Empty;
-            return false;
-        }
     }
 
     private async Task<bool> HasAnyTenantPermissionAsync(
@@ -148,10 +149,11 @@ public class RealtimeAccessService : IRealtimeAccessService
         var roleNames = await GetCurrentRoleNamesAsync(user, userId);
         if (roleNames.Count == 0)
         {
+            _logger.LogWarning("[RealtimeAccessService] HasAnyTenantPermission denied: no roles for user {UserId}", userId);
             return false;
         }
 
-        return await _dbContext.Permissions
+        var hasPermission = await _dbContext.Permissions
             .AsNoTracking()
             .Include(p => p.Role)
             .AnyAsync(p =>
@@ -160,6 +162,14 @@ public class RealtimeAccessService : IRealtimeAccessService
                     roleNames.Contains(p.Role.Name) &&
                     permissionNames.Contains(p.Name),
                 cancellationToken);
+
+        if (!hasPermission)
+        {
+            _logger.LogWarning("[RealtimeAccessService] HasAnyTenantPermission denied: user {UserId} with roles [{Roles}] does not have any of [{Permissions}]",
+                userId, string.Join(", ", roleNames), string.Join(", ", permissionNames));
+        }
+
+        return hasPermission;
     }
 
     private async Task<HashSet<string>> GetCurrentRoleNamesAsync(ClaimsPrincipal? user, Guid userId)
@@ -179,7 +189,7 @@ public class RealtimeAccessService : IRealtimeAccessService
             }
         }
 
-        var claimRoles = user?.FindAll(ClaimTypes.Role).Select(c => c.Value) ?? Enumerable.Empty<string>();
+        var claimRoles = user?.FindAll(System.Security.Claims.ClaimTypes.Role).Select(c => c.Value) ?? Enumerable.Empty<string>();
         foreach (var role in claimRoles)
         {
             if (!string.IsNullOrWhiteSpace(role))

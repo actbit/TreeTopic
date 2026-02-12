@@ -139,8 +139,21 @@
       // テナントを取得
       const tenant = api.getCurrentTenant();
 
-      // RoomUser 情報を取得（直接データを取得）
-      const roomUserData = await api.get(`/${tenant}/api/roomusers/room/${roomId}/me`) as typeof roomUser;
+      // RoomUser 情報を取得。未作成ならここで作成して設定画面を継続利用できるようにする。
+      let roomUserData: typeof roomUser;
+      try {
+        roomUserData = await api.get(`/${tenant}/api/roomusers/room/${roomId}/me`) as typeof roomUser;
+      } catch (err) {
+        if (err instanceof api.ApiError && err.status === 404) {
+          roomUserData = await api.post(`/${tenant}/api/roomusers/room/${roomId}/join`, {
+            useMainName: true,
+            useMainIcon: true
+          }) as typeof roomUser;
+        } else {
+          throw err;
+        }
+      }
+
       roomUser = roomUserData;
       // ユーザー名を同期
       applicationUser.displayName = roomUser.displayName;
