@@ -12,13 +12,16 @@ public class TopicPermissionManager
 {
     private readonly ApplicationDbContext _context;
     private readonly ILogger<TopicPermissionManager> _logger;
+    private readonly PermissionScanService _permissionScanService;
 
     public TopicPermissionManager(
         ApplicationDbContext context,
-        ILogger<TopicPermissionManager> logger)
+        ILogger<TopicPermissionManager> logger,
+        PermissionScanService permissionScanService)
     {
         _context = context;
         _logger = logger;
+        _permissionScanService = permissionScanService;
     }
 
     #region TopicRolePermission 管理
@@ -294,34 +297,41 @@ public class TopicPermissionManager
         Guid roomUserId,
         CancellationToken cancellationToken = default)
     {
-        // Topic作成者に全権限を付与
-        var permissions = new[]
-        {
-            TopicPermissions.Read,
-            TopicPermissions.Write,
-            TopicPermissions.Delete,
-            TopicPermissions.Manage,
-            TopicPermissions.ReadMessages,
-            TopicPermissions.WriteMessages
-        };
+        // このトピックとユーザーに対して既に付与されている権限を取得
+        var existingPermissions = await _context.TopicUserPermissions
+            .Where(tup => tup.TopicId == topicId && tup.RoomUserId == roomUserId)
+            .Select(tup => tup.Name)
+            .ToHashSetAsync(cancellationToken);
 
-        foreach (var permissionName in permissions)
+        // PermissionScanServiceからTopicレベルの全権限を取得
+        var allTopicPermissions = _permissionScanService.GetTopicPermissions();
+
+        var addedCount = 0;
+        foreach (var permission in allTopicPermissions)
         {
-            var permission = new TopicUserPermission
+            // 既に存在する権限はスキップ
+            if (existingPermissions.Contains(permission.Name))
+                continue;
+
+            var userPermission = new TopicUserPermission
             {
                 Id = Guid.CreateVersion7(),
                 TopicId = topicId,
                 RoomUserId = roomUserId,
-                Name = permissionName
+                Name = permission.Name
             };
-            _context.TopicUserPermissions.Add(permission);
+            _context.TopicUserPermissions.Add(userPermission);
+            addedCount++;
         }
 
-        await _context.SaveChangesAsync(cancellationToken);
+        if (addedCount > 0)
+        {
+            await _context.SaveChangesAsync(cancellationToken);
+        }
 
         _logger.LogInformation(
-            "Creator permissions granted to RoomUser {RoomUserId} for topic {TopicId}",
-            roomUserId, topicId);
+            "Creator permissions granted to RoomUser {RoomUserId} for topic {TopicId}: {AddedCount} new permissions added",
+            roomUserId, topicId, addedCount);
     }
 
     #endregion

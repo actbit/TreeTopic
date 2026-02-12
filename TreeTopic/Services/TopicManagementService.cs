@@ -46,7 +46,7 @@ public class TopicManagementService : BaseService, ITopicManagementService
     private readonly IMaskedUUIDService _maskedUuidService;
     private readonly ApplicationDbContext _dbContext;
     private readonly ILogger<TopicDtoBuilder> _topicDtoBuilderLogger;
-    private readonly ILogger<TopicPermissionManager> _permissionManagerLogger;
+    private readonly TopicPermissionManager _topicPermissionManager;
     private readonly IMultiTenantContextAccessor<ApplicationTenantInfo> _tenantAccessor;
 
     public TopicManagementService(
@@ -56,7 +56,7 @@ public class TopicManagementService : BaseService, ITopicManagementService
         IMaskedUUIDService maskedUuidService,
         ApplicationDbContext dbContext,
         ILogger<TopicDtoBuilder> topicDtoBuilderLogger,
-        ILogger<TopicPermissionManager> permissionManagerLogger,
+        TopicPermissionManager topicPermissionManager,
         IMultiTenantContextAccessor<ApplicationTenantInfo> tenantAccessor,
         ILogger<TopicManagementService> logger) : base(logger)
     {
@@ -66,7 +66,7 @@ public class TopicManagementService : BaseService, ITopicManagementService
         _maskedUuidService = maskedUuidService;
         _dbContext = dbContext;
         _topicDtoBuilderLogger = topicDtoBuilderLogger;
-        _permissionManagerLogger = permissionManagerLogger;
+        _topicPermissionManager = topicPermissionManager;
         _tenantAccessor = tenantAccessor;
     }
 
@@ -198,8 +198,7 @@ public class TopicManagementService : BaseService, ITopicManagementService
                 // 親トピックの権限をコピー（オプション）
                 if (parentId.HasValue && request.InheritPermissions)
                 {
-                    var permissionManager = new TopicPermissionManager(_dbContext, _permissionManagerLogger);
-                    await permissionManager.CopyPermissionsAsync(parentId.Value, topic.Id, cancellationToken);
+                    await _topicPermissionManager.CopyPermissionsAsync(parentId.Value, topic.Id, cancellationToken);
                 }
 
                 // 作成者に管理者権限を付与
@@ -210,8 +209,7 @@ public class TopicManagementService : BaseService, ITopicManagementService
 
                     if (roomUser != null)
                     {
-                        var permissionManager = new TopicPermissionManager(_dbContext, _permissionManagerLogger);
-                        await permissionManager.GrantCreatorPermissionsAsync(topic.Id, roomUser.Id, cancellationToken);
+                        await _topicPermissionManager.GrantCreatorPermissionsAsync(topic.Id, roomUser.Id, cancellationToken);
                     }
                 }
 
