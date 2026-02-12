@@ -103,12 +103,30 @@
 
     // イベント発生時の値をキャプチャ（stale closure防止）
     const tenant = $page.params.tenant ?? getCurrentTenant();
-    const room = $currentRoom;
+    let room = $currentRoom;
+
+    // $currentRoom が設定されていない場合、roomId からRoomを探す
+    const eventRoomId = customEvent.detail?.roomId;
+    if (!room && eventRoomId) {
+      room = $roomList.find(r => r.id === eventRoomId) ?? null;
+      if (room) {
+        setCurrentRoom(room);
+      }
+    }
+
     if (!tenant || !room) {
       console.error('[RoomPage] Tenant or Room not found, cannot reload data');
       ui.addNotification({ type: 'error', message: 'Failed to reload room data: Missing context' });
       return;
     }
+
+    // 既に読み込み済みの場合はスキップ（二重読み込み防止）
+    if (room.id === lastLoadedRoomId) {
+      console.log('[RoomPage] Room already loaded, skipping');
+      ui.addNotification({ type: 'success', message: 'Room joined successfully' });
+      return;
+    }
+    lastLoadedRoomId = room.id;
 
     try {
       // 並列でTopics、Files、子孫ロードを実行
@@ -1732,6 +1750,8 @@
     const tenant = $page.params.tenant ?? getCurrentTenant();
     const roomId = $currentRoom?.id ?? null;
     if (!tenant || !roomId || isLoading || roomId === lastLoadedRoomId) return;
+    // RoomUserが存在しない場合はスキップ（権限エラーを防ぐ）
+    if (!$currentRoomUser?.id) return;
 
     // Roomが変更された場合、Topicsを再読み込み
     console.log('[RoomPage] Room changed, reloading topics for room:', roomId);

@@ -100,7 +100,7 @@ public class TopicController : ControllerBase
     }
 
     [HttpGet("{topicId}")]
-    [RequireAny(PermissionScope.Topic, TopicPermissions.Read, TenantPermissions.TopicRead)]
+    [RequireAny(PermissionScope.Topic, TopicPermissions.Read, RoomPermissions.TopicRead, TenantPermissions.TopicRead)]
     public async Task<IActionResult> GetById([FromRoute] MaskedGuid topicId, CancellationToken cancellationToken)
     {
         var result = await _topicManagementService.GetTopicByIdAsync((Guid)topicId, CurrentUserId, cancellationToken);
@@ -196,7 +196,7 @@ public class TopicController : ControllerBase
     }
 
     [HttpPut("{topicId}")]
-    [RequireAny(PermissionScope.Topic, TopicPermissions.Write, TenantPermissions.TopicManage)]
+    [RequireAny(PermissionScope.Topic, TopicPermissions.Write, RoomPermissions.TopicWrite, TenantPermissions.TopicManage)]
     public async Task<IActionResult> Update([FromRoute] MaskedGuid topicId, [FromBody] UpdateTopicRequest request, CancellationToken cancellationToken)
     {
         if (!ModelState.IsValid)
@@ -207,7 +207,7 @@ public class TopicController : ControllerBase
     }
 
     [HttpDelete("{topicId}")]
-    [RequireAny(PermissionScope.Topic, TopicPermissions.Delete, TenantPermissions.TopicManage)]
+    [RequireAny(PermissionScope.Topic, TopicPermissions.Delete, RoomPermissions.TopicManage, TenantPermissions.TopicManage)]
     public async Task<IActionResult> Delete(
         [FromRoute] MaskedGuid topicId,
         [FromQuery] string? strategy,
@@ -245,7 +245,7 @@ public class TopicController : ControllerBase
     /// 単一トピックの統計情報を取得
     /// </summary>
     [HttpGet("{topicId}/stats")]
-    [RequireAny(PermissionScope.Topic, TopicPermissions.Read, TenantPermissions.TopicRead)]
+    [RequireAny(PermissionScope.Topic, TopicPermissions.Read, RoomPermissions.TopicRead, TenantPermissions.TopicRead)]
     public async Task<IActionResult> GetTopicWithStats(
         [FromRoute] MaskedGuid topicId,
         CancellationToken cancellationToken)

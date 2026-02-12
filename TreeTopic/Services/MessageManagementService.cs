@@ -210,6 +210,143 @@ public class MessageManagementService : BaseService, IMessageManagementService
         await _roomUserSyncHub.Clients.Group(groupName).TopicUnreadUpdated(payload);
     }
 
+    /// <summary>
+    /// 送信者以外のRoomUsersに未読カウント更新を通知（同期的に実行）
+    /// CreateMessageAsync の HTTP リクエストコンテキスト内で呼び出されるため、MaskedGuid のシリアライズが可能
+    /// </summary>
+    private async Task BroadcastTopicUnreadUpdatesToRoomUsersAsync(Message message, RoomUser senderRoomUser, CancellationToken cancellationToken = default)
+    {
+        // Topic を取得
+        var topic = await _topicRepository.GetByIdAsync(message.TopicId, cancellationToken);
+        if (topic == null) return;
+
+        var tenantKey = ResolveTenantKey();
+
+        // 送信者以外の RoomUsers を取得
+        var roomUsersForUnread = await _dbContext.RoomUsers
+            .Where(ru => ru.RoomId == topic.RoomId && ru.Id != senderRoomUser.Id)
+            .ToListAsync(cancellationToken);
+
+        if (roomUsersForUnread.Count == 0)
+        {
+            Logger.LogDebug("[BroadcastTopicUnreadUpdatesToRoomUsers] No room users to notify for topic {TopicId}", message.TopicId);
+            return;
+        }
+
+        var targetUserIds = roomUsersForUnread
+            .Select(ru => ru.ApplicationUserId)
+            .Distinct()
+            .ToList();
+
+        // メッセージ総数を取得
+        var totalMessageCount = await _dbContext.Messages
+            .CountAsync(m => m.TopicId == message.TopicId, cancellationToken);
+
+        // UserTopics を取得
+        var userTopics = await _dbContext.UserTopics
+            .Where(ut => ut.TopicId == message.TopicId && targetUserIds.Contains(ut.UserId))
+            .ToListAsync(cancellationToken);
+
+        var userTopicMap = userTopics.ToDictionary(ut => ut.UserId, ut => ut);
+
+        // 有効なアンカーユーザーIDを取得
+        var validAnchorUserIds = (
+            await (
+                from ut in _dbContext.UserTopics
+                    .Where(ut =>
+                        ut.TopicId == message.TopicId
+                        && targetUserIds.Contains(ut.UserId)
+                        && ut.LastReadMessageId.HasValue)
+                join anchor in _dbContext.Messages
+                    on ut.LastReadMessageId equals anchor.Id
+                where anchor.TopicId == message.TopicId
+                select ut.UserId
+            ).Distinct().ToListAsync(cancellationToken)
+        ).ToHashSet();
+
+        // ユーザーごとの未読数を計算
+        var unreadCountsByUser = await (
+            from m in _dbContext.Messages
+            where m.TopicId == message.TopicId
+            join ut in _dbContext.UserTopics
+                .Where(ut =>
+                    ut.TopicId == message.TopicId
+                    && targetUserIds.Contains(ut.UserId)
+                    && ut.LastReadMessageId.HasValue)
+                on m.TopicId equals ut.TopicId
+            join anchor in _dbContext.Messages
+                on ut.LastReadMessageId equals anchor.Id
+            where anchor.TopicId == message.TopicId
+                && (
+                    m.CreatedAt > anchor.CreatedAt
+                    || (m.CreatedAt == anchor.CreatedAt && m.Id > anchor.Id)
+                )
+            group m by ut.UserId into g
+            select new { UserId = g.Key, UnreadCount = g.Count() }
+        ).ToDictionaryAsync(x => x.UserId, x => x.UnreadCount, cancellationToken);
+
+        // 各ユーザーに未読カウント更新を通知
+        foreach (var ru in roomUsersForUnread)
+        {
+            try
+            {
+                int unreadCount;
+                DateTime? lastReadAt = null;
+
+                if (userTopicMap.TryGetValue(ru.ApplicationUserId, out var userTopic))
+                {
+                    lastReadAt = userTopic.LastAccessAt;
+
+                    if (userTopic.LastReadMessageId.HasValue)
+                    {
+                        if (unreadCountsByUser.TryGetValue(ru.ApplicationUserId, out var unread))
+                        {
+                            unreadCount = unread;
+                        }
+                        else if (validAnchorUserIds.Contains(ru.ApplicationUserId))
+                        {
+                            // アンカーは有効で未読行が0件のケース
+                            unreadCount = 0;
+                        }
+                        else
+                        {
+                            // LastReadMessageId が存在していてもアンカー行が消えていた場合は全件未読扱い
+                            unreadCount = totalMessageCount;
+                        }
+                    }
+                    else
+                    {
+                        unreadCount = totalMessageCount;
+                    }
+                }
+                else
+                {
+                    unreadCount = totalMessageCount;
+                }
+
+                var groupName = RoomUserSyncHubGroups.RoomUser(
+                    tenantKey,
+                    topic.RoomId.ToString(),
+                    ru.ApplicationUserId.ToString());
+
+                var payload = new TopicUnreadUpdateEvent(
+                    topic.RoomId,
+                    message.TopicId,
+                    unreadCount,
+                    lastReadAt);
+
+                Logger.LogDebug("[BroadcastTopicUnreadUpdatesToRoomUsers] Sending unread update to user {UserId} topic {TopicId} unread {UnreadCount}", ru.ApplicationUserId, message.TopicId, unreadCount);
+                await _roomUserSyncHub.Clients.Group(groupName).TopicUnreadUpdated(payload);
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Failed to broadcast unread update for user {UserId} topic {TopicId}", ru.ApplicationUserId, message.TopicId);
+            }
+        }
+
+        Logger.LogInformation("[BroadcastTopicUnreadUpdatesToRoomUsers] Completed for topic {TopicId} notified {UserCount} users", message.TopicId, roomUsersForUnread.Count);
+    }
+
     private static bool IsMessageOrderAtOrAfter(
         DateTime lhsCreatedAt,
         Guid lhsId,
@@ -967,6 +1104,9 @@ public class MessageManagementService : BaseService, IMessageManagementService
                 {
                     await BroadcastTopicUpdatedAsync(createdTopicDto, cancellationToken);
                 }
+
+                // 未読カウント更新通知：同期的に実行（HTTP コンテキスト内なので MaskedGuid のシリアライズが可能）
+                await BroadcastTopicUnreadUpdatesToRoomUsersAsync(message, roomUser, cancellationToken);
             }
             catch (Exception ex)
             {
@@ -974,7 +1114,7 @@ public class MessageManagementService : BaseService, IMessageManagementService
                 Logger.LogError(ex, "Failed to broadcast message created for message {MessageId}. SignalR broadcast failed but message was created successfully.", message.Id);
             }
 
-            // プッシュ通知と未読カウント更新（fire-and-forget、トランザクション外で実行）
+            // プッシュ通知（fire-and-forget、トランザクション外で実行）
             _ = SendPushNotificationsAsync(message, roomUser, dto);
 
             return Result<MessageDto>.Success(dto, 201);
@@ -1464,6 +1604,7 @@ public class MessageManagementService : BaseService, IMessageManagementService
 
     /// <summary>
     /// プッシュ通知を送信（fire-and-forgetで実行）
+    /// 未読カウント通知は含まない（CreateMessageAsync内で同期的に実行）
     /// </summary>
     private async Task SendPushNotificationsAsync(Message message, RoomUser senderRoomUser, MessageDto messageDto)
     {
@@ -1546,120 +1687,6 @@ public class MessageManagementService : BaseService, IMessageManagementService
                 }
 
                 await dbContext.SaveChangesAsync();
-
-                // 未読カウントを更新して通知（送信者以外のRoomUsers）
-                var roomUserSyncHub = scope.ServiceProvider.GetRequiredService<IHubContext<RoomUserSyncHub, IRoomUserSyncHubClient>>();
-                var tenantAccessor = scope.ServiceProvider.GetRequiredService<IMultiTenantContextAccessor<ApplicationTenantInfo>>();
-                var tenantKey = RoomUserSyncHubGroups.ResolveTenantKey(tenantAccessor.MultiTenantContext?.TenantInfo);
-
-                var roomUsersForUnread = await dbContext.RoomUsers
-                    .Where(ru => ru.RoomId == topic.RoomId && ru.Id != senderRoomUser.Id)
-                    .ToListAsync();
-
-                var targetUserIds = roomUsersForUnread
-                    .Select(ru => ru.ApplicationUserId)
-                    .Distinct()
-                    .ToList();
-
-                var totalMessageCount = await dbContext.Messages
-                    .CountAsync(m => m.TopicId == message.TopicId);
-
-                var userTopics = await dbContext.UserTopics
-                    .Where(ut => ut.TopicId == message.TopicId && targetUserIds.Contains(ut.UserId))
-                    .ToListAsync();
-
-                var userTopicMap = userTopics.ToDictionary(ut => ut.UserId, ut => ut);
-
-                var validAnchorUserIds = (
-                    await (
-                        from ut in dbContext.UserTopics
-                            .Where(ut =>
-                                ut.TopicId == message.TopicId
-                                && targetUserIds.Contains(ut.UserId)
-                                && ut.LastReadMessageId.HasValue)
-                        join anchor in dbContext.Messages
-                            on ut.LastReadMessageId equals anchor.Id
-                        where anchor.TopicId == message.TopicId
-                        select ut.UserId
-                    ).Distinct().ToListAsync()
-                ).ToHashSet();
-
-                var unreadCountsByUser = await (
-                    from m in dbContext.Messages
-                    where m.TopicId == message.TopicId
-                    join ut in dbContext.UserTopics
-                        .Where(ut =>
-                            ut.TopicId == message.TopicId
-                            && targetUserIds.Contains(ut.UserId)
-                            && ut.LastReadMessageId.HasValue)
-                        on m.TopicId equals ut.TopicId
-                    join anchor in dbContext.Messages
-                        on ut.LastReadMessageId equals anchor.Id
-                    where anchor.TopicId == message.TopicId
-                        && (
-                            m.CreatedAt > anchor.CreatedAt
-                            || (m.CreatedAt == anchor.CreatedAt && m.Id > anchor.Id)
-                        )
-                    group m by ut.UserId into g
-                    select new { UserId = g.Key, UnreadCount = g.Count() }
-                ).ToDictionaryAsync(x => x.UserId, x => x.UnreadCount);
-
-                foreach (var ru in roomUsersForUnread)
-                {
-                    try
-                    {
-                        int unreadCount;
-                        DateTime? lastReadAt = null;
-
-                        if (userTopicMap.TryGetValue(ru.ApplicationUserId, out var userTopic))
-                        {
-                            lastReadAt = userTopic.LastAccessAt;
-
-                            if (userTopic.LastReadMessageId.HasValue)
-                            {
-                                if (unreadCountsByUser.TryGetValue(ru.ApplicationUserId, out var unread))
-                                {
-                                    unreadCount = unread;
-                                }
-                                else if (validAnchorUserIds.Contains(ru.ApplicationUserId))
-                                {
-                                    // アンカーは有効で未読行が0件のケース
-                                    unreadCount = 0;
-                                }
-                                else
-                                {
-                                    // LastReadMessageId が存在していてもアンカー行が消えていた場合は全件未読扱い
-                                    unreadCount = totalMessageCount;
-                                }
-                            }
-                            else
-                            {
-                                unreadCount = totalMessageCount;
-                            }
-                        }
-                        else
-                        {
-                            unreadCount = totalMessageCount;
-                        }
-
-                        var groupName = RoomUserSyncHubGroups.RoomUser(
-                            tenantKey,
-                            topic.RoomId.ToString(),
-                            ru.ApplicationUserId.ToString());
-
-                        var payload = new TopicUnreadUpdateEvent(
-                            topic.RoomId,
-                            message.TopicId,
-                            unreadCount,
-                            lastReadAt);
-
-                        await roomUserSyncHub.Clients.Group(groupName).TopicUnreadUpdated(payload);
-                    }
-                    catch (Exception ex)
-                    {
-                        Logger.LogError(ex, "Failed to broadcast unread update for user {UserId} topic {TopicId}", ru.ApplicationUserId, message.TopicId);
-                    }
-                }
             }
         }
         catch (Exception ex)

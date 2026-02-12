@@ -5,7 +5,7 @@
   import ErrorMessage from '../common/ErrorMessage.svelte';
   import { ui, activeModals } from '$lib/stores/ui';
   import { currentUser } from '$lib/stores/auth';
-  import { rooms } from '$lib/stores/rooms';
+  import { rooms, roomList } from '$lib/stores/rooms';
   import { api } from '$lib/api/client';
 
   const modalId = 'room-user-join';
@@ -57,6 +57,12 @@
           iconUrl: response.iconUrl ?? response.IconUrl,
           useMainIcon: response.useMainIcon ?? response.UseMainIcon ?? false,
         });
+
+        // 現在のRoomを設定（他のRoomから切り替えた場合に備える）
+        const room = $roomList.find(r => r.id === roomId);
+        if (room) {
+          rooms.setCurrentRoom(room);
+        }
 
         // 参加完了イベントを発火
         window.dispatchEvent(new CustomEvent('room-user-joined', {
