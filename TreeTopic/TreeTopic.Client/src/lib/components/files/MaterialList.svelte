@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { api } from '$lib/api/client';
   import { fileList, deleteFile as deleteFileApi, type Material } from '$lib/stores/files';
   import { currentRoom } from '$lib/stores/rooms';
   import { formatFileSize } from '$lib/utils/validation';
@@ -20,7 +21,7 @@
 
     const tenant = api.getCurrentTenant();
     if (!tenant) {
-      alert('Unable to determine tenant');
+      console.error('Unable to determine tenant');
       return;
     }
 
@@ -30,7 +31,6 @@
       await deleteFileApi(fileId, tenant);
     } catch (error) {
       console.error('Failed to delete file:', error);
-      alert('Failed to delete file. Please try again.');
     } finally {
       deletingFiles.delete(fileId);
     }

@@ -370,21 +370,11 @@
           const isSelectedTopic = loadedTopicId === normalized.topicId;
 
           if (!exists && isSelectedTopic && !document.hidden) {
-              topicId: normalized.topicId,
-              loadedTopicId,
-              messageId: normalized.id
-            });
             // 既読APIを呼び、レスポンスの未読数で更新
             void markTopicAsRead(normalized.topicId).then(unreadCount => {
               if (unreadCount !== null) {
                 updateTopic(normalized.topicId, { unreadCount });
               }
-            });
-          } else if (!exists) {
-              topicId: normalized.topicId,
-              loadedTopicId,
-              isSelectedTopic,
-              pageHidden: document.hidden
             });
           }
         }
@@ -1132,7 +1122,7 @@
           const canRetry = attempt < 3 && !!error.status && error.status >= 500;
           if (!canRetry) {
             if (error.status && error.status >= 400 && error.status < 500) {
-              alert('未読の更新に失敗しました。ページを再読み込みしてください。');
+              console.error('Failed to update unread status. Please reload the page.');
             }
             return null;
           }
@@ -1766,7 +1756,6 @@
             class="text-text-light hover:text-primary transition-colors text-sm flex items-center gap-1"
             title="Room Settings"
           >
-            <span>⚙</span>
             <span>Settings</span>
           </button>
         {/if}
@@ -1813,7 +1802,6 @@
                 class="text-text-light hover:text-primary transition-colors text-sm flex items-center gap-1"
                 title="Topic Settings"
               >
-                <span>⚙</span>
                 <span>Settings</span>
               </button>
             </div>

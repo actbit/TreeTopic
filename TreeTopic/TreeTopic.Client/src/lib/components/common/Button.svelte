@@ -52,7 +52,7 @@
   aria-disabled={disabled}
 >
   {#if loading}
-    <span class="btn-spinner">⏳</span>
+    <span class="btn-spinner">...</span>
   {:else if icon}
     <span class="btn-icon">{icon}</span>
   {/if}

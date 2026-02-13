@@ -7,7 +7,7 @@ TreeTopic はマルチテナント対応の ASP.NET Core アプリケーショ�
 
 ### 前提条件
 
-- **.NET 10.0** 以上
+- **.NET 9.0** 以上
 - **Docker Desktop**
 - **Git**
 
@@ -80,7 +80,7 @@ curl -X POST https://localhost:5001/my-tenant/api/setup \
 
 | 環境 | 開発環境 | 本番環境 |
 |------|---------|---------|
-| .NET | 10.0 以上 | 10.0 以上 |
+| .NET | 9.0 以上 | 9.0 以上 |
 | PostgreSQL | Docker経由 | 外部インスタンス |
 | Keycloak | Docker経由（自動） | 外部インスタンス |
 | Docker | 必須 | 不要 |
@@ -216,6 +216,482 @@ builder.Services.AddAuthentication()
             }
         });
 ```
+
+---
+
+## FreeBSDへのデプロイ
+
+本番環境としてFreeBSDサーバーにTreeTopicをデプロイする手順です。
+
+### デプロイの全体像
+
+```
+Windows開発環境           FreeBSD本番環境
+┌─────────────┐          ┌─────────────┐
+│  .NET 9.0   │ publish  │   .NET 9.0   │
+│             │ ──────→  │             │
+│ TreeTopic   │   scp    │ TreeTopic   │
+│             │          │  Keycloak   │
+│             │          │  PostgreSQL │
+│             │          │    nginx    │
+└─────────────┘          └─────────────┘
+```
+
+### 1. FreeBSD環境構築
+
+#### 1.1 前提条件パッケージのインストール
+
+```bash
+# パッケージインストール
+pkg install -y dotnet9      # .NET 9 (TreeTopic実行用)
+pkg install -y openjdk21    # OpenJDK 21 (Keycloak用)
+pkg install -y nginx        # Webサーバー
+pkg install -y postgresql17-server  # データベース
+
+# バージョン確認
+dotnet --version   # 9.0.xxx
+java --version     # openjdk 21.x.x
+```
+
+#### 1.2 ディレクトリ構成
+
+```
+/root/
+└── TreeTopic/
+    └── publish/              # TreeTopicアプリケーション
+        ├── TreeTopic.dll
+        ├── appsettings.Production.json
+        └── Fonts/
+            └── NotoSansJP-Bold.ttf
+
+/usr/local/share/java/keycloak/  # Keycloakインストール先
+├── bin/
+│   └── kc.sh               # 起動スクリプト
+├── conf/
+│   └── keycloak.conf       # Keycloak設定ファイル
+└── data/                   # データディレクトリ
+
+/usr/local/etc/
+├── nginx/
+│   ├── nginx.conf          # nginx設定ファイル
+│   └── ssl/
+│       ├── server.crt      # SSL証明書
+│       └── server.key      # SSL秘密鍵
+└── rc.d/
+    └── treetopic           # TreeTopicサービススクリプト
+
+/etc/
+├── ssh/
+│   └── sshd_config         # SSH設定
+├── pf.conf                 # ファイアウォール設定
+└── rc.conf                 # サービス自動起動設定
+
+/var/db/postgres/data/      # PostgreSQLデータ
+/var/log/
+├── keycloak/               # Keycloakログ
+├── treetopic.log           # TreeTopicログ
+└── postgres/logfile        # PostgreSQLログ
+```
+
+#### 1.3 SSH設定
+
+```bash
+# 設定ファイル編集
+vi /etc/ssh/sshd_config
+```
+
+**変更内容:**
+```
+PermitRootLogin yes
+PasswordAuthentication yes
+PubkeyAuthentication yes
+```
+
+```bash
+# サービス有効化
+sysrc sshd_enable=YES
+service sshd restart
+```
+
+#### 1.4 ファイアウォール（pf）設定
+
+```bash
+# 設定ファイル作成
+vi /etc/pf.conf
+```
+
+**内容:**
+```
+ext_if="em0"
+tcp_services = "{ 22, 80, 443, 8443 }"
+set skip on lo0
+block in all
+pass out all keep state
+pass in on $ext_if inet proto tcp from any to any port $tcp_services
+```
+
+```bash
+# 有効化
+sysrc pf_enable=YES
+sysrc pf_rules="/etc/pf.conf"
+pfctl -f /etc/pf.conf
+pfctl -e
+```
+
+#### 1.5 PostgreSQL設定
+
+```bash
+# データディレクトリ作成
+mkdir -p /var/db/postgres/data
+chown postgres:postgres /var/db/postgres/data
+
+# データベース初期化
+su -m postgres -c "/usr/local/bin/initdb -D /var/db/postgres/data --locale ja_JP.UTF-8 --encoding UTF8"
+
+# 起動
+su -m postgres -c "/usr/local/bin/pg_ctl -D /var/db/postgres/data -l /var/db/postgres/logfile start"
+
+# ユーザー・データベース作成
+su -m postgres -c "psql -d postgres -c \"ALTER USER postgres WITH PASSWORD 'postgres';\""
+su -m postgres -c "psql -d postgres -c \"CREATE USER treetopic WITH PASSWORD 'treetopic';\""
+su -m postgres -c "psql -d postgres -c \"CREATE DATABASE treetopic_tenants;\""
+su -m postgres -c "psql -d postgres -c \"CREATE DATABASE treetopic_shared;\""
+su -m postgres -c "psql -d postgres -c \"CREATE DATABASE keycloak;\""
+
+# 権限付与
+su -m postgres -c "psql -d keycloak -c \"GRANT ALL ON SCHEMA public TO treetopic; GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO treetopic; GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO treetopic;\""
+
+# 自動起動設定
+sysrc postgresql_enable=YES
+```
+
+#### 1.6 Keycloak設定
+
+```bash
+# パッケージインストール
+pkg install -y keycloak
+
+# 設定ファイル編集
+vi /usr/local/share/java/keycloak/conf/keycloak.conf
+```
+
+**内容:**
+```
+# Database
+db=postgres
+db-username=treetopic
+db-password=treetopic
+db-url=jdbc:postgresql://localhost:5432/keycloak
+
+# HTTP
+http-enabled=true
+http-port=8080
+https-port=8443
+
+# Hostname
+hostname=localhost
+hostname-strict=false
+
+# Proxy (for nginx)
+proxy=edge
+
+# Health & Metrics
+health-enabled=true
+metrics-enabled=true
+admin-enabled=true
+```
+
+```bash
+# ユーザー・ディレクトリ作成
+pw user add keycloak -c "Keycloak User" -d /nonexistent -s /usr/sbin/nologin
+mkdir -p /var/log/keycloak /var/run/keycloak
+chown -R keycloak:keycloak /var/log/keycloak /var/run/keycloak /usr/local/share/java/keycloak
+
+# サービス登録
+sysrc keycloak_enable=YES
+sysrc keycloak_env="KEYCLOAK_ADMIN=admin KEYCLOAK_ADMIN_PASSWORD=admin"
+
+# ビルド
+service keycloak build
+
+# 管理者ユーザー作成（初回のみ）
+cd /usr/local/share/java/keycloak
+KEYCLOAK_ADMIN=admin KEYCLOAK_ADMIN_PASSWORD=admin bin/kc.sh start --optimized --bootstrap-admin-username=admin --bootstrap-admin-password=admin &
+sleep 50
+curl -s -X POST "http://localhost:8080/realms/master/protocol/openid-connect/token" \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "username=admin" -d "password=admin" \
+  -d "grant_type=password" -d "client_id=admin-cli" | grep access_token
+pkill -f keycloak
+
+# サービス起動
+service keycloak start
+```
+
+#### 1.7 nginx設定
+
+```bash
+# パッケージインストール
+pkg install -y nginx
+sysrc nginx_enable=YES
+
+# SSL証明書ディレクトリ作成
+mkdir -p /usr/local/etc/nginx/ssl
+
+# 自己署名証明書作成
+cd /usr/local/etc/nginx/ssl
+openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+  -keyout server.key \
+  -out server.crt \
+  -subj "/CN=192.168.1.46"
+
+# nginx設定ファイル編集
+vi /usr/local/etc/nginx/nginx.conf
+```
+
+**内容:**
+```nginx
+worker_processes auto;
+events { worker_connections 1024; }
+http {
+    include mime.types;
+    default_type application/octet-stream;
+    sendfile on;
+    keepalive_timeout 65;
+
+    upstream treetopic { server 127.0.0.1:5000; }
+    upstream keycloak { server 127.0.0.1:8080; }
+
+    # HTTP → HTTPS リダイレクト
+    server {
+        listen 80;
+        return 301 https://$host$request_uri;
+    }
+
+    # TreeTopic (HTTPS 443)
+    server {
+        listen 443 ssl;
+        ssl_certificate /usr/local/etc/nginx/ssl/server.crt;
+        ssl_certificate_key /usr/local/etc/nginx/ssl/server.key;
+
+        location / {
+            proxy_pass http://treetopic;
+            proxy_http_version 1.1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            # SignalR/WebSocket対応
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection "upgrade";
+            proxy_read_timeout 86400;
+        }
+    }
+
+    # Keycloak (HTTPS 8443)
+    server {
+        listen 8443 ssl;
+        ssl_certificate /usr/local/etc/nginx/ssl/server.crt;
+        ssl_certificate_key /usr/local/etc/nginx/ssl/server.key;
+
+        location / {
+            proxy_pass http://keycloak;
+            proxy_http_version 1.1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+    }
+}
+```
+
+```bash
+# nginx起動
+service nginx start
+```
+
+### 2. Windows環境でのビルド
+
+#### 2.1 プロジェクトのビルドと公開
+
+```powershell
+# プロジェクトディレクトリに移動
+cd C:\path\to\TreeTopic
+
+# 依存関係復元
+dotnet restore
+
+# 公開（Release構成）
+dotnet publish TreeTopic/TreeTopic.csproj -c Release -o publish/
+```
+
+#### 2.2 フォントの確認
+
+`TreeTopic/Fonts/NotoSansJP-Bold.ttf` がプロジェクトに含まれていることを確認してください。csprojで自動コピー設定済みの場合は、publishフォルダーに自動的に含まれます。
+
+### 3. FreeBSDへの転送
+
+#### 3.1 アプリケーションの転送
+
+```powershell
+# publishフォルダーをFreeBSDへ転送
+scp -r publish root@192.168.1.46:/root/TreeTopic/
+```
+
+### 4. TreeTopicの設定と起動
+
+#### 4.1 フォント確認（必要に応じて）
+
+```bash
+# フォントが含まれているか確認
+ls -la /root/TreeTopic/publish/Fonts/
+# NotoSansJP-Bold.ttf があればOK
+
+# 含まれていない場合の対処
+mkdir -p /root/TreeTopic/publish/Fonts
+fetch -o /root/TreeTopic/publish/Fonts/NotoSansJP-Bold.ttf \
+  "https://github.com/googlefonts/noto-cjk/raw/main/Sans/OTF/Japanese/NotoSansJP-Bold.otf"
+```
+
+#### 4.2 設定ファイル作成
+
+```bash
+vi /root/TreeTopic/publish/appsettings.Production.json
+```
+
+**内容:**
+```json
+{
+  "ConnectionStrings": {
+    "TenantDb": "Host=localhost;Port=5432;Database=treetopic_tenants;Username=postgres;Password=postgres",
+    "SharedApp": "Host=localhost;Port=5432;Database=treetopic_shared;Username=postgres;Password=postgres"
+  },
+  "Authentication": {
+    "PublicBaseUrl": "https://192.168.1.46"
+  }
+}
+```
+
+#### 4.3 サービススクリプト作成
+
+```bash
+vi /usr/local/etc/rc.d/treetopic
+```
+
+**内容:**
+```bash
+#!/bin/sh
+# PROVIDE: treetopic
+# REQUIRE: DAEMON postgresql keycloak
+# KEYWORD: shutdown
+
+. /etc/rc.subr
+
+name="treetopic"
+rcvar="treetopic_enable"
+desc="TreeTopic Application"
+
+load_rc_config $name
+
+: ${treetopic_enable:=NO}
+: ${treetopic_user:=root}
+: ${treetopic_dir:=/root/TreeTopic/publish}
+: ${treetopic_env:=}
+
+pidfile="/var/run/treetopic.pid"
+command="/usr/sbin/daemon"
+
+start_cmd="treetopic_start"
+
+treetopic_start()
+{
+    echo "Starting treetopic."
+    cd ${treetopic_dir}
+    ${command} -u ${treetopic_user} -o /var/log/treetopic.log -t treetopic -P ${pidfile} \
+        /usr/bin/env ASPNETCORE_ENVIRONMENT=Production ${treetopic_env} \
+        /usr/local/bin/dotnet TreeTopic.dll --urls "http://0.0.0.0:5000"
+}
+
+run_rc_command "$1"
+```
+
+```bash
+# 実行権限付与
+chmod +x /usr/local/etc/rc.d/treetopic
+
+# ログディレクトリ作成
+mkdir -p /var/log/treetopic
+
+# 自動起動設定
+sysrc treetopic_enable=YES
+sysrc treetopic_dir=/root/TreeTopic/publish
+
+# 起動
+service treetopic start
+```
+
+### 5. サービス操作コマンド
+
+#### サービス状態確認
+
+```bash
+service sshd status
+service postgresql status
+service keycloak status
+service nginx status
+service treetopic status
+```
+
+#### サービス起動/停止/再起動
+
+```bash
+# TreeTopic
+service treetopic start
+service treetopic stop
+service treetopic restart
+
+# Keycloak
+service keycloak start
+service keycloak stop
+service keycloak restart
+
+# nginx
+service nginx start
+service nginx stop
+service nginx restart
+```
+
+#### ログ確認
+
+```bash
+# TreeTopicログ
+tail -f /var/log/treetopic.log
+
+# Keycloakログ
+tail -f /var/log/keycloak/keycloak.log
+
+# PostgreSQLログ
+tail -f /var/db/postgres/logfile
+```
+
+### 6. アクセス情報
+
+| サービス | URL | 備考 |
+|---------|-----|------|
+| TreeTopic | https://192.168.1.46/ | メインアプリケーション |
+| Keycloak | https://192.168.1.46:8443/ | 認証基盤 |
+| Keycloak管理 | https://192.168.1.46:8443/admin/master/console/ | admin / admin |
+| SSH | ssh root@192.168.1.46 | ポート22 |
+
+### 7. 開放ポート
+
+| ポート | 用途 |
+|-------|------|
+| 22 | SSH |
+| 80 | HTTP (HTTPSへリダイレクト) |
+| 443 | HTTPS (TreeTopic) |
+| 8443 | HTTPS (Keycloak) |
 
 ---
 
