@@ -33,24 +33,17 @@ export function normalizeTenantInfo(raw: RawTenantInfo): PublicTenantInfo {
  */
 export async function getAllPublicTenants(): Promise<PublicTenantInfo[]> {
   if (publicTenantsInFlight) {
-    console.log('Reusing in-flight tenants request');
     return publicTenantsInFlight;
   }
 
   publicTenantsInFlight = (async () => {
     try {
-      console.log('Fetching tenants from /api/tenants/public');
       const response = await api.get<RawTenantInfo[]>('/api/tenants/public');
       const tenants = Array.isArray(response)
         ? response.map(normalizeTenantInfo).filter(t => t.identifier)
         : [];
-      console.log('Tenants fetched:', tenants);
       return tenants;
     } catch (error) {
-      console.error('Failed to fetch public tenants:', error);
-      if (error instanceof Error) {
-        console.error('Error message:', error.message);
-      }
       return [];
     } finally {
       publicTenantsInFlight = null;
@@ -70,7 +63,6 @@ export async function getPublicTenantInfo(identifier: string): Promise<PublicTen
     const tenant = normalizeTenantInfo(response);
     return tenant.identifier ? tenant : null;
   } catch (error) {
-    console.error(`Failed to fetch tenant info for ${identifier}`, error);
     return null;
   }
 }

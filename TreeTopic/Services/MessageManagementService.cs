@@ -121,7 +121,8 @@ public class MessageManagementService : BaseService, IMessageManagementService
     private string BuildMessageUploadUrl(Guid userId, Guid messageId, string savedFileName)
     {
         var folder = GetTenantUploadsFolderName();
-        return $"/uploads/{folder}/messages/{userId}/{messageId}/{savedFileName}".Replace("\\", "/");
+        // FileControllerのダウンロードエンドポイントを使用
+        return $"/{folder}/api/file/download/message/{messageId}/{savedFileName}".Replace("\\", "/");
     }
 
     private string BuildLegacyUploadUrl(string savedFileName)
@@ -229,7 +230,6 @@ public class MessageManagementService : BaseService, IMessageManagementService
 
         if (roomUsersForUnread.Count == 0)
         {
-            Logger.LogDebug("[BroadcastTopicUnreadUpdatesToRoomUsers] No room users to notify for topic {TopicId}", message.TopicId);
             return;
         }
 
@@ -335,7 +335,6 @@ public class MessageManagementService : BaseService, IMessageManagementService
                     unreadCount,
                     lastReadAt);
 
-                Logger.LogDebug("[BroadcastTopicUnreadUpdatesToRoomUsers] Sending unread update to user {UserId} topic {TopicId} unread {UnreadCount}", ru.ApplicationUserId, message.TopicId, unreadCount);
                 await _roomUserSyncHub.Clients.Group(groupName).TopicUnreadUpdated(payload);
             }
             catch (Exception ex)

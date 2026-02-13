@@ -60,38 +60,29 @@ function createPushStore() {
         return;
       }
 
-      // VAPID公開鍵を取得
       let vapidPublicKey: string | null = null;
       try {
         const vapidResponse = await api.get<{ publicKey: string }>(`/${tenant}/api/push/vapid-public-key`);
         vapidPublicKey = vapidResponse?.publicKey ?? null;
       } catch (error) {
-        console.warn('[Push] Failed to fetch VAPID public key:', error);
       }
 
-      // 保存されているVAPIDキーを取得
       const storedVapidKey = localStorage.getItem(VAPID_KEY_STORAGE_KEY);
       const vapidKeyChanged = vapidPublicKey && storedVapidKey !== vapidPublicKey;
 
-      // VAPIDキーが変更された場合は古い購読を削除
       if (vapidKeyChanged) {
-        console.log('[Push] VAPID key changed, unsubscribing old subscription');
         try {
           const registration = await navigator.serviceWorker.ready;
           const existingSubscription = await registration.pushManager.getSubscription();
           if (existingSubscription) {
             await existingSubscription.unsubscribe();
-            console.log('[Push] Old subscription removed due to VAPID key change');
           }
         } catch (error) {
-          console.error('[Push] Failed to unsubscribe old subscription:', error);
         }
-        // 新しいVAPIDキーを保存
         if (vapidPublicKey) {
           localStorage.setItem(VAPID_KEY_STORAGE_KEY, vapidPublicKey);
         }
       } else if (!storedVapidKey && vapidPublicKey) {
-        // 初回のみVAPIDキーを保存
         localStorage.setItem(VAPID_KEY_STORAGE_KEY, vapidPublicKey);
       }
 
@@ -108,23 +99,15 @@ function createPushStore() {
       } : null;
 
       if (subscription) {
-        // ローカルに購読がある場合、サーバー側でも存在するか確認
         try {
           const response = await fetch(`/${tenant}/api/push/subscription-status?endpoint=${encodeURIComponent(subscription.endpoint)}`);
           if (response.ok) {
             const data = await response.json() as { exists: boolean };
             if (!data.exists) {
-              // サーバー側に購読がない場合、既存の購読をそのまま登録（解除しない）
-              console.log('[Push] Subscription not found on server, registering existing subscription...');
               await sendSubscriptionToServer(localSubscription!);
-              console.log('[Push] Successfully registered existing subscription for current tenant');
             }
-          } else {
-            console.warn('[Push] Failed to check subscription status, using local state');
           }
         } catch (error) {
-          console.error('[Push] Failed to verify subscription with server:', error);
-          // 検証に失敗した場合、とりあえずローカルの状態を信じる
         }
       }
 
@@ -161,22 +144,17 @@ function createPushStore() {
       const registration = await navigator.serviceWorker.ready;
 
       try {
-        // 既存の購読を確認
         const existingSubscription = await registration.pushManager.getSubscription();
         let subscription: PushSubscription;
 
         if (existingSubscription) {
-          // VAPIDキーが変更された可能性があるため、既存の購読を解除して再作成
           await existingSubscription.unsubscribe();
-          console.log('[Push] Unsubscribed old subscription to create new one with current VAPID key');
         }
 
-        // 新しい購読を作成
         subscription = await registration.pushManager.subscribe({
           userVisibleOnly: true,
           applicationServerKey: urlBase64ToUint8Array(vapidResponse.publicKey) as BufferSource
         });
-        console.log('[Push] Created new subscription');
 
         const subscriptionData: LocalPushSubscription = {
           endpoint: subscription.endpoint,
@@ -192,12 +170,10 @@ function createPushStore() {
           subscription: subscriptionData
         }));
 
-        // サーバーに購読情報を送信
         await sendSubscriptionToServer(subscriptionData);
 
         return true;
       } catch (error) {
-        console.error('Failed to subscribe to push notifications:', error);
         return false;
       }
     },
@@ -256,9 +232,7 @@ async function sendSubscriptionToServer(subscription: LocalPushSubscription): Pr
     body: JSON.stringify(subscription)
   });
 
-  // 409 Conflict は既に登録されている場合（正常）
   if (response.status === 409) {
-    console.log('Subscription already exists on server');
     return;
   }
 

@@ -17,12 +17,10 @@ public abstract class BaseService
     {
         try
         {
-            Logger.LogDebug("Starting operation: {OperationName}", operationName);
             var result = await operation();
 
             if (result.IsSuccess)
             {
-                Logger.LogDebug("Operation {OperationName} completed successfully", operationName);
             }
             else
             {
@@ -33,7 +31,6 @@ public abstract class BaseService
         }
         catch (OperationCanceledException)
         {
-            Logger.LogDebug("Operation {OperationName} was canceled", operationName);
             throw;
         }
         catch (Exception ex)
@@ -49,12 +46,10 @@ public abstract class BaseService
     {
         try
         {
-            Logger.LogDebug("Starting operation: {OperationName}", operationName);
             var result = await operation();
 
             if (result.IsSuccess)
             {
-                Logger.LogDebug("Operation {OperationName} completed successfully", operationName);
             }
             else
             {
@@ -65,7 +60,6 @@ public abstract class BaseService
         }
         catch (OperationCanceledException)
         {
-            Logger.LogDebug("Operation {OperationName} was canceled", operationName);
             throw;
         }
         catch (Exception ex)
@@ -81,12 +75,10 @@ public abstract class BaseService
     {
         try
         {
-            Logger.LogDebug("Starting operation: {OperationName}", operationName);
             var result = operation();
 
             if (result.IsSuccess)
             {
-                Logger.LogDebug("Operation {OperationName} completed successfully", operationName);
             }
             else
             {
@@ -97,7 +89,6 @@ public abstract class BaseService
         }
         catch (OperationCanceledException)
         {
-            Logger.LogDebug("Operation {OperationName} was canceled", operationName);
             throw;
         }
         catch (Exception ex)
@@ -113,12 +104,10 @@ public abstract class BaseService
     {
         try
         {
-            Logger.LogDebug("Starting operation: {OperationName}", operationName);
             var result = operation();
 
             if (result.IsSuccess)
             {
-                Logger.LogDebug("Operation {OperationName} completed successfully", operationName);
             }
             else
             {
@@ -129,7 +118,6 @@ public abstract class BaseService
         }
         catch (OperationCanceledException)
         {
-            Logger.LogDebug("Operation {OperationName} was canceled", operationName);
             throw;
         }
         catch (Exception ex)
