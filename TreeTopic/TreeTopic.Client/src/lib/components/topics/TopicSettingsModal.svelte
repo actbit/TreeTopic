@@ -2,8 +2,9 @@
   import Modal from '../common/Modal.svelte';
   import { ui, activeModals, modals } from '$lib/stores/ui';
   import { page } from '$app/stores';
-  import { api, permissionsApi } from '$lib/api';
-  import type { AvailablePermissions } from '$lib/types';
+  import { api } from '$lib/api/client';
+  import { permissionsApi } from '$lib/api/permissions';
+  import type { AvailablePermissions } from '$lib/types/permissions';
   import { selectedTopic } from '$lib/stores/topics';
   import { currentRoom } from '$lib/stores/rooms';
 

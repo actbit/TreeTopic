@@ -1,7 +1,8 @@
 <script lang="ts">
   import Modal from '../common/Modal.svelte';
-  import { api, tenantRolePermissionsApi, assignUserRole, removeUserRole } from '$lib/api';
-  import type { AvailablePermissions, Role } from '$lib/types';
+  import { api, assignUserRole, removeUserRole } from '$lib/api/client';
+  import { tenantRolePermissionsApi } from '$lib/api/permissions';
+  import type { AvailablePermissions, Role } from '$lib/types/permissions';
   import { ui, activeModals } from '$lib/stores/ui';
   import { page } from '$app/stores';
 
