@@ -332,6 +332,76 @@ public class FileController : ControllerBase
             contentType = "application/octet-stream";
         }
 
+        // savedFileName から元のファイル名を抽出
+        // savedFileName の形式: "{GUID}_{originalFileName}"
+        var originalFileName = safeFileName.Length > 37 ? safeFileName.Substring(37) : safeFileName;
+
+        // Content-Disposition ヘッダーで元のファイル名を指定（attachmentでダウンロードを強制）
+        Response.Headers.Add("Content-Disposition", $"attachment; filename=\"{originalFileName}\"");
+
+        // ファイルをストリームで返す
+        var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+        return File(fileStream, contentType);
+    }
+
+    /// <summary>
+    /// メッセージ添付ファイルダウンロードエンドポイント
+    /// </summary>
+    [HttpGet("download/message/{messageId}/{fileName}")]
+    [RequireAny(PermissionScope.Topic, TopicPermissions.ReadMessages, TenantPermissions.TopicReadMessages, RoomPermissions.TopicMessageRead)]
+    public async Task<IActionResult> DownloadMessageFile(
+        [FromRoute] MaskedGuid messageId,
+        [FromRoute] string fileName,
+        CancellationToken cancellationToken)
+    {
+        var tenant = RouteData.Values["tenant"]?.ToString() ?? "default";
+        var webRoot = _environment.ContentRootPath;
+
+        // メッセージファイルのパス: uploads/{tenant}/messages/{userId}/{messageId}/{fileName}
+        var messagesRoot = Path.GetFullPath(Path.Combine(webRoot, "uploads", tenant, "messages"));
+        var safeFileName = Path.GetFileName(fileName);
+        if (!string.Equals(fileName, safeFileName, StringComparison.Ordinal))
+        {
+            return BadRequest(new { message = "Invalid file name." });
+        }
+
+        // messageIdのディレクトリを検索
+        var messageDir = Directory.GetDirectories(messagesRoot, "*", SearchOption.AllDirectories)
+            .FirstOrDefault(d => Path.GetFileName(d) == ((Guid)messageId).ToString());
+
+        if (messageDir == null)
+        {
+            return NotFound(new { message = "Message directory not found." });
+        }
+
+        var filePath = Path.GetFullPath(Path.Combine(messageDir, safeFileName));
+        if (!filePath.StartsWith(messagesRoot, StringComparison.OrdinalIgnoreCase))
+        {
+            return BadRequest(new { message = "Invalid file path." });
+        }
+
+        if (!System.IO.File.Exists(filePath))
+        {
+            return NotFound(new { message = "File not found." });
+        }
+
+        // savedFileName から元のファイル名を抽出
+        var originalFileName = safeFileName.Length > 37 ? safeFileName.Substring(37) : safeFileName;
+
+        // Content-Disposition ヘッダーで元のファイル名を指定
+        Response.Headers.Add("Content-Disposition", $"attachment; filename=\"{originalFileName}\"");
+
+        // Content-Type を決定
+        string contentType;
+        if (_contentTypeProvider.TryGetContentType(safeFileName, out var providerContentType))
+        {
+            contentType = providerContentType;
+        }
+        else
+        {
+            contentType = "application/octet-stream";
+        }
+
         // ファイルをストリームで返す
         var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
         return File(fileStream, contentType);

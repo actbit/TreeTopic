@@ -91,15 +91,12 @@
   }
 
   async function loadUsers() {
-    if (users.length > 0) return; // Already loaded
+    if (users.length > 0) return;
     try {
       isLoadingUsers = true;
-      console.log('[TenantRolePermissionModal] Loading users from:', `/${tenant}/api/users`);
       const userData = await api.get<UserSummary[]>(`/${tenant}/api/users`, { cache: false });
-      console.log('[TenantRolePermissionModal] Users loaded:', userData.length);
       users = userData;
     } catch (err) {
-      console.error('[TenantRolePermissionModal] Failed to load users:', err);
       error = err instanceof Error ? err.message : 'Failed to load users';
     } finally {
       isLoadingUsers = false;
@@ -209,25 +206,19 @@
       if (!user) return;
 
       const hasRole = user.roles.includes(roleName);
-      console.log('[TenantRolePermissionModal] Toggle role:', { userId, roleName, hasRole });
 
       if (hasRole) {
         // Remove role - use the imported function
-        console.log('[TenantRolePermissionModal] Removing role:', { tenant, userId, roleName });
         await removeUserRole(tenant, userId, roleName);
         // Optimistically update UI
         user.roles = user.roles.filter(r => r !== roleName);
-        console.log('[TenantRolePermissionModal] Role removed successfully');
       } else {
         // Add role - use the imported function
-        console.log('[TenantRolePermissionModal] Adding role:', { tenant, userId, roleName });
         await assignUserRole(tenant, userId, roleName);
         // Optimistically update UI
         user.roles = [...user.roles, roleName];
-        console.log('[TenantRolePermissionModal] Role added successfully');
       }
     } catch (err) {
-      console.error('[TenantRolePermissionModal] Failed to update user role:', err);
       error = err instanceof Error ? err.message : 'Failed to update user role';
       // Revert by reloading user data on error
       await refreshUser(userId);
@@ -236,15 +227,12 @@
 
   async function refreshUser(userId: string) {
     try {
-      console.log('[TenantRolePermissionModal] Refreshing user:', userId);
       const userData = await api.get<UserSummary>(`/${tenant}/api/users/${userId}`, { cache: false });
-      console.log('[TenantRolePermissionModal] User refreshed:', userData);
       const index = users.findIndex(u => u.id === userId);
       if (index !== -1) {
         users[index] = userData;
       }
     } catch (err) {
-      console.error('[TenantRolePermissionModal] Failed to refresh user data:', err);
     }
   }
 </script>
