@@ -122,14 +122,14 @@
       <div class="card room-dropdown">
         <div class="panel-header sticky top-0">
           <div class="flex items-center justify-between">
-            <span class="text-small text-light">テナント: {tenantName}</span>
+            <span class="text-small text-light">Tenant: {tenantName}</span>
             <div class="flex gap-2">
               <button
                 onclick={openTenantRolePermissionModal}
                 class="px-2 py-1 text-xs border border-border rounded hover:bg-surface transition-colors"
-                title="テナントロール権限管理"
+                title="Tenant Role Permissions"
               >
-                🛡 ロール権限
+                Role Permissions
               </button>
               <Button
                 onclick={openCreateModal}
@@ -179,7 +179,7 @@
                   class="button clickable room-settings-button"
                   title="Room settings"
                 >
-                  ⚙
+                  Settings
                 </button>
               {/if}
             </div>
@@ -191,20 +191,18 @@
                 onclick={() => openRoomSettings($currentRoom.id, new Event('click'))}
                 class="list-item clickable hoverable flex items-center gap-2 w-full text-left"
               >
-                <span>⚙</span>
-                <span>ルーム設定</span>
+                <span>Room Settings</span>
               </button>
             </div>
           {/if}
 
-          <!-- テナントロール権限管理（右下） -->
+          <!-- Tenant Role Permissions -->
           <div class="border-t border-border mt-2 pt-2">
             <button
               onclick={openTenantRolePermissionModal}
               class="list-item clickable hoverable flex items-center gap-2 w-full text-left"
             >
-              <span>🛡</span>
-              <span>テナントロール権限</span>
+              <span>Tenant Role Permissions</span>
             </button>
           </div>
         </div>

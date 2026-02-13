@@ -125,7 +125,7 @@
         <h1 class="panel-title">Select a room</h1>
         <div class="flex gap-2">
           <button class="button button-secondary button-small" onclick={() => ui.openModal({ id: 'tenant-role-permission', title: 'Tenant Settings', type: 'custom' })}>
-            ⚙️ Settings
+            Settings
           </button>
           <button class="button button-secondary button-small" onclick={openCreateModal}>
             New Room
@@ -176,7 +176,7 @@
                   onclick={(e) => openRoomSettings(room.id, e)}
                   title="Room settings"
                 >
-                  ⚙️
+                  Settings
                 </button>
               </div>
             {/each}

@@ -247,13 +247,13 @@
     {
       id: 'reply',
       label: 'Reply',
-      icon: '↩',
+      icon: '<',
       action: replyToMessage,
     },
     {
       id: 'create-child-topic',
       label: 'Create child topic',
-      icon: '➕',
+      icon: '+',
       action: openCreateChildTopicFromMessage,
     },
     {
@@ -264,13 +264,13 @@
     ...(canEditMessage ? [{
       id: 'edit',
       label: 'Edit',
-      icon: '✏️',
+      icon: 'e',
       action: openEditModal,
     } as ContextMenuItem] : []),
     ...(canDeleteMessage ? [{
       id: 'delete',
       label: 'Delete',
-      icon: '🗑️',
+      icon: 'x',
       action: openDeleteModal,
       isDangerous: true,
     } as ContextMenuItem] : []),

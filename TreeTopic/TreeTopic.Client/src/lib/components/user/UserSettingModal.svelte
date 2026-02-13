@@ -473,7 +473,7 @@
           <!-- ApplicationUser 設定タブ -->
           <div class="application-user-tab">
             <div class="form-section">
-              <h3>表示名</h3>
+              <h3>Display Name</h3>
               <Input
                 bind:value={applicationUser.displayName}
                 placeholder="Enter display name"

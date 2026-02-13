@@ -58,13 +58,13 @@
           useMainIcon: response.useMainIcon ?? response.UseMainIcon ?? false,
         });
 
-        // 現在のRoomを設定（他のRoomから切り替えた場合に備える）
+        // Set current Room (in case of switching from another Room)
         const room = $roomList.find(r => r.id === roomId);
         if (room) {
           rooms.setCurrentRoom(room);
         }
 
-        // 参加完了イベントを発火
+        // Fire join completion event
         window.dispatchEvent(new CustomEvent('room-user-joined', {
           detail: { roomId, roomUser: response }
         }));

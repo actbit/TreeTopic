@@ -382,7 +382,7 @@
           title={node.isExpanded ? 'Collapse' : 'Expand'}
           aria-expanded={node.isExpanded}
         >
-          <span class="toggle-icon {node.isExpanded ? 'toggle-icon-open' : ''}">▶</span>
+          <span class="toggle-icon {node.isExpanded ? 'toggle-icon-open' : ''}">&gt;</span>
         </button>
       {:else}
         <div class="toggle-spacer"></div>
@@ -401,7 +401,7 @@
       {/if}
 
       {#if node.hasChildren && hasUnreadChildrenState && hasCheckedUnread}
-        <span class="child-unread-badge" title="子孫トピックの未読メッセージ">
+        <span class="child-unread-badge" title="Unread messages in descendant topics">
           {descendantsUnreadCount}
         </span>
       {/if}

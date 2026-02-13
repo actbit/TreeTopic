@@ -11,9 +11,9 @@
     $props();
 
   const icons = {
-    error: '⚠',
-    warning: '⚡',
-    info: 'ℹ',
+    error: '!',
+    warning: '!',
+    info: 'i',
   };
 </script>
 
@@ -34,7 +34,7 @@
       class="error-message-dismiss"
       aria-label="Dismiss message"
     >
-      ✕
+      ×
     </button>
   {/if}
 </div>
