@@ -18,28 +18,22 @@
       return;
     }
     try {
-      console.log('Loading tenants...');
       tenants = await getAllPublicTenants();
-      console.log('Tenants loaded:', tenants);
       isLoading = false;
       if (tenants.length === 0) {
         error = 'No tenants available';
-        console.warn('No tenants returned from API');
       }
     } catch (err) {
       isLoading = false;
       error = 'Failed to load tenants';
-      console.error('Error loading tenants:', err);
     }
   });
 
   async function handleSelectTenant() {
     if (selectedTenant) {
       try {
-        console.log('Navigating to:', `/${selectedTenant}/login`);
         await goto(`/${selectedTenant}/login`);
       } catch (err) {
-        console.error('Navigation error:', err);
         error = 'Failed to navigate to login page';
       }
     }

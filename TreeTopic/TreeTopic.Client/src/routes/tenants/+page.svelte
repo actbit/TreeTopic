@@ -230,19 +230,12 @@
   }
 
   function handleSSOLogin() {
-    console.log('[handleSSOLogin] createdTenant:', createdTenant);
     if (createdTenant?.identifier && createdTenant?.setupToken) {
-      // setupTokenをsessionStorageに保存
       sessionStorage.setItem(`setupToken_${createdTenant.identifier}`, createdTenant.setupToken);
       const returnUrl = encodeURIComponent(`/${createdTenant.identifier}/setup`);
       const loginUrl = `/${createdTenant.identifier}/auth/login?returnUrl=${returnUrl}`;
-      console.log('[handleSSOLogin] Redirecting to:', loginUrl);
       window.location.href = loginUrl;
     } else {
-      console.error('[handleSSOLogin] Missing identifier or setupToken', {
-        identifier: createdTenant?.identifier,
-        setupToken: createdTenant?.setupToken
-      });
       alert('認証情報が不足しています。管理者にお問い合わせください。');
     }
   }

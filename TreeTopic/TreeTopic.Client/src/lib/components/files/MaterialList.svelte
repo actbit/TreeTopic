@@ -4,7 +4,6 @@
   import { formatFileSize } from '$lib/utils/validation';
   import { formatDate } from '$lib/utils/date';
   import { ui } from '$lib/stores/ui';
-  import { api } from '$lib/api/client';
 
   interface Props {
     compact?: boolean;
@@ -61,15 +60,6 @@
 
     return groups;
   });
-
-  function handleDownload(fileUrl: string, fileName: string) {
-    const link = document.createElement('a');
-    link.href = fileUrl;
-    link.download = fileName;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  }
 
   function openUploadModal() {
     ui.openModal({
@@ -187,14 +177,14 @@
                     View
                   </a>
                 {/if}
-                <button
-                  type="button"
-                  onclick={() => handleDownload(file.url, file.fileName)}
+                <a
+                  href={file.url}
+                  download={file.fileName}
                   class="px-3 py-2 text-sm text-text-light hover:text-primary rounded hover:bg-white transition-colors font-medium"
                   title="Download"
                 >
                   Download
-                </button>
+                </a>
                 <button
                   type="button"
                   onclick={() => handleDeleteFile(file.id, file.fileName)}
@@ -249,17 +239,15 @@
                   >
                     View
                   </a>
-                  <button
-                    type="button"
-                    onclick={(e) => {
-                      e.preventDefault();
-                      handleDownload(file.url, file.fileName);
-                    }}
+                  <a
+                    href={file.url}
+                    download={file.fileName}
+                    onclick={(e) => e.preventDefault()}
                     class="px-3 py-1 bg-white rounded hover:bg-primary transition-colors text-xs font-medium"
                     title="Download"
                   >
                     Download
-                  </button>
+                  </a>
                   <button
                     type="button"
                     onclick={(e) => {
@@ -306,14 +294,14 @@
                   >
                     View
                   </a>
-                  <button
-                    type="button"
-                    onclick={() => handleDownload(file.url, file.fileName)}
+                  <a
+                    href={file.url}
+                    download={file.fileName}
                     class="px-3 py-2 text-sm text-text-light hover:text-primary rounded hover:bg-white transition-colors font-medium"
                     title="Download"
                   >
                     Download
-                  </button>
+                  </a>
                   <button
                     type="button"
                     onclick={() => handleDeleteFile(file.id, file.fileName)}
@@ -355,14 +343,14 @@
                 >
                   View
                 </a>
-                <button
-                  type="button"
-                  onclick={() => handleDownload(file.url, file.fileName)}
+                <a
+                  href={file.url}
+                  download={file.fileName}
                   class="px-3 py-2 text-sm text-text-light hover:text-primary rounded hover:bg-white transition-colors font-medium"
                   title="Download"
                 >
                   Download
-                </button>
+                </a>
                 <button
                   type="button"
                   onclick={() => handleDeleteFile(file.id, file.fileName)}
