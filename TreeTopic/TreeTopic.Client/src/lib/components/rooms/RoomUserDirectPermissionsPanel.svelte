@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { api } from '$lib/api';
-  import type { AvailablePermissions } from '$lib/types';
+  import { api } from '$lib/api/client';
+  import type { AvailablePermissions } from '$lib/types/permissions';
 
   interface Props {
     tenant: string;

@@ -1,6 +1,7 @@
 <script lang="ts">
-  import { api, roomRolePermissionsApi } from '$lib/api';
-  import type { AvailablePermissions, Role } from '$lib/types';
+  import { api } from '$lib/api/client';
+  import { roomRolePermissionsApi } from '$lib/api/permissions';
+  import type { AvailablePermissions, Role } from '$lib/types/permissions';
 
   interface Props {
     tenant: string;
@@ -164,7 +165,7 @@
                   placeholder="Description (optional)..."
                   class="rrpp-textarea"
                   rows="2"
-                />
+                ></textarea>
                 <div class="rrpp-create-actions">
                   <button onclick={createRole} disabled={!newRoleName.trim()} class="rrpp-btn rrpp-btn--primary">
                     Create
