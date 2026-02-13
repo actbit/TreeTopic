@@ -393,7 +393,7 @@
           disabled={isLoading}
           title="Delete selected circle"
         >
-          🗑 Delete
+          Delete
         </Button>
         <Button
           variant="secondary"

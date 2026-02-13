@@ -236,7 +236,7 @@
       const loginUrl = `/${createdTenant.identifier}/auth/login?returnUrl=${returnUrl}`;
       window.location.href = loginUrl;
     } else {
-      alert('認証情報が不足しています。管理者にお問い合わせください。');
+      console.error('Authentication information is insufficient. Please contact the administrator.');
     }
   }
 

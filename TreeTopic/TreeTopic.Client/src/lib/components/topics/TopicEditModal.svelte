@@ -152,7 +152,7 @@
             topicId: topicId
           })}
         >
-          トピック権限管理
+          Manage Topic Permissions
         </button>
       </div>
     {/if}
