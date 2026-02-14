@@ -84,8 +84,8 @@ public class MessageHub : Hub<IMessageHubClient>
             _logger.LogInformation("[MessageHub] Client disconnected: {ConnectionId}, Exception: {Exception}",
                 Context.ConnectionId, exception?.Message ?? "None");
 
-            // Note: Groups are automatically cleaned up by SignalR when a connection closes
-            // No manual cleanup needed unless using custom group management
+            // 注: 接続が閉じるとSignalRが自動的にグループをクリーンアップする
+            // カスタムグループ管理を使用している場合を除き、手動クリーンアップは不要
         }
         catch (Exception ex)
         {

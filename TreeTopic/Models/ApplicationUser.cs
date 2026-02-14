@@ -12,7 +12,7 @@ namespace TreeTopic.Models
         public string? Sub { get; set; }
         public string? TenantId { get; set; }
 
-        // Ban related properties
+        // BAN関連プロパティ
         public bool IsBanned { get; set; }
         public DateTime? BannedAt { get; set; }
         public string? BannedBy { get; set; }

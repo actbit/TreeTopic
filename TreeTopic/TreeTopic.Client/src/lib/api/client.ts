@@ -24,7 +24,6 @@ export interface ApiClientConfig {
 }
 
 export function initializeApiClient(config: ApiClientConfig): void {
-  // Store for later use in interceptors
   apiClientConfig = config;
 }
 
@@ -202,7 +201,7 @@ export async function get<T>(
     }
     url = urlObj.toString();
   } else {
-    // Relative path
+    // 相対パス
     url = path;
     if (options?.params) {
       const params = new URLSearchParams();
@@ -224,10 +223,9 @@ export async function get<T>(
     credentials: 'include',
   });
 
-  // handleResponse will handle 401/403 and redirect if needed
   const result = await handleResponse<T>(response);
 
-  // Only cache successful responses
+  // 成功時のみキャッシュ
   if (response.ok && result !== null && options?.cache !== false) {
     cacheManager.set(cacheKey, result);
   }
@@ -245,7 +243,7 @@ export async function post<T>(
   const body = data instanceof FormData ? data : JSON.stringify(data);
 
   const headers = buildHeaders(options?.headers);
-  // FormData should not include Content-Type header (browser will set it)
+  // FormDataの場合はContent-Typeヘッダーを削除（ブラウザが自動設定）
   if (data instanceof FormData) {
     delete headers['Content-Type'];
   }
@@ -261,7 +259,6 @@ export async function post<T>(
 
   const result = await handleResponse<T>(response);
 
-  // Invalidate related cache on success
   if (response.ok) {
     cacheManager.invalidateByResource('POST', path);
   }
@@ -288,7 +285,6 @@ export async function put<T>(
 
   const result = await handleResponse<T>(response);
 
-  // Invalidate related cache on success
   if (response.ok) {
     cacheManager.invalidateByResource('PUT', path);
   }
@@ -315,7 +311,6 @@ export async function patch<T>(
 
   const result = await handleResponse<T>(response);
 
-  // Invalidate related cache on success
   if (response.ok) {
     cacheManager.invalidateByResource('PATCH', path);
   }
@@ -338,14 +333,12 @@ export async function del<T>(
   });
 
   if (response.status === 204) {
-    // Invalidate related cache on success
     cacheManager.invalidateByResource('DELETE', path);
     return;
   }
 
   const result = await handleResponse<T>(response);
 
-  // Invalidate related cache on success
   if (response.ok) {
     cacheManager.invalidateByResource('DELETE', path);
   }
@@ -456,9 +449,6 @@ export async function uploadFile(
   });
 }
 
-/**
- * Retry API call with exponential backoff
- */
 export async function retryWithBackoff<T>(
   fn: () => Promise<T>,
   maxRetries: number = 3,
@@ -472,7 +462,7 @@ export async function retryWithBackoff<T>(
     } catch (error) {
       lastError = error as Error;
 
-      // Don't retry on 4xx errors (except 429)
+      // 4xxエラーはリトライしない（429を除く）
       if (error instanceof ApiError && error.status >= 400 && error.status < 500 && error.status !== 429) {
         throw error;
       }
@@ -502,7 +492,6 @@ export const api = {
   ApiError,
 };
 
-// Setup APIs with token
 export async function getRolesWithSetupToken(tenant: string, setupToken: string) {
   return api.get(`/${tenant}/api/setup/rolesetup`, {
     headers: { 'Authorization': `Bearer ${setupToken}` }
@@ -600,7 +589,6 @@ export async function checkUserPermissions(tenant: string) {
   return api.get(`/${tenant}/auth/me/permissions`);
 }
 
-// User management functions
 export async function createUser(tenant: string, email: string) {
   return api.post(`/${tenant}/api/users`, { email });
 }
@@ -633,10 +621,8 @@ export async function removeUserRole(tenant: string, userId: string, roleName: s
   return handleResponse(response);
 }
 
-// User role management exports
 export { removeUserRole as deleteUserRole };
 
-// Room user candidates for adding to room
 export async function getRoomUserCandidates(tenant: string, roomId: string, search?: string) {
   const params = search ? { search } : undefined;
   return api.get(`/${tenant}/api/room/${roomId}/users/candidates`, { params });

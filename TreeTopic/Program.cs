@@ -125,8 +125,6 @@ public class Program
                     OnRedirectToLogin = ctx =>
                     {
                         var isApi = ctx.Request.IsApiRequest();
-                        var logger = ctx.HttpContext.RequestServices.GetRequiredService<ILogger<Program>>();
-                        logger.LogDebug("[OnRedirectToLogin] Path: {Path}, IsApi: {IsApi}", ctx.Request.Path, isApi);
 
                         if (isApi)
                         {
@@ -180,8 +178,7 @@ public class Program
                     },
                     OnValidatePrincipal = context =>
                     {
-                        var logger = context.HttpContext.RequestServices.GetRequiredService<ILogger<Program>>();
-                        logger.LogDebug("[Cookies] Principal validated for path {Path}", context.HttpContext.Request.Path);
+                        var tenantId = context.HttpContext.GetRouteValue("tenant")?.ToString();
 
                         if (!context.Properties.Items.ContainsKey(AuthenticationConstants.TenantClaimType))
                         {
@@ -213,7 +210,6 @@ public class Program
                                 context.Properties.Items[AuthenticationConstants.TenantClaimType] = tenantId;
                                 context.HttpContext.Items[AuthenticationConstants.Cookie.TenantForCookieKey] = tenantId;
                                 context.ShouldRenew = true;
-                                logger.LogDebug("[Cookies] Tenant injected into auth properties: {Tenant}", tenantId);
                             }
                         }
 
@@ -331,7 +327,7 @@ public class Program
                     if (!Uri.TryCreate(tenantDetail.OpenIdConnectAuthority, UriKind.Absolute, out var authorityUri) ||
                         (authorityUri.Scheme != Uri.UriSchemeHttps && !builder.Environment.IsDevelopment()))
                     {
-                        return; // Skip this tenant configuration
+                        return; // このテナント設定をスキップ
                     }
 
                     options.Authority = tenantDetail.OpenIdConnectAuthority;
@@ -340,29 +336,20 @@ public class Program
                     if (string.IsNullOrEmpty(tenantDetail.OpenIdConnectAuthorizationEndpoint) ||
                         string.IsNullOrEmpty(tenantDetail.OpenIdConnectTokenEndpoint))
                     {
-                        // Use default endpoints from authority
+                        // authorityからデフォルトエンドポイントを使用
                     }
                     else
                     {
                         if (!Uri.TryCreate(tenantDetail.OpenIdConnectAuthorizationEndpoint, UriKind.Absolute, out var authEndpoint) ||
                             (authEndpoint.Scheme != Uri.UriSchemeHttps && !builder.Environment.IsDevelopment()))
                         {
-                            // Use default from authority
+                            // authorityのデフォルトを使用
                         }
 
                         if (!Uri.TryCreate(tenantDetail.OpenIdConnectTokenEndpoint, UriKind.Absolute, out var tokenEndpoint) ||
                             (tokenEndpoint.Scheme != Uri.UriSchemeHttps && !builder.Environment.IsDevelopment()))
                         {
-                            // Use default from authority
-                        }
-                    }
-
-                    if (!string.IsNullOrEmpty(tenantDetail.OpenIdConnectJwksUri))
-                    {
-                        if (!Uri.TryCreate(tenantDetail.OpenIdConnectJwksUri, UriKind.Absolute, out var jwksUri) ||
-                            (jwksUri.Scheme != Uri.UriSchemeHttps && !builder.Environment.IsDevelopment()))
-                        {
-                            // Skip JWKS configuration but continue with other settings
+                            // authorityのデフォルトを使用
                         }
                     }
 
@@ -473,7 +460,6 @@ public class Program
 
         builder.Services.AddScoped<SetupTokenValidationService>();
 
-        // Register background service for tenant cleanup
         builder.Services.AddHostedService<TenantCleanupBackgroundService>();
 
         builder.Services.AddSingleton<TenantIdObfuscationService>();
@@ -784,7 +770,6 @@ public class Program
             await context.Response.SendFileAsync(Path.Combine(app.Environment.WebRootPath, "index.html"));
         });
 
-        // Tenant cleanup background task is now started as HostedService
         app.Run();
     }
 }

@@ -43,23 +43,18 @@ public class TreeTopicMaskedUUIDKeyProvider : IMaskedUUIDKeyProvider
         var tenantId = GetCurrentTenantId();
         var cacheKey = $"{CacheKeyPrefix}{tenantId}";
 
-        // Check cache first
         if (_cache.TryGetValue(cacheKey, out (ulong k0, ulong k1) cachedKeys))
         {
-            _logger.LogDebug("MaskedUUID keys found in cache for tenant {TenantId}", tenantId);
             return cachedKeys;
         }
 
-        // Fetch from DB
         var keys = await FetchKeysFromDatabaseAsync(tenantId);
 
-        // Cache the keys
         _cache.Set(cacheKey, keys, new MemoryCacheEntryOptions
         {
             AbsoluteExpirationRelativeToNow = CacheDuration
         });
 
-        _logger.LogDebug("MaskedUUID keys fetched from DB and cached for tenant {TenantId}", tenantId);
         return keys;
     }
 
@@ -68,23 +63,18 @@ public class TreeTopicMaskedUUIDKeyProvider : IMaskedUUIDKeyProvider
         var tenantId = GetCurrentTenantId();
         var cacheKey = $"{CacheKeyPrefix}{tenantId}";
 
-        // Check cache first
         if (_cache.TryGetValue(cacheKey, out (ulong k0, ulong k1) cachedKeys))
         {
-            _logger.LogDebug("MaskedUUID keys found in cache (sync) for tenant {TenantId}", tenantId);
             return cachedKeys;
         }
 
-        // Fetch from DB (sync wrapper)
         var keys = FetchKeysFromDatabaseSync(tenantId);
 
-        // Cache the keys
         _cache.Set(cacheKey, keys, new MemoryCacheEntryOptions
         {
             AbsoluteExpirationRelativeToNow = CacheDuration
         });
 
-        _logger.LogDebug("MaskedUUID keys fetched from DB and cached (sync) for tenant {TenantId}", tenantId);
         return keys;
     }
 
@@ -246,7 +236,6 @@ public class TreeTopicMaskedUUIDKeyProvider : IMaskedUUIDKeyProvider
             throw new InvalidOperationException($"MaskedUUID keys not configured for tenant {tenantId}");
         }
 
-        _logger.LogDebug("MaskedUUID keys loaded from database for tenant {TenantId}", tenantId);
         return (tenantInfo.Detail.TenantObfuscationKeyK0, tenantInfo.Detail.TenantObfuscationKeyK1);
     }
 
@@ -273,7 +262,6 @@ public class TreeTopicMaskedUUIDKeyProvider : IMaskedUUIDKeyProvider
             throw new InvalidOperationException($"MaskedUUID keys not configured for tenant {tenantId}");
         }
 
-        _logger.LogDebug("MaskedUUID keys loaded from database (sync) for tenant {TenantId}", tenantId);
         return (tenantInfo.Detail.TenantObfuscationKeyK0, tenantInfo.Detail.TenantObfuscationKeyK1);
     }
 }

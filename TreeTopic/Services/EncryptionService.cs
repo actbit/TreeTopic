@@ -4,7 +4,7 @@ using System.Text;
 namespace TreeTopic.Services;
 
 /// <summary>
-/// Service for encrypting and decrypting sensitive data using AES-256-GCM
+/// AES-256-GCMを使用して機密データを暗号化・復号化するサービス
 /// </summary>
 public class EncryptionService
 {
@@ -37,7 +37,7 @@ public class EncryptionService
     {
         _logger = logger;
 
-        // Try to get encryption key from environment variable first, then appsettings
+        // 環境変数から暗号化キーを取得、なければappsettingsから
         var keyString = Environment.GetEnvironmentVariable("ENCRYPTION_KEY")
             ?? configuration["Encryption:Key"];
 
@@ -45,7 +45,7 @@ public class EncryptionService
         {
             if (env.IsDevelopment())
             {
-                // Auto-generate key in development for convenience
+                // 開発環境では便宜上キーを自動生成
                 var generatedKey = GenerateNewKey();
                 _logger.LogWarning(
                     "╔════════════════════════════════════════════════════════════════╗\n" +
@@ -73,7 +73,7 @@ public class EncryptionService
         {
             _key = Convert.FromBase64String(keyString);
 
-            // AES-256 requires 32 bytes
+            // AES-256は32バイト必要
             if (_key.Length != 32)
             {
                 throw new InvalidOperationException(
@@ -90,8 +90,8 @@ public class EncryptionService
     }
 
     /// <summary>
-    /// Encrypts plaintext using AES-256-GCM
-    /// Returns: base64-encoded "nonce:ciphertext:tag"
+    /// AES-256-GCMで平文を暗号化
+    /// 戻り値: base64エンコードされた "nonce:ciphertext:tag"
     /// </summary>
     public string Encrypt(string plaintext)
     {
@@ -103,7 +103,7 @@ public class EncryptionService
             const int tagSizeInBytes = 16; // 128-bit authentication tag
             using (var aes = new AesGcm(_key, tagSizeInBytes))
             {
-                // Generate random 96-bit nonce (12 bytes recommended for GCM)
+                // 96ビットのランダムnonceを生成（GCM推奨の12バイト）
                 var nonce = new byte[12];
                 using (var rng = RandomNumberGenerator.Create())
                 {
@@ -114,10 +114,10 @@ public class EncryptionService
                 var ciphertext = new byte[plaintextBytes.Length];
                 var tag = new byte[tagSizeInBytes];
 
-                // Encrypt and authenticate
+                // 暗号化と認証
                 aes.Encrypt(nonce, plaintextBytes, ciphertext, tag);
 
-                // Combine nonce:ciphertext:tag as base64 for storage
+                // 保存用にnonce:ciphertext:tagをbase64形式で結合
                 var nonceBase64 = Convert.ToBase64String(nonce);
                 var ciphertextBase64 = Convert.ToBase64String(ciphertext);
                 var tagBase64 = Convert.ToBase64String(tag);
@@ -133,7 +133,7 @@ public class EncryptionService
     }
 
     /// <summary>
-    /// Decrypts encryptedData using a tenant key that is itself encrypted with the master key.
+    /// マスターキーで暗号化されたテナントキーを使用してデータを復号化
     /// </summary>
     public string DecryptWithTenantKey(string encryptedTenantKey, string encryptedData)
     {
@@ -148,7 +148,7 @@ public class EncryptionService
     }
 
     /// <summary>
-    /// Decrypts encryptedData using a tenant key that is already decrypted (base64-encoded 32-byte key).
+    /// 既に復号化されたテナントキー（base64エンコード32バイトキー）を使用してデータを復号化
     /// </summary>
     public string DecryptWithPlainTenantKey(string tenantKeyString, string encryptedData)
     {
@@ -163,8 +163,8 @@ public class EncryptionService
     }
 
     /// <summary>
-    /// Decrypts ciphertext encrypted with Encrypt method
-    /// Expected format: base64-encoded "nonce:ciphertext:tag"
+    /// Encryptメソッドで暗号化されたデータを復号化
+    /// 期待フォーマット: base64エンコードされた "nonce:ciphertext:tag"
     /// </summary>
     public string Decrypt(string encryptedData)
     {
@@ -173,7 +173,7 @@ public class EncryptionService
 
         try
         {
-            // Parse the encrypted data: nonce:ciphertext:tag
+            // 暗号化データをパース: nonce:ciphertext:tag
             var parts = encryptedData.Split(':');
             if (parts.Length != 3)
             {
@@ -190,7 +190,7 @@ public class EncryptionService
             {
                 var plaintext = new byte[ciphertext.Length];
 
-                // Decrypt and verify authentication tag
+                // 復号化と認証タグ検証
                 aes.Decrypt(nonce, ciphertext, tag, plaintext);
 
                 return Encoding.UTF8.GetString(plaintext);
@@ -209,12 +209,12 @@ public class EncryptionService
     }
 
     /// <summary>
-    /// Generates a new encryption key (for reference/setup purposes)
-    /// Returns base64-encoded 256-bit key
+    /// 新しい暗号化キーを生成（参照・セットアップ用）
+    /// 戻り値: base64エンコードされた256ビットキー
     /// </summary>
     public static string GenerateNewKey()
     {
-        var key = new byte[32]; // 256 bits
+        var key = new byte[32]; // 256ビット
         using (var rng = RandomNumberGenerator.Create())
         {
             rng.GetBytes(key);

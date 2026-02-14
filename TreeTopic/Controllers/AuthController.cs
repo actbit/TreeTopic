@@ -123,8 +123,8 @@ public class AuthController : ControllerBase
         var redirectUri = returnUrl ?? "/";
         _logger.LogInformation("Logout redirecting to: {RedirectUri}", redirectUri);
 
-        // Only logout from application session (Cookies)
-        // Don't logout from Keycloak to preserve session for other applications
+        // アプリケーションセッション（Cookie）のみログアウト
+        // 他のアプリケーションのセッションを維持するためKeycloakからはログアウトしない
         return SignOut(
             new AuthenticationProperties
             {

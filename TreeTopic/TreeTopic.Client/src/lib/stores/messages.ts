@@ -1,11 +1,8 @@
 import { writable, derived } from 'svelte/store';
 import { isCacheValid } from '$lib/utils/store';
 
-const MESSAGES_CACHE_TTL = 30 * 1000; // 30 seconds - messages change frequently
+const MESSAGES_CACHE_TTL = 30 * 1000; // 30秒 - メッセージは頻繁に変更される
 
-/**
- * Message attachment
- */
 export interface Attachment {
   id: string;
   fileName: string;
@@ -17,9 +14,6 @@ export interface Attachment {
   uploadedBy: string;
 }
 
-/**
- * Message information
- */
 export interface Message {
   id: string;
   topicId: string;
@@ -42,9 +36,6 @@ export interface Message {
   childTopicTitle?: string;
 }
 
-/**
- * Messages store state
- */
 export interface MessagesState {
   messages: Message[];
   messagesByTopic: Map<string, string[]>; // topicId -> message IDs
@@ -56,9 +47,6 @@ export interface MessagesState {
   cacheExpiry: number;
 }
 
-/**
- * Create messages store
- */
 function createMessagesStore() {
   const { subscribe, set, update } = writable<MessagesState>({
     messages: [],
@@ -73,15 +61,12 @@ function createMessagesStore() {
 
   return {
     subscribe,
-    /**
-     * Set messages for a topic
-     */
     setMessages: (topicId: string, messages: Message[]) => {
       update((state) => {
         const messagesByTopic = new Map(state.messagesByTopic);
         messagesByTopic.set(topicId, messages.map((m) => m.id));
 
-        // Merge messages - keep existing if not replaced
+        // メッセージをマージ - 置換されなかったものは保持
         const messagesMap = new Map(state.messages.map((m) => [m.id, m]));
         messages.forEach((m) => messagesMap.set(m.id, m));
 
@@ -104,9 +89,6 @@ function createMessagesStore() {
         };
       });
     },
-    /**
-     * Add a new message
-     */
     addMessage: (message: Message) => {
       update((state) => {
         // 重複チェック - 同じIDのメッセージが既に存在する場合は追加しない
@@ -134,9 +116,6 @@ function createMessagesStore() {
         };
       });
     },
-    /**
-     * Update message
-     */
     updateMessage: (messageId: string, updates: Partial<Message>) => {
       update((state) => ({
         ...state,
@@ -148,9 +127,6 @@ function createMessagesStore() {
         ),
       }));
     },
-    /**
-     * Delete message
-     */
     deleteMessage: (messageId: string) => {
       update((state) => {
         const message = state.messages.find((m) => m.id === messageId);
@@ -175,9 +151,6 @@ function createMessagesStore() {
         };
       });
     },
-    /**
-     * Add reaction to message
-     */
     addReaction: (messageId: string, emoji: string, userId: string) => {
       update((state) => ({
         ...state,
@@ -198,9 +171,6 @@ function createMessagesStore() {
         }),
       }));
     },
-    /**
-     * Remove reaction from message
-     */
     removeReaction: (messageId: string, emoji: string, userId: string) => {
       update((state) => ({
         ...state,
@@ -225,21 +195,12 @@ function createMessagesStore() {
         }),
       }));
     },
-    /**
-     * Set loading state
-     */
     setLoading: (isLoading: boolean) => {
       update((state) => ({ ...state, isLoading }));
     },
-    /**
-     * Set error
-     */
     setError: (error: string | null) => {
       update((state) => ({ ...state, error }));
     },
-    /**
-     * Clear messages for a topic
-     */
     clearTopicMessages: (topicId: string) => {
       update((state) => {
         const messagesByTopic = new Map(state.messagesByTopic);
@@ -255,9 +216,6 @@ function createMessagesStore() {
         };
       });
     },
-    /**
-     * Clear all messages
-     */
     clear: () => {
       set({
         messages: [],
@@ -275,9 +233,6 @@ function createMessagesStore() {
 
 export const messages = createMessagesStore();
 
-/**
- * Derived stores
- */
 export const messageList = derived(messages, ($messages) => $messages?.messages ?? []);
 export const messagesLoading = derived(messages, ($messages) => $messages.isLoading);
 export const messagesError = derived(messages, ($messages) => $messages.error);
@@ -286,17 +241,11 @@ export const currentTopicId = derived(
   ($messages) => $messages.currentTopicId
 );
 
-/**
- * Get messages for a specific topic
- */
 export const getMessagesByTopic = (topicId: string) =>
   derived(messageList, ($messages) =>
     $messages.filter((m) => m.topicId === topicId)
   );
 
-/**
- * Get messages grouped by topic
- */
 export const messagesGroupedByTopic = derived(messageList, ($messages) => {
   const grouped = new Map<string, Message[]>();
 
@@ -310,9 +259,6 @@ export const messagesGroupedByTopic = derived(messageList, ($messages) => {
   return grouped;
 });
 
-/**
- * Get threaded messages for a specific topic
- */
 export const getThreadedMessages = (topicId: string) =>
   derived(getMessagesByTopic(topicId), ($messages) => {
     const parentMessages: Message[] = [];
@@ -321,17 +267,14 @@ export const getThreadedMessages = (topicId: string) =>
 
     $messages.forEach((msg) => {
       if (!msg.replyToId) {
-        // No replyToId means it's a parent message
         parentMessages.push(msg);
       } else {
-        // Check if replyToId points to an existing message
         if (validParentIds.has(msg.replyToId)) {
           if (!childrenMap.has(msg.replyToId)) {
             childrenMap.set(msg.replyToId, []);
           }
           childrenMap.get(msg.replyToId)!.push(msg);
         } else {
-          // Invalid replyToId - treat as parent message
           console.warn(`Message ${msg.id} has invalid replyToId ${msg.replyToId}, treating as parent`);
           parentMessages.push(msg);
         }
@@ -344,15 +287,9 @@ export const getThreadedMessages = (topicId: string) =>
     };
   });
 
-/**
- * Get message by ID
- */
 export const getMessageById = (messageId: string) =>
   derived(messageList, ($messages) => $messages.find((m) => m.id === messageId));
 
-/**
- * Reply target (message being replied to)
- */
 export const replyTargetId = writable<string | null>(null);
 export const replyTarget = derived(
   [replyTargetId, messageList],
@@ -360,26 +297,17 @@ export const replyTarget = derived(
     $replyTargetId ? $messages.find((m) => m.id === $replyTargetId) ?? null : null
 );
 
-/**
- * Get unread messages count
- */
 export const unreadMessagesCount = derived(messageList, ($messages) => {
-  // This would need to be calculated based on read receipts
-  // Placeholder for now
+  // 既読レシートに基づいて計算する必要がある
+  // 現在はプレースホルダー
   return $messages.length;
 });
 
-/**
- * Get recent messages
- */
 export const recentMessages = (limit: number = 10) =>
   derived(messageList, ($messages) =>
     $messages.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, limit)
   );
 
-/**
- * Helper functions to interact with messages store
- */
 export function addMessage(message: Message) {
   messages.addMessage(message);
 }

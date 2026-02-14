@@ -116,9 +116,6 @@ public class RequireAnyAttribute : Attribute, IAsyncActionFilter
 
             if (hasPermission)
             {
-                logger.LogDebug(
-                    "[RequireAny] Permission granted: UserId={UserId}, Requirement={Requirement}",
-                    permContext.UserId, requirement);
                 await next();
                 return;
             }

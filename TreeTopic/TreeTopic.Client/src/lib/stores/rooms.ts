@@ -1,11 +1,8 @@
 import { writable, derived } from 'svelte/store';
 import { isCacheValid } from '$lib/utils/store';
 
-const ROOMS_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const ROOMS_CACHE_TTL = 5 * 60 * 1000; // 5分
 
-/**
- * Room member information
- */
 export interface RoomMember {
   id: string;
   userName: string;
@@ -16,9 +13,6 @@ export interface RoomMember {
   isOwner: boolean;
 }
 
-/**
- * Room information
- */
 export interface Room {
   id: string;
   name: string;
@@ -43,9 +37,6 @@ export interface Room {
   isJoined?: boolean;
 }
 
-/**
- * Current user's RoomUser information
- */
 export interface CurrentRoomUser {
   id: string;
   displayName: string;
@@ -53,9 +44,6 @@ export interface CurrentRoomUser {
   useMainIcon: boolean;
 }
 
-/**
- * Rooms store state
- */
 export interface RoomsState {
   rooms: Room[];
   currentRoom: Room | null;
@@ -67,9 +55,6 @@ export interface RoomsState {
   cacheExpiry: number;
 }
 
-/**
- * Create rooms store
- */
 function createRoomsStore() {
   const { subscribe, set, update } = writable<RoomsState>({
     rooms: [],
@@ -84,9 +69,6 @@ function createRoomsStore() {
 
   return {
     subscribe,
-    /**
-     * Set all rooms
-     */
     setRooms: (rooms: Room[]) => {
       update((state) => ({
         ...state,
@@ -96,9 +78,6 @@ function createRoomsStore() {
         cacheExpiry: Date.now() + ROOMS_CACHE_TTL,
       }));
     },
-    /**
-     * Set current room
-     */
     setCurrentRoom: (room: Room | null) => {
       update((state) => ({
         ...state,
@@ -108,18 +87,12 @@ function createRoomsStore() {
         error: null,
       }));
     },
-    /**
-     * Set current room user
-     */
     setCurrentRoomUser: (roomUser: CurrentRoomUser | null) => {
       update((state) => ({
         ...state,
         currentRoomUser: roomUser,
       }));
     },
-    /**
-     * Add a new room
-     */
     addRoom: (room: Room) => {
       update((state) => ({
         ...state,
@@ -129,9 +102,6 @@ function createRoomsStore() {
         ],
       }));
     },
-    /**
-     * Update room
-     */
     updateRoom: (roomId: string, updates: Partial<Room>) => {
       update((state) => ({
         ...state,
@@ -144,9 +114,6 @@ function createRoomsStore() {
             : state.currentRoom,
       }));
     },
-    /**
-     * Delete room
-     */
     deleteRoom: (roomId: string) => {
       update((state) => ({
         ...state,
@@ -155,9 +122,6 @@ function createRoomsStore() {
           state.currentRoom?.id === roomId ? null : state.currentRoom,
       }));
     },
-    /**
-     * Update room members
-     */
     updateRoomMembers: (roomId: string, members: RoomMember[]) => {
       update((state) => ({
         ...state,
@@ -170,9 +134,6 @@ function createRoomsStore() {
             : state.currentRoom,
       }));
     },
-    /**
-     * Update room unread count
-     */
     updateUnreadCount: (roomId: string, count: number) => {
       update((state) => ({
         ...state,
@@ -181,9 +142,6 @@ function createRoomsStore() {
         ),
       }));
     },
-    /**
-     * Increment unread count for room
-     */
     incrementUnreadCount: (roomId: string) => {
       update((state) => ({
         ...state,
@@ -192,9 +150,6 @@ function createRoomsStore() {
         ),
       }));
     },
-    /**
-     * Clear unread count
-     */
     clearUnreadCount: (roomId: string) => {
       update((state) => ({
         ...state,
@@ -203,21 +158,12 @@ function createRoomsStore() {
         ),
       }));
     },
-    /**
-     * Set loading state
-     */
     setLoading: (isLoading: boolean) => {
       update((state) => ({ ...state, isLoading }));
     },
-    /**
-     * Set error
-     */
     setError: (error: string | null) => {
       update((state) => ({ ...state, error }));
     },
-    /**
-     * Clear all rooms
-     */
     clear: () => {
       set({
         rooms: [],
@@ -235,9 +181,6 @@ function createRoomsStore() {
 
 export const rooms = createRoomsStore();
 
-/**
- * Derived stores
- */
 export const roomList = derived(rooms, ($rooms) => $rooms?.rooms ?? []);
 export const currentRoom = derived(rooms, ($rooms) => $rooms?.currentRoom ?? null);
 export const selectedRoomId = derived(rooms, ($rooms) => $rooms?.selectedRoomId ?? null);
@@ -245,22 +188,13 @@ export const currentRoomUser = derived(rooms, ($rooms) => $rooms?.currentRoomUse
 export const roomsLoading = derived(rooms, ($rooms) => $rooms?.isLoading ?? false);
 export const roomsError = derived(rooms, ($rooms) => $rooms?.error ?? null);
 
-/**
- * Get room by ID
- */
 export const getRoomById = (roomId: string) =>
   derived(roomList, ($rooms) => ($rooms || []).find((r) => r?.id === roomId));
 
-/**
- * Get all unread rooms
- */
 export const unreadRooms = derived(roomList, ($rooms) =>
   ($rooms || []).filter((r) => r?.unreadCount > 0)
 );
 
-/**
- * Get total unread count
- */
 export const totalUnreadCount = derived(roomList, ($rooms) =>
   ($rooms || []).reduce((sum, room) => sum + (room?.unreadCount ?? 0), 0)
 );
