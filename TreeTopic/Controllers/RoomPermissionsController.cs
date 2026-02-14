@@ -7,7 +7,6 @@ using System.Security.Claims;
 using TreeTopic.Common;
 using TreeTopic.Dtos;
 using TreeTopic.Filters;
-using TreeTopic.Models;
 using TreeTopic.Permissions;
 using TreeTopic.Services;
 

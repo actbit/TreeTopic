@@ -9,7 +9,6 @@ using TreeTopic.Permissions;
 using TreeTopic.Services;
 using Microsoft.AspNetCore.Identity;
 using System.Security.Claims;
-using TreeTopic.Data;
 using Microsoft.EntityFrameworkCore;
 
 namespace TreeTopic.Controllers;
