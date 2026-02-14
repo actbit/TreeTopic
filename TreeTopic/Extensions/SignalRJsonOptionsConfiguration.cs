@@ -6,7 +6,7 @@ using Microsoft.Extensions.Options;
 namespace TreeTopic.Extensions;
 
 /// <summary>
-/// Configure SignalR JSON serialization to use MaskedGuid converter.
+/// SignalR JSONシリアライゼーションでMaskedGuidコンバータを使用するように設定
 /// </summary>
 internal class SignalRJsonOptionsConfiguration : IConfigureOptions<JsonHubProtocolOptions>
 {

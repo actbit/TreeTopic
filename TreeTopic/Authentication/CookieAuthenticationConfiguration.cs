@@ -5,8 +5,8 @@ using Microsoft.Extensions.Options;
 namespace TreeTopic.Authentication;
 
 /// <summary>
-/// Configures CookieAuthenticationOptions with TenantAwareCookieManager using constructor injection.
-/// This avoids calling BuildServiceProvider() during configuration.
+/// コンストラクタインジェクションでTenantAwareCookieManagerを使用してCookieAuthenticationOptionsを設定
+/// 設定中にBuildServiceProvider()を呼び出すのを回避
 /// </summary>
 internal class CookieAuthenticationConfiguration : IPostConfigureOptions<CookieAuthenticationOptions>
 {
@@ -33,10 +33,10 @@ internal class CookieAuthenticationConfiguration : IPostConfigureOptions<CookieA
         }
         else
         {
-            // Use a single shared cookie name across tenants.
+            // テナント間で単一の共有Cookie名を使用
             options.CookieManager = new ChunkingCookieManager();
         }
 
-        // Use standard cookie auth without server-side ticket store.
+        // サーバーサイドのチケットストアなしで標準のCookie認証を使用
     }
 }

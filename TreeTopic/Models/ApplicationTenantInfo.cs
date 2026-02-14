@@ -43,4 +43,3 @@ namespace TreeTopic.Models
         public string? ChallengeScheme => !string.IsNullOrEmpty(OpenIdConnectAuthority) ? "oidc" : null;
     }
 }
-

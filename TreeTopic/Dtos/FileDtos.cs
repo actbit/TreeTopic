@@ -13,10 +13,10 @@ public class FileDto : BaseDto
 
     public string SaveFileName { get; set; } = string.Empty;
 
-    // MIME type (e.g. image/png, application/pdf)
+    // MIMEタイプ（例: image/png, application/pdf）
     public string FileType { get; set; } = string.Empty;
 
-    // Convenience fields for UI (may be empty for some endpoints)
+    // UI用の利便性フィールド（一部エンドポイントでは空の可能性あり）
     public long Size { get; set; }
 
     public string Url { get; set; } = string.Empty;

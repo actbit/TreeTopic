@@ -80,7 +80,7 @@ public class RegexSearchPatternConverter : IRegexSearchPatternConverter
             }
         }
 
-        // Support inline flags where DB engines generally accept PCRE-style syntax.
+        // DBエンジンが一般的にPCREスタイル構文を受け入れるインラインフラグをサポート
         var inlineFlags = new StringBuilder();
         if (flagSet.Contains('m')) inlineFlags.Append('m');
         if (flagSet.Contains('s')) inlineFlags.Append('s');
@@ -94,7 +94,7 @@ public class RegexSearchPatternConverter : IRegexSearchPatternConverter
         if (flagSet.Contains('i')) effectiveCaseSensitive = false;
         if (flagSet.Contains('c')) effectiveCaseSensitive = true;
 
-        // Validate syntax early.
+        // 構文を早期検証
         _ = new Regex(
             pattern,
             effectiveCaseSensitive ? RegexOptions.None : RegexOptions.IgnoreCase,
@@ -104,12 +104,6 @@ public class RegexSearchPatternConverter : IRegexSearchPatternConverter
         var postgresOperator = effectiveCaseSensitive ? "~" : "~*";
         var mySqlMatchType = effectiveCaseSensitive ? "c" : "i";
 
-        if (provider.Contains("mysql"))
-        {
-            return new RegexSearchSpec(pattern, effectiveCaseSensitive, postgresOperator, mySqlMatchType);
-        }
-
-        // Default to PostgreSQL-compatible behavior.
         return new RegexSearchSpec(pattern, effectiveCaseSensitive, postgresOperator, mySqlMatchType);
     }
 
@@ -149,7 +143,7 @@ public class RegexSearchPatternConverter : IRegexSearchPatternConverter
                 backslashCount++;
             }
 
-            // Even number of backslashes means slash is not escaped.
+            // バックスラッシュが偶数の場合はエスケープされていない
             if (backslashCount % 2 == 0)
             {
                 return i;

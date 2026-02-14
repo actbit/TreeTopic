@@ -1,10 +1,3 @@
-/**
- * Date formatting and manipulation utilities
- */
-
-/**
- * Format date for display
- */
 export function formatDate(date: Date | string, format: string = 'short'): string {
   const d = typeof date === 'string' ? new Date(date) : date;
 
@@ -29,9 +22,6 @@ export function formatDate(date: Date | string, format: string = 'short'): strin
   }
 }
 
-/**
- * Format time as relative (e.g., "2 hours ago")
- */
 export function formatRelativeTime(date: Date | string): string {
   const d = typeof date === 'string' ? new Date(date) : date;
   const now = new Date();
@@ -53,9 +43,6 @@ export function formatRelativeTime(date: Date | string): string {
   return `${diffYears} year${diffYears > 1 ? 's' : ''} ago`;
 }
 
-/**
- * Format time only (HH:MM)
- */
 export function formatTime(date: Date | string): string {
   const d = typeof date === 'string' ? new Date(date) : date;
   const hours = String(d.getHours()).padStart(2, '0');
@@ -63,9 +50,6 @@ export function formatTime(date: Date | string): string {
   return `${hours}:${minutes}`;
 }
 
-/**
- * Check if date is today
- */
 export function isToday(date: Date | string): boolean {
   const d = typeof date === 'string' ? new Date(date) : date;
   const today = new Date();
@@ -76,9 +60,6 @@ export function isToday(date: Date | string): boolean {
   );
 }
 
-/**
- * Check if date is yesterday
- */
 export function isYesterday(date: Date | string): boolean {
   const d = typeof date === 'string' ? new Date(date) : date;
   const yesterday = new Date();
@@ -90,36 +71,24 @@ export function isYesterday(date: Date | string): boolean {
   );
 }
 
-/**
- * Get start of day
- */
 export function startOfDay(date: Date | string): Date {
   const d = typeof date === 'string' ? new Date(date) : new Date(date);
   d.setHours(0, 0, 0, 0);
   return d;
 }
 
-/**
- * Get end of day
- */
 export function endOfDay(date: Date | string): Date {
   const d = typeof date === 'string' ? new Date(date) : new Date(date);
   d.setHours(23, 59, 59, 999);
   return d;
 }
 
-/**
- * Add days to date
- */
 export function addDays(date: Date | string, days: number): Date {
   const d = typeof date === 'string' ? new Date(date) : new Date(date);
   d.setDate(d.getDate() + days);
   return d;
 }
 
-/**
- * Get difference in days
- */
 export function daysBetween(date1: Date | string, date2: Date | string): number {
   const d1 = typeof date1 === 'string' ? new Date(date1) : date1;
   const d2 = typeof date2 === 'string' ? new Date(date2) : date2;

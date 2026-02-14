@@ -349,7 +349,7 @@ public class TenantManagementService
             var bytes = ip.GetAddressBytes();
             if ((bytes[0] & 0xFE) == 0xFC)
             {
-                return true; // Unique local address (fc00::/7)
+                return true; // ユニークローカルアドレス (fc00::/7)
             }
         }
 

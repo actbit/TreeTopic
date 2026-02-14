@@ -3,7 +3,7 @@ import { api } from '$lib/api/client';
 import { getCachedAuth, setCachedAuth, clearAuthCache } from '$lib/utils/authCache';
 
 /**
- * User information interface
+ * ユーザー情報インターフェース
  */
 export interface User {
   id: string;
@@ -16,7 +16,7 @@ export interface User {
 }
 
 /**
- * Authentication context
+ * 認証コンテキスト
  */
 export interface AuthContext {
   user: User | null;
@@ -26,7 +26,7 @@ export interface AuthContext {
 }
 
 /**
- * Initialize auth store
+ * 認証ストア初期化
  */
 interface AuthCheckResponse {
   isAuthenticated?: boolean;
@@ -52,7 +52,7 @@ function createAuthStore() {
   return {
     subscribe,
     /**
-     * Check if session exists (cookie-based)
+     * セッションが存在するかチェック（Cookieベース）
      */
     async checkSession(tenant: string): Promise<boolean> {
       try {
@@ -63,12 +63,12 @@ function createAuthStore() {
       }
     },
     /**
-     * Fetch current user info
-     * Uses cache to avoid redundant API calls
+     * 現在のユーザー情報を取得
+     * キャッシュを使用してAPI呼び出しの冗長化を回避
      */
     async fetchCurrentUser(tenant: string): Promise<void> {
       try {
-        // Check cache first
+        // 最初にキャッシュをチェック
         const cached = getCachedAuth(tenant);
         if (cached) {
           set({
@@ -88,7 +88,7 @@ function createAuthStore() {
         }
 
         const userData = await api.get<AuthMeResponse>(`/${tenant}/auth/me`);
-        // Cache the user data
+        // ユーザーデータをキャッシュ
         setCachedAuth(tenant, userData as unknown as Record<string, unknown>);
 
         set({
@@ -121,7 +121,7 @@ function createAuthStore() {
       }
     },
     /**
-     * Set user information after login
+     * ログイン後にユーザー情報を設定
      */
     setUser: (user: User) => {
       update((state) => ({
@@ -154,7 +154,7 @@ function createAuthStore() {
       }
     },
     /**
-     * Clear local state only (for session expiration)
+     * ローカル状態のみクリア（セッション期限切れ用）
      */
     clear: () => {
       clearAuthCache();
@@ -165,21 +165,12 @@ function createAuthStore() {
         error: null,
       });
     },
-    /**
-     * Set loading state
-     */
     setLoading: (isLoading: boolean) => {
       update((state) => ({ ...state, isLoading }));
     },
-    /**
-     * Set error
-     */
     setError: (error: string | null) => {
       update((state) => ({ ...state, error }));
     },
-    /**
-     * Update user profile
-     */
     updateUser: (updates: Partial<User>) => {
       update((state) => ({
         ...state,
@@ -191,9 +182,6 @@ function createAuthStore() {
 
 export const auth = createAuthStore();
 
-/**
- * Derived stores
- */
 export const currentUser = derived(auth, ($auth) => $auth.user);
 export const isAuthenticated = derived(auth, ($auth) => $auth.isAuthenticated);
 export const isLoading = derived(auth, ($auth) => $auth.isLoading);

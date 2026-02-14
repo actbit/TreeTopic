@@ -69,24 +69,15 @@ public class UserManagementService : BaseService
 
             var user = userResult.Data!;
 
-            // Validate role name is not empty
-            var roleNameValidation = ValidationHelper.ValidateRequired(request.RoleName, "RoleName");
-            if (roleNameValidation.IsFailure)
-            {
-                return Result<(ApplicationUser, IList<string>)>.BadRequest(roleNameValidation.Error!.Message);
-            }
-
-            var roleName = request.RoleName.Trim();
+            var roleName = request.RoleName!.Trim();
             if (!await _roleManager.RoleExistsAsync(roleName))
             {
                 return Result<(ApplicationUser, IList<string>)>.NotFound($"Role '{roleName}' does not exist");
             }
 
-            // Check if user already has this role
             var currentRoles = await _userManager.GetRolesAsync(user);
             if (currentRoles.Contains(roleName))
             {
-                // Already has role, return success with current roles
                 return Result<(ApplicationUser, IList<string>)>.Success((user, currentRoles));
             }
 
@@ -97,7 +88,6 @@ public class UserManagementService : BaseService
                 return identityResult;
             }
 
-            // Get updated roles
             var updatedRoles = await _userManager.GetRolesAsync(user);
             return Result<(ApplicationUser, IList<string>)>.Success((user, updatedRoles));
         }, nameof(AddRoleToUserAsync));
@@ -116,24 +106,17 @@ public class UserManagementService : BaseService
 
             var user = userResult.Data!;
 
-            // Validate role name is not empty
-            var roleNameValidation = ValidationHelper.ValidateRequired(request.RoleName, "RoleName");
-            if (roleNameValidation.IsFailure)
-            {
-                return Result<(ApplicationUser, IList<string>)>.BadRequest(roleNameValidation.Error!.Message);
-            }
-
-            var roleName = request.RoleName.Trim();
+            var roleName = request.RoleName!.Trim();
             if (!await _roleManager.RoleExistsAsync(roleName))
             {
                 return Result<(ApplicationUser, IList<string>)>.NotFound($"Role '{roleName}' does not exist");
             }
 
-            // Check if user has this role
+            // ユーザーがこのロールを持っているか確認
             var currentRoles = await _userManager.GetRolesAsync(user);
             if (!currentRoles.Contains(roleName))
             {
-                // Does not have role, return success with current roles
+                // ロールを持っていない場合は成功として現在のロールを返す
                 return Result<(ApplicationUser, IList<string>)>.Success((user, currentRoles));
             }
 
@@ -144,7 +127,6 @@ public class UserManagementService : BaseService
                 return identityResult;
             }
 
-            // Get updated roles
             var updatedRoles = await _userManager.GetRolesAsync(user);
             return Result<(ApplicationUser, IList<string>)>.Success((user, updatedRoles));
         }, nameof(RemoveRoleFromUserAsync));
@@ -154,22 +136,15 @@ public class UserManagementService : BaseService
     {
         return await ExecuteAsync(async () =>
         {
-            var emailValidation = ValidationHelper.ValidateRequired(request.Email, "Email");
-            if (emailValidation.IsFailure)
-            {
-                return Result<(ApplicationUser, IList<string>)>.BadRequest(emailValidation.Error!.Message);
-            }
-
             var email = request.Email!.Trim().ToLowerInvariant();
 
-            // Check if user already exists
+            // ユーザーが既に存在するか確認
             var existingUser = await _userManager.FindByEmailAsync(email);
             if (existingUser != null)
             {
                 return Result<(ApplicationUser, IList<string>)>.Conflict($"User with email '{email}' already exists");
             }
 
-            // Create new user with email as username
             var user = new ApplicationUser
             {
                 UserName = email,
@@ -203,14 +178,6 @@ public class UserManagementService : BaseService
 
             var user = userResult.Data!;
 
-            // Validate reason is not empty
-            var reasonValidation = ValidationHelper.ValidateRequired(request.Reason, "Reason");
-            if (reasonValidation.IsFailure)
-            {
-                return Result<(ApplicationUser, IList<string>)>.BadRequest(reasonValidation.Error!.Message);
-            }
-
-            // Update user with ban info
             user.IsBanned = true;
             user.BannedAt = DateTime.UtcNow;
             user.BannedBy = bannedBy;
@@ -240,7 +207,6 @@ public class UserManagementService : BaseService
 
             var user = userResult.Data!;
 
-            // Clear ban info
             user.IsBanned = false;
             user.BannedAt = null;
             user.BannedBy = null;

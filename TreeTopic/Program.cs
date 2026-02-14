@@ -93,9 +93,6 @@ public class Program
                 options.SlidingExpiration = true;
                 options.Cookie.HttpOnly = true;
 
-                // Session CookieのSameSite設定
-                // デフォルト: Lax（CSRF保護のため）
-                // OIDC Correlation/Nonce Cookieとは別設定
                 var sessionCookieSameSiteStr = builder.Configuration["Authentication:SessionCookieSameSite"];
 
                 SameSiteMode sameSiteMode;
@@ -105,11 +102,9 @@ public class Program
                 }
                 else
                 {
-                    // デフォルト: Lax（CSRF保護に必要、クロスサイトPOSTでCookie送信を防ぐ）
                     sameSiteMode = SameSiteMode.Lax;
                 }
 
-                // SameSite=Noneを使用する場合はSecureが必須
                 CookieSecurePolicy securePolicy;
                 if (sameSiteMode == SameSiteMode.None)
                 {
@@ -125,14 +120,11 @@ public class Program
                 options.Cookie.SameSite = sameSiteMode;
                 options.Cookie.SecurePolicy = securePolicy;
 
-                // Set cookie path per tenant to allow multiple tenant logins
                 options.Events = new CookieAuthenticationEvents
                 {
                     OnRedirectToLogin = ctx =>
                     {
                         var isApi = ctx.Request.IsApiRequest();
-                        var logger = ctx.HttpContext.RequestServices.GetRequiredService<ILogger<Program>>();
-                        logger.LogDebug("[OnRedirectToLogin] Path: {Path}, IsApi: {IsApi}", ctx.Request.Path, isApi);
 
                         if (isApi)
                         {
@@ -162,7 +154,6 @@ public class Program
                             ? AuthenticationConstants.Paths.LoginPath
                             : $"/{tenantId}{AuthenticationConstants.Paths.LoginPath}";
 
-                        // returnUrlを保持 - 現在のパスをreturnUrlとして設定
                         var currentPath = ctx.Request.Path.Value ?? string.Empty;
                         var currentQuery = ctx.Request.QueryString.Value ?? string.Empty;
                         var fullReturnUrl = currentPath + currentQuery;
@@ -187,9 +178,6 @@ public class Program
                     },
                     OnValidatePrincipal = context =>
                     {
-                        var logger = context.HttpContext.RequestServices.GetRequiredService<ILogger<Program>>();
-                        logger.LogDebug("[Cookies] Principal validated for path {Path}", context.HttpContext.Request.Path);
-
                         if (!context.Properties.Items.ContainsKey(AuthenticationConstants.TenantClaimType))
                         {
                             var tenantId = context.HttpContext.GetRouteValue("tenant")?.ToString();
@@ -220,7 +208,6 @@ public class Program
                                 context.Properties.Items[AuthenticationConstants.TenantClaimType] = tenantId;
                                 context.HttpContext.Items[AuthenticationConstants.Cookie.TenantForCookieKey] = tenantId;
                                 context.ShouldRenew = true;
-                                logger.LogDebug("[Cookies] Tenant injected into auth properties: {Tenant}", tenantId);
                             }
                         }
 
@@ -317,7 +304,7 @@ public class Program
         var altchaService = Altcha.CreateServiceBuilder()
             .UseSha256(altchaKey)
             .UseInMemoryStore()
-            .SetComplexity(20000, 30000)  // デフォルト50000-100000から厳しく（約2.5-3.3倍の難易度）
+            .SetComplexity(20000, 30000)
             .SetExpiryInSeconds(180)
             .Build();
         builder.Services.AddSingleton(altchaService);
@@ -338,7 +325,7 @@ public class Program
                     if (!Uri.TryCreate(tenantDetail.OpenIdConnectAuthority, UriKind.Absolute, out var authorityUri) ||
                         (authorityUri.Scheme != Uri.UriSchemeHttps && !builder.Environment.IsDevelopment()))
                     {
-                        return; // Skip this tenant configuration
+                        return; // このテナント設定をスキップ
                     }
 
                     options.Authority = tenantDetail.OpenIdConnectAuthority;
@@ -347,29 +334,20 @@ public class Program
                     if (string.IsNullOrEmpty(tenantDetail.OpenIdConnectAuthorizationEndpoint) ||
                         string.IsNullOrEmpty(tenantDetail.OpenIdConnectTokenEndpoint))
                     {
-                        // Use default endpoints from authority
+                        // authorityからデフォルトエンドポイントを使用
                     }
                     else
                     {
                         if (!Uri.TryCreate(tenantDetail.OpenIdConnectAuthorizationEndpoint, UriKind.Absolute, out var authEndpoint) ||
                             (authEndpoint.Scheme != Uri.UriSchemeHttps && !builder.Environment.IsDevelopment()))
                         {
-                            // Use default from authority
+                            // authorityのデフォルトを使用
                         }
 
                         if (!Uri.TryCreate(tenantDetail.OpenIdConnectTokenEndpoint, UriKind.Absolute, out var tokenEndpoint) ||
                             (tokenEndpoint.Scheme != Uri.UriSchemeHttps && !builder.Environment.IsDevelopment()))
                         {
-                            // Use default from authority
-                        }
-                    }
-
-                    if (!string.IsNullOrEmpty(tenantDetail.OpenIdConnectJwksUri))
-                    {
-                        if (!Uri.TryCreate(tenantDetail.OpenIdConnectJwksUri, UriKind.Absolute, out var jwksUri) ||
-                            (jwksUri.Scheme != Uri.UriSchemeHttps && !builder.Environment.IsDevelopment()))
-                        {
-                            // Skip JWKS configuration but continue with other settings
+                            // authorityのデフォルトを使用
                         }
                     }
 
@@ -402,9 +380,6 @@ public class Program
                                 new OpenIdConnectConfigurationRetriever(),
                                 httpDocumentRetriever);
                         }
-                        else
-                        {
-                        }
                     }
 
                     if (!string.IsNullOrEmpty(tenantDetail.TenantEncryptionKey) &&
@@ -424,9 +399,6 @@ public class Program
                         catch (Exception)
                         {
                         }
-                    }
-                    else if (!string.IsNullOrEmpty(tenantDetail.TenantEncryptionKey) || !string.IsNullOrEmpty(tenantDetail.OpenIdConnectClientSecret))
-                    {
                     }
                 }
                 else
@@ -480,7 +452,6 @@ public class Program
 
         builder.Services.AddScoped<SetupTokenValidationService>();
 
-        // Register background service for tenant cleanup
         builder.Services.AddHostedService<TenantCleanupBackgroundService>();
 
         builder.Services.AddSingleton<TenantIdObfuscationService>();
@@ -679,7 +650,7 @@ public class Program
                 shouldUseForwardedHeaders = true;
                 app.Logger.LogInformation("ForwardedHeaders is enabled by configuration");
             }
-            else // Auto mode (default)
+            else // 自動モード（デフォルト）
             {
                 // 環境変数やヘッダーの有無でリバースプロキシの有無を判定
                 // Docker環境では通常Nginx等のリバースプロキシが前に配置される
@@ -791,7 +762,6 @@ public class Program
             await context.Response.SendFileAsync(Path.Combine(app.Environment.WebRootPath, "index.html"));
         });
 
-        // Tenant cleanup background task is now started as HostedService
         app.Run();
     }
 }

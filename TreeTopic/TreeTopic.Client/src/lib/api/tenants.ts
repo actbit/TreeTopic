@@ -1,8 +1,5 @@
 import { api } from '$lib/api/client';
 
-/**
- * Raw tenant info from API (supports both camelCase and PascalCase)
- */
 export interface RawTenantInfo {
   identifier?: string;
   Identifier?: string;
@@ -11,9 +8,6 @@ export interface RawTenantInfo {
   [key: string]: unknown;
 }
 
-/**
- * Public tenant information
- */
 export interface PublicTenantInfo {
   identifier: string;
   name: string;
@@ -27,10 +21,6 @@ export function normalizeTenantInfo(raw: RawTenantInfo): PublicTenantInfo {
   return { identifier, name };
 }
 
-/**
- * Get all public tenants
- * Used for tenant selection on home page
- */
 export async function getAllPublicTenants(): Promise<PublicTenantInfo[]> {
   if (publicTenantsInFlight) {
     return publicTenantsInFlight;
@@ -53,10 +43,6 @@ export async function getAllPublicTenants(): Promise<PublicTenantInfo[]> {
   return publicTenantsInFlight;
 }
 
-/**
- * Get public tenant info by identifier
- * Used to validate tenant exists before showing login page
- */
 export async function getPublicTenantInfo(identifier: string): Promise<PublicTenantInfo | null> {
   try {
     const response = await api.get<RawTenantInfo>(`/api/tenants/public/${identifier}`);

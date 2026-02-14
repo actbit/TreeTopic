@@ -3,6 +3,8 @@
   import { api } from '$lib/api/client';
   import { ui, activeModals } from '$lib/stores/ui';
   import { page } from '$app/stores';
+  import { getDisplayName } from '$lib/utils/user';
+  import { formatPermissionName } from '$lib/utils/permission';
 
   interface RoomUser {
     id: string;
@@ -103,19 +105,8 @@
     }
   }
 
-  function getDisplayName(user: RoomUser): string {
-    return user.displayName || user.userName || 'Unknown';
-  }
-
   function hasPermission(userId: string, permissionName: string): boolean {
     return (userPermissions[userId] || []).includes(permissionName);
-  }
-
-  function formatPermissionName(name: string): string {
-    return name.split('.')
-      .map((part) => { if (part === 'room') return ''; return part.charAt(0).toUpperCase() + part.slice(1); })
-      .filter((p) => p !== '')
-      .join(' ').trim();
   }
 
   let selectedUser = $derived.by(() => roomUsers.find((u) => u.id === selectedUserId) ?? null);

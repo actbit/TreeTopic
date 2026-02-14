@@ -2,6 +2,7 @@
   import { api } from '$lib/api/client';
   import { roomRolePermissionsApi } from '$lib/api/permissions';
   import type { AvailablePermissions, Role } from '$lib/types/permissions';
+  import { formatPermissionName } from '$lib/utils/permission';
 
   interface Props {
     tenant: string;
@@ -109,13 +110,6 @@
     return (rolePermissions[roleName] || []).includes(permissionName);
   }
 
-  function formatPermissionName(name: string): string {
-    return name.split('.')
-      .map((part) => { if (part === 'room' || part === 'topic') return ''; return part.charAt(0).toUpperCase() + part.slice(1); })
-      .filter((p) => p !== '')
-      .join(' ').trim();
-  }
-
   let selectedRole = $derived.by(() => roles.find((r) => r.name === selectedRoleName) ?? null);
 </script>
 
@@ -152,7 +146,6 @@
       </div>
     {:else if activeTab === 'roles'}
       <div class="rpp-layout">
-        <!-- Left Panel: Role List -->
         <div class="rpp-panel rpp-panel--left">
           <div class="rpp-panel-header">
             <span class="rpp-panel-title">Roles</span>
@@ -203,7 +196,6 @@
           </div>
         </div>
 
-        <!-- Right Panel: Permission Details -->
         <div class="rpp-panel rpp-panel--right">
           {#if selectedRole}
             {@const perms = rolePermissions[selectedRole.name] || []}
@@ -247,7 +239,6 @@
         </div>
       </div>
     {:else}
-      <!-- User Roles Tab -->
       <div class="rpp-placeholder">
         <p>User role assignment coming soon</p>
       </div>

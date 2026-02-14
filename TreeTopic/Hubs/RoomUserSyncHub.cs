@@ -79,8 +79,6 @@ public class RoomUserSyncHub : Hub<IRoomUserSyncHubClient>
             _logger.LogInformation("[RoomUserSyncHub] Client disconnected: {ConnectionId}, Exception: {Exception}",
                 Context.ConnectionId, exception?.Message ?? "None");
 
-            // Note: Groups are automatically cleaned up by SignalR when a connection closes
-            // No manual cleanup needed unless using custom group management
         }
         catch (Exception ex)
         {

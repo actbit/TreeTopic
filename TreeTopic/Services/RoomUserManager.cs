@@ -18,7 +18,6 @@ public class RoomUserManager
 
     /// <summary>
     /// 新規メンバーに付与するデフォルト権限
-    /// システムが正常に動作するために必要な最小限の権限
     /// </summary>
     private static readonly string[] DefaultMemberPermissions =
     {

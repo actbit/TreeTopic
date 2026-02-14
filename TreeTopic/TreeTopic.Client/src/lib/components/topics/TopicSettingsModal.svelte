@@ -7,6 +7,7 @@
   import type { AvailablePermissions } from '$lib/types/permissions';
   import { selectedTopic } from '$lib/stores/topics';
   import { currentRoom } from '$lib/stores/rooms';
+  import { formatPermissionName } from '$lib/utils/permission';
 
   const modalId = 'topic-settings';
   let modal = $derived.by(() => $activeModals.find((m) => m.id === modalId) ?? null);
@@ -48,18 +49,6 @@
     } finally {
       isLoading = false;
     }
-  }
-
-  function formatPermissionName(name: string): string {
-    return name
-      .split('.')
-      .map((part) => {
-        if (part === 'topic') return '';
-        return part.charAt(0).toUpperCase() + part.slice(1);
-      })
-      .filter(p => p !== '')
-      .join(' ')
-      .trim();
   }
 
   function openUserPermissionModal() {

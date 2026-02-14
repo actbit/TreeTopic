@@ -3,23 +3,14 @@ import type { TopicTreeNode } from '$lib/types/ui';
 import { isCacheValid, getCacheAge } from '$lib/utils/store';
 import { api, getCurrentTenant } from '$lib/api/client';
 
-/**
- * Topic permission levels
- */
 export type PermissionLevel = 'none' | 'read' | 'write' | 'admin';
 
-/**
- * Topic permission information
- */
 export interface TopicPermission {
   userId: string;
   userName: string;
   level: PermissionLevel;
 }
 
-/**
- * Topic information
- */
 export interface Topic {
   id: string;
   roomId: string;
@@ -39,9 +30,6 @@ export interface Topic {
   hasChildren: boolean;
 }
 
-/**
- * Topics store state
- */
 export interface TopicsState {
   topics: Topic[];
   selectedTopicId: string | null;
@@ -53,11 +41,8 @@ export interface TopicsState {
   cacheExpiry: number;
 }
 
-const TOPICS_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const TOPICS_CACHE_TTL = 5 * 60 * 1000; // 5分
 
-/**
- * Create topics store
- */
 function createTopicsStore() {
   // localStorageからexpandedTopicsを復元
   let savedExpandedTopics: string[] = [];
@@ -83,9 +68,6 @@ function createTopicsStore() {
 
   return {
     subscribe,
-    /**
-     * Set all topics
-     */
     setTopics: (topics: Topic[]) => {
       update((state) => ({
         ...state,
@@ -95,9 +77,6 @@ function createTopicsStore() {
         cacheExpiry: Date.now() + TOPICS_CACHE_TTL,
       }));
     },
-    /**
-     * Set selected topic
-     */
     setSelectedTopic: (topic: Topic | null) => {
       update((state) => ({
         ...state,
@@ -109,9 +88,6 @@ function createTopicsStore() {
         localStorage.setItem('selected_topic', topic.id);
       }
     },
-    /**
-     * Add a new topic
-     */
     addTopic: (topic: Topic) => {
       update((state) => {
         const updatedTopics = [...state.topics, topic];
@@ -138,9 +114,6 @@ function createTopicsStore() {
         };
       });
     },
-    /**
-     * Update topic
-     */
     updateTopic: (topicId: string, updates: Partial<Topic>) => {
       update((state) => {
         if (!state) return state;
@@ -223,9 +196,6 @@ function createTopicsStore() {
         };
       });
     },
-    /**
-     * Move topic to a new parent (or root if null)
-     */
     moveTopicParent: (topicId: string, newParentId: string | null) => {
       update((state) => {
         const moving = state.topics.find((t) => t.id === topicId);
@@ -286,9 +256,6 @@ function createTopicsStore() {
         };
       });
     },
-    /**
-     * Delete topic
-     */
     deleteTopic: (topicId: string) => {
       update((state) => {
         const childIdsByParent = new Map<string, string[]>();
@@ -327,9 +294,6 @@ function createTopicsStore() {
         };
       });
     },
-    /**
-     * Toggle topic expansion
-     */
     toggleTopicExpansion: (topicId: string) => {
       update((state) => {
         const expanded = new Set(state.expandedTopics);
@@ -343,27 +307,18 @@ function createTopicsStore() {
         return { ...state, expandedTopics: expanded };
       });
     },
-    /**
-     * Expand all topics
-     */
     expandAll: () => {
       update((state) => ({
         ...state,
         expandedTopics: new Set(state.topics.map((t) => t.id)),
       }));
     },
-    /**
-     * Collapse all topics
-     */
     collapseAll: () => {
       update((state) => ({
         ...state,
         expandedTopics: new Set(),
       }));
     },
-    /**
-     * Update topic permissions
-     */
     updateTopicPermissions: (topicId: string, permissions: string[]) => {
       update((state) => ({
         ...state,
@@ -376,9 +331,6 @@ function createTopicsStore() {
             : state.selectedTopic,
       }));
     },
-    /**
-     * Update topic unread count
-     */
     updateUnreadCount: (topicId: string, count: number) => {
       update((state) => ({
         ...state,
@@ -387,21 +339,12 @@ function createTopicsStore() {
         ),
       }));
     },
-    /**
-     * Set loading state
-     */
     setLoading: (isLoading: boolean) => {
       update((state) => ({ ...state, isLoading }));
     },
-    /**
-     * Set error
-     */
     setError: (error: string | null) => {
       update((state) => ({ ...state, error }));
     },
-    /**
-     * Refresh hasChildren for a topic from server
-     */
     refreshHasChildren: async (topicId: string) => {
       try {
         const tenant = getCurrentTenant();
@@ -419,9 +362,6 @@ function createTopicsStore() {
         console.error('Failed to refresh hasChildren:', error);
       }
     },
-    /**
-     * Clear all topics
-     */
     clear: () => {
       set({
         topics: [],
@@ -440,9 +380,6 @@ function createTopicsStore() {
 
 export const topics = createTopicsStore();
 
-/**
- * Derived stores
- */
 export const topicList = derived(topics, ($topics) => $topics?.topics ?? []);
 export const childTopicsBySourceMessage = derived(topicList, ($topics) => {
   const map = new Map<string, Topic[]>();
@@ -460,15 +397,9 @@ export const topicsLoading = derived(topics, ($topics) => $topics?.isLoading ?? 
 export const topicsError = derived(topics, ($topics) => $topics?.error ?? null);
 export const expandedTopics = derived(topics, ($topics) => $topics?.expandedTopics ?? new Set());
 
-/**
- * Get topic by ID
- */
 export const getTopicById = (topicId: string) =>
   derived(topicList, ($topics) => ($topics || []).find((t) => t?.id === topicId));
 
-/**
- * Build topic tree structure
- */
 export const topicTree = derived([topicList, expandedTopics], ([$topics, $expandedTopics]) => {
   const buildTree = (): TopicTreeNode[] => {
     if (!$topics || $topics.length === 0) return [];
@@ -536,47 +467,29 @@ export const topicTree = derived([topicList, expandedTopics], ([$topics, $expand
   return buildTree();
 });
 
-/**
- * Get unread topics
- */
 export const unreadTopics = derived(topicList, ($topics) =>
   $topics.filter((t) => t.unreadCount > 0)
 );
 
-/**
- * Get total unread count
- */
 export const totalTopicUnreadCount = derived(topicList, ($topics) =>
   $topics.reduce((sum, topic) => sum + topic.unreadCount, 0)
 );
 
-/**
- * Get topic with write permission
- */
 export const writableTopics = derived(topicList, ($topics) =>
   $topics.filter((t) => t.userPermission === 'write' || t.userPermission === 'admin')
 );
 
-/**
- * Get child topics of a specific topic
- */
 export const getChildTopics = (parentId: string) =>
   derived(topicList, ($topics) =>
     $topics.filter((t) => t.parentId === parentId)
   );
 
-/**
- * Get parent topic
- */
 export const getParentTopic = (topicId: string) =>
   derived(topicList, ($topics) => {
     const topic = $topics.find((t) => t.id === topicId);
     return topic ? $topics.find((t) => t.id === topic.parentId) : null;
   });
 
-/**
- * Helper functions to interact with topics store
- */
 export function addTopic(topic: Topic) {
   topics.addTopic(topic);
 }
@@ -605,7 +518,4 @@ export function setTopics(topicsList: Topic[]) {
   topics.setTopics(topicsList);
 }
 
-/**
- * Store for managing parent topic selection in topic creation modal
- */
 export const createTopicParentId = writable<string | null>(null);

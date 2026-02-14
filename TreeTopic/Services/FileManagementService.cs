@@ -1,9 +1,8 @@
-using TreeTopic.Dtos;
-using TreeTopic.Models;
-using TreeTopic.Repositories;
-using TreeTopic.Common;
-using FileModel = TreeTopic.Models.File;
 using Microsoft.EntityFrameworkCore;
+using TreeTopic.Common;
+using TreeTopic.Dtos;
+using TreeTopic.Repositories;
+using FileModel = TreeTopic.Models.File;
 
 namespace TreeTopic.Services;
 

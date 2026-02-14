@@ -23,7 +23,3 @@ namespace TreeTopic.Models
         public List<RoomJoinRolePermission> JoinRolePermissions { get; set; } = new();
     }
 }
-
-
-
-

@@ -1,7 +1,5 @@
 ﻿using Finbuckle.MultiTenant.Abstractions;
-using Finbuckle.MultiTenant;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging;
 using TreeTopic.Data;
 using TreeTopic.Models;
 
@@ -182,7 +180,3 @@ public class MigrationService
         _logger.LogInformation("✅ {TenantCount} 件のテナントマイグレーション完了", tenants.Count);
     }
 }
-
-
-
-

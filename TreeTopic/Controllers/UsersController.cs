@@ -9,14 +9,13 @@ using TreeTopic.Permissions;
 using TreeTopic.Services;
 using Microsoft.AspNetCore.Identity;
 using System.Security.Claims;
-using TreeTopic.Data;
 using Microsoft.EntityFrameworkCore;
 
 namespace TreeTopic.Controllers;
 
 [ApiController]
 [Route("{tenant}/api/[controller]")]
-public class UsersController : ControllerBase
+public class UsersController : BaseController
 {
     private readonly UserManagementService _userManagementService;
     private readonly IconService _iconService;
@@ -274,7 +273,7 @@ public class UsersController : ControllerBase
     }
 
     /// <summary>
-    /// Create a new user (only allowed when OIDC is not configured)
+    /// 新規ユーザー作成（OIDC未設定時のみ許可）
     /// </summary>
     [HttpPost]
     [Authorize]
@@ -312,7 +311,7 @@ public class UsersController : ControllerBase
     }
 
     /// <summary>
-    /// Ban a user
+    /// ユーザーをBANする
     /// </summary>
     [HttpPost("{userId}/ban")]
     [Authorize]
@@ -345,7 +344,7 @@ public class UsersController : ControllerBase
     }
 
     /// <summary>
-    /// Unban a user
+    /// ユーザーのBANを解除する
     /// </summary>
     [HttpDelete("{userId}/ban")]
     [Authorize]

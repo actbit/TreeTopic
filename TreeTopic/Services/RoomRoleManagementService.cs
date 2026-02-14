@@ -1,5 +1,4 @@
 using TreeTopic.Common;
-using TreeTopic.Common.Helpers;
 using TreeTopic.Dtos;
 using TreeTopic.Models;
 using TreeTopic.Repositories;
@@ -54,16 +53,9 @@ public class RoomRoleManagementService : BaseService
     {
         return await ExecuteAsync(async () =>
         {
-            // Validate name
-            var nameValidation = ValidationHelper.ValidateRequired(request.Name, "Name");
-            if (nameValidation.IsFailure)
-            {
-                return Result<RoomRole>.BadRequest(nameValidation.Error!.Message);
-            }
+            var cleanName = request.Name!.Trim();
 
-            var cleanName = request.Name.Trim();
-
-            // Check if role already exists
+            // ロールが既に存在するか確認
             if (await _roleRepository.ExistsAsync(cleanName, cancellationToken))
             {
                 return Result<RoomRole>.Conflict($"Role '{cleanName}' already exists");
@@ -97,13 +89,6 @@ public class RoomRoleManagementService : BaseService
                 return Result<RoomRole>.BadRequest("Role ID cannot be empty");
             }
 
-            // Validate name
-            var nameValidation = ValidationHelper.ValidateRequired(request.Name, "Name");
-            if (nameValidation.IsFailure)
-            {
-                return Result<RoomRole>.BadRequest(nameValidation.Error!.Message);
-            }
-
             var role = await _roleRepository.FindByIdAsync(id, cancellationToken);
             if (role == null)
             {
@@ -112,7 +97,7 @@ public class RoomRoleManagementService : BaseService
 
             var cleanName = request.Name.Trim();
 
-            // Check if another role with the same name exists
+            // 同名の別ロールが存在するか確認
             var existingRole = await _roleRepository.FindByNameAsync(cleanName, cancellationToken);
             if (existingRole != null && existingRole.Id != id)
             {
@@ -123,7 +108,6 @@ public class RoomRoleManagementService : BaseService
             role.Description = request.Description?.Trim();
             role.SortOrder = request.SortOrder;
 
-            // Update permissions
             role.Permissions.Clear();
             foreach (var permName in request.Permissions)
             {

@@ -4,6 +4,8 @@
   import { ui, activeModals } from '$lib/stores/ui';
   import { page } from '$app/stores';
   import type { PermissionDefinition } from '$lib/types/permissions';
+  import { getDisplayName } from '$lib/utils/user';
+  import { formatPermissionName } from '$lib/utils/permission';
 
   const modalId = 'topic-user-permission';
   let modal = $derived.by(() => $activeModals.find((m) => m.id === modalId) ?? null);
@@ -85,19 +87,8 @@
     }
   }
 
-  function getDisplayName(user: { displayName?: string; userName?: string }): string {
-    return user.displayName || user.userName || 'Unknown';
-  }
-
   function hasPermission(userId: string, permissionName: string): boolean {
     return (userPermissions[userId] || []).includes(permissionName);
-  }
-
-  function formatPermissionName(name: string): string {
-    return name.split('.')
-      .map((part) => { if (part === 'topic') return ''; return part.charAt(0).toUpperCase() + part.slice(1); })
-      .filter((p) => p !== '')
-      .join(' ').trim();
   }
 
   let selectedUser = $derived.by(() => roomUsers.find((u) => u.id === selectedUserId) ?? null);

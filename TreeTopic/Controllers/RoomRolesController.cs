@@ -1,6 +1,5 @@
 using MaskedUUID.AspNetCore.Types;
 using Microsoft.AspNetCore.Identity;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
@@ -8,7 +7,6 @@ using TreeTopic.Common;
 using TreeTopic.Dtos;
 using TreeTopic.Filters;
 using TreeTopic.Permissions;
-using TreeTopic.Models;
 using TreeTopic.Services;
 
 namespace TreeTopic.Controllers;

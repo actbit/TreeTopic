@@ -1,11 +1,4 @@
-/**
- * SignalR event payloads from server
- */
 
-/**
- * Raw API response types (from backend DTOs)
- * Used in normalizer functions
- */
 export interface RawRoom {
   id?: string;
   Id?: string;

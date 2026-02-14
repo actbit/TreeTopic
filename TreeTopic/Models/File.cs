@@ -23,7 +23,3 @@ namespace TreeTopic.Models
         public List<File> VersionedFiles { get; set; } = new List<File>();
     }
 }
-
-
-
-

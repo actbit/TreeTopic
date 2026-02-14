@@ -18,7 +18,7 @@ export const handle: Handle = async ({ event, resolve }) => {
   const acceptHeader = event.request.headers.get('accept');
   if (acceptHeader?.includes('text/html')) {
     // 現在のシステムではCookieベースの認証を使用。
-    // 固定名(TreeTopic.Cookie)、旧名(AuthSession)、テナント別Cookie名(TreeTopic.Cookie_<tenant>.Tenant)に対応する。
+    // 固定名(TreeTopic.Cookie)、テナント別Cookie名(TreeTopic.Cookie_<tenant>.Tenant)に対応する。
     const hasTenantScopedCookie = event.cookies
       .getAll()
       .some((cookie) =>

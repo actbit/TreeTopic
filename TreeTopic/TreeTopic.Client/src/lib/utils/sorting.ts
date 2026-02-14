@@ -1,12 +1,5 @@
-/**
- * Sorting and filtering utilities
- */
-
 export type SortDirection = 'asc' | 'desc';
 
-/**
- * Generic sort function
- */
 export function sort<T>(
   items: T[],
   field: keyof T,
@@ -36,9 +29,6 @@ export function sort<T>(
   });
 }
 
-/**
- * Sort by multiple fields
- */
 export function sortByFields<T>(
   items: T[],
   fields: Array<{ field: keyof T; direction?: SortDirection }>
@@ -70,16 +60,10 @@ export function sortByFields<T>(
   });
 }
 
-/**
- * Filter array by predicate
- */
 export function filter<T>(items: T[], predicate: (item: T) => boolean): T[] {
   return items.filter(predicate);
 }
 
-/**
- * Filter array by field value
- */
 export function filterByField<T>(
   items: T[],
   field: keyof T,
@@ -88,9 +72,6 @@ export function filterByField<T>(
   return items.filter((item) => item[field] === value);
 }
 
-/**
- * Filter array by multiple conditions
- */
 export function filterByMultiple<T>(
   items: T[],
   conditions: Array<{ field: keyof T; value: unknown }>
@@ -100,9 +81,6 @@ export function filterByMultiple<T>(
   );
 }
 
-/**
- * Search in array by text
- */
 export function search<T>(
   items: T[],
   searchTerm: string,
@@ -118,9 +96,6 @@ export function search<T>(
   );
 }
 
-/**
- * Group array by field
- */
 export function groupBy<T>(
   items: T[],
   field: keyof T
@@ -138,9 +113,6 @@ export function groupBy<T>(
   return groups;
 }
 
-/**
- * Unique values from array
- */
 export function unique<T>(
   items: T[],
   field?: keyof T
@@ -158,9 +130,6 @@ export function unique<T>(
   });
 }
 
-/**
- * Paginate array
- */
 export function paginate<T>(
   items: T[],
   page: number,
@@ -170,9 +139,6 @@ export function paginate<T>(
   return items.slice(start, start + pageSize);
 }
 
-/**
- * Get pagination info
- */
 export function getPaginationInfo(
   totalItems: number,
   pageSize: number,
@@ -194,16 +160,10 @@ export function getPaginationInfo(
   };
 }
 
-/**
- * Reverse array
- */
 export function reverse<T>(items: T[]): T[] {
   return [...items].reverse();
 }
 
-/**
- * Shuffle array
- */
 export function shuffle<T>(items: T[]): T[] {
   const shuffled = [...items];
   for (let i = shuffled.length - 1; i > 0; i--) {
@@ -213,16 +173,10 @@ export function shuffle<T>(items: T[]): T[] {
   return shuffled;
 }
 
-/**
- * Check if array contains value
- */
 export function contains<T>(items: T[], value: T): boolean {
   return items.includes(value);
 }
 
-/**
- * Find first item matching predicate
- */
 export function findFirst<T>(
   items: T[],
   predicate: (item: T) => boolean
@@ -230,9 +184,6 @@ export function findFirst<T>(
   return items.find(predicate);
 }
 
-/**
- * Find last item matching predicate
- */
 export function findLast<T>(
   items: T[],
   predicate: (item: T) => boolean
@@ -240,9 +191,6 @@ export function findLast<T>(
   return [...items].reverse().find(predicate);
 }
 
-/**
- * Flatten nested array
- */
 export function flatten<T>(items: unknown[]): T[] {
   return items.reduce((flat: T[], item) => {
     return flat.concat(Array.isArray(item) ? flatten<T>(item) : [item as T]);

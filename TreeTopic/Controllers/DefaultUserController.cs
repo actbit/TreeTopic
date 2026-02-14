@@ -5,10 +5,8 @@ using Microsoft.EntityFrameworkCore;
 using MaskedUUID.AspNetCore.Types;
 using TreeTopic.Dtos;
 using TreeTopic.Models;
-using Finbuckle.MultiTenant;
 using Finbuckle.MultiTenant.Abstractions;
 using TreeTopic.Services;
-using TreeTopic.Data;
 using TreeTopic.Helpers;
 
 namespace TreeTopic.Controllers;
@@ -100,9 +98,4 @@ public class DefaultUserController : ControllerBase
         var maskedId = new MaskedGuid(user.Id);
         return CreatedAtAction(nameof(CreateUser), new { tenant, user.Id, user.Email }, new { user = new { id = maskedId, email = user.Email } });
     }
-
 }
-
-
-
-

@@ -2,7 +2,6 @@
 using Finbuckle.MultiTenant.Abstractions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
-using Pomelo.EntityFrameworkCore.MySql.Infrastructure;
 using TreeTopic.Models;
 
 namespace TreeTopic.Data;
@@ -69,7 +68,3 @@ internal class DesignTimeMultiTenantContextAccessor : IMultiTenantContextAccesso
         MultiTenantContext = context;
     }
 }
-
-
-
-

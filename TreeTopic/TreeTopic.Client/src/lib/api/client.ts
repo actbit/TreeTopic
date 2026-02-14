@@ -1,16 +1,3 @@
-/**
- * API Client Wrapper
- *
- * This wrapper provides:
- * - Authentication management
- * - Request/response interceptors
- * - Error handling
- * - Tenant context management
- * - Response caching with TTL
- *
- * Note: This integrates with OpenAPI auto-generated client from 'src/lib/api/generated'
- */
-
 import { auth } from '$lib/stores/auth';
 import type { User, AuthContext } from '$lib/stores/auth';
 import { get as getStore } from 'svelte/store';
@@ -18,9 +5,6 @@ import { goto } from '$app/navigation';
 import * as cacheManager from './cache';
 import { activeModals, ui } from '$lib/stores/ui';
 
-/**
- * API Error
- */
 export class ApiError extends Error {
   constructor(
     public status: number,
@@ -33,26 +17,16 @@ export class ApiError extends Error {
   }
 }
 
-/**
- * API Client configuration
- */
 export interface ApiClientConfig {
   baseUrl: string;
   tenant: string;
   headers?: Record<string, string>;
 }
 
-/**
- * Initialize API client
- */
 export function initializeApiClient(config: ApiClientConfig): void {
-  // Store for later use in interceptors
   apiClientConfig = config;
 }
 
-/**
- * Global API client configuration
- */
 const DEFAULT_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string) ?? '';
 
 let apiClientConfig: ApiClientConfig = {
@@ -60,10 +34,6 @@ let apiClientConfig: ApiClientConfig = {
   tenant: '',
 };
 
-/**
- * Build headers for API request
- * Note: Cookie-based authentication is used (credentials: 'include')
- */
 function buildHeaders(customHeaders?: Record<string, string>): Record<string, string> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -127,9 +97,6 @@ function showForbiddenModal(data?: unknown): void {
   });
 }
 
-/**
- * Handle API response
- */
 async function handleResponse<T>(response: Response): Promise<T> {
   const contentType = response.headers.get('content-type');
   let data: unknown;
@@ -202,10 +169,6 @@ async function handleResponse<T>(response: Response): Promise<T> {
   return data as T;
 }
 
-/**
- * Make GET request
- * Supports caching for improved performance
- */
 export async function get<T>(
   path: string,
   options?: {
@@ -238,7 +201,7 @@ export async function get<T>(
     }
     url = urlObj.toString();
   } else {
-    // Relative path
+    // 相対パス
     url = path;
     if (options?.params) {
       const params = new URLSearchParams();
@@ -260,10 +223,9 @@ export async function get<T>(
     credentials: 'include',
   });
 
-  // handleResponse will handle 401/403 and redirect if needed
   const result = await handleResponse<T>(response);
 
-  // Only cache successful responses
+  // 成功時のみキャッシュ
   if (response.ok && result !== null && options?.cache !== false) {
     cacheManager.set(cacheKey, result);
   }
@@ -271,10 +233,6 @@ export async function get<T>(
   return result;
 }
 
-/**
- * Make POST request
- * Invalidates related cache entries on success
- */
 export async function post<T>(
   path: string,
   data?: FormData | object,
@@ -285,7 +243,7 @@ export async function post<T>(
   const body = data instanceof FormData ? data : JSON.stringify(data);
 
   const headers = buildHeaders(options?.headers);
-  // FormData should not include Content-Type header (browser will set it)
+  // FormDataの場合はContent-Typeヘッダーを削除（ブラウザが自動設定）
   if (data instanceof FormData) {
     delete headers['Content-Type'];
   }
@@ -301,7 +259,6 @@ export async function post<T>(
 
   const result = await handleResponse<T>(response);
 
-  // Invalidate related cache on success
   if (response.ok) {
     cacheManager.invalidateByResource('POST', path);
   }
@@ -309,10 +266,6 @@ export async function post<T>(
   return result;
 }
 
-/**
- * Make PUT request
- * Invalidates related cache entries on success
- */
 export async function put<T>(
   path: string,
   data?: object,
@@ -332,7 +285,6 @@ export async function put<T>(
 
   const result = await handleResponse<T>(response);
 
-  // Invalidate related cache on success
   if (response.ok) {
     cacheManager.invalidateByResource('PUT', path);
   }
@@ -340,10 +292,6 @@ export async function put<T>(
   return result;
 }
 
-/**
- * Make PATCH request
- * Invalidates related cache entries on success
- */
 export async function patch<T>(
   path: string,
   data?: object,
@@ -363,7 +311,6 @@ export async function patch<T>(
 
   const result = await handleResponse<T>(response);
 
-  // Invalidate related cache on success
   if (response.ok) {
     cacheManager.invalidateByResource('PATCH', path);
   }
@@ -371,10 +318,6 @@ export async function patch<T>(
   return result;
 }
 
-/**
- * Make DELETE request
- * Invalidates related cache entries on success
- */
 export async function del<T>(
   path: string,
   options?: {
@@ -390,14 +333,12 @@ export async function del<T>(
   });
 
   if (response.status === 204) {
-    // Invalidate related cache on success
     cacheManager.invalidateByResource('DELETE', path);
     return;
   }
 
   const result = await handleResponse<T>(response);
 
-  // Invalidate related cache on success
   if (response.ok) {
     cacheManager.invalidateByResource('DELETE', path);
   }
@@ -405,37 +346,22 @@ export async function del<T>(
   return result;
 }
 
-/**
- * Configure API client with tenant
- */
 export function configureApiClient(tenant: string): void {
   apiClientConfig.tenant = tenant;
 }
 
-/**
- * Get the current tenant from API client config
- */
 export function getCurrentTenant(): string {
   return apiClientConfig.tenant;
 }
 
-/**
- * Set API base URL
- */
 export function setApiBaseUrl(baseUrl: string): void {
   apiClientConfig.baseUrl = baseUrl;
 }
 
-/**
- * Get current API base URL
- */
 export function getApiBaseUrl(): string {
   return apiClientConfig.baseUrl;
 }
 
-/**
- * Check API connectivity
- */
 export async function checkApiHealth(): Promise<boolean> {
   try {
     const url = apiClientConfig.baseUrl ? `${apiClientConfig.baseUrl}/health` : '/health';
@@ -449,9 +375,6 @@ export async function checkApiHealth(): Promise<boolean> {
   }
 }
 
-/**
- * Upload file with progress tracking
- */
 export async function uploadFile(
   path: string,
   file: File,
@@ -526,9 +449,6 @@ export async function uploadFile(
   });
 }
 
-/**
- * Retry API call with exponential backoff
- */
 export async function retryWithBackoff<T>(
   fn: () => Promise<T>,
   maxRetries: number = 3,
@@ -542,7 +462,7 @@ export async function retryWithBackoff<T>(
     } catch (error) {
       lastError = error as Error;
 
-      // Don't retry on 4xx errors (except 429)
+      // 4xxエラーはリトライしない（429を除く）
       if (error instanceof ApiError && error.status >= 400 && error.status < 500 && error.status !== 429) {
         throw error;
       }
@@ -572,7 +492,6 @@ export const api = {
   ApiError,
 };
 
-// Setup APIs with token
 export async function getRolesWithSetupToken(tenant: string, setupToken: string) {
   return api.get(`/${tenant}/api/setup/rolesetup`, {
     headers: { 'Authorization': `Bearer ${setupToken}` }
@@ -670,7 +589,6 @@ export async function checkUserPermissions(tenant: string) {
   return api.get(`/${tenant}/auth/me/permissions`);
 }
 
-// User management functions
 export async function createUser(tenant: string, email: string) {
   return api.post(`/${tenant}/api/users`, { email });
 }
@@ -703,10 +621,8 @@ export async function removeUserRole(tenant: string, userId: string, roleName: s
   return handleResponse(response);
 }
 
-// User role management exports
 export { removeUserRole as deleteUserRole };
 
-// Room user candidates for adding to room
 export async function getRoomUserCandidates(tenant: string, roomId: string, search?: string) {
   const params = search ? { search } : undefined;
   return api.get(`/${tenant}/api/room/${roomId}/users/candidates`, { params });

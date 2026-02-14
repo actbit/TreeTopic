@@ -3,9 +3,6 @@ using TreeTopic.Models;
 
 namespace TreeTopic.Services;
 
-/// <summary>
-/// ルームロール管理
-/// </summary>
 public class RoomRoleManager
 {
     private readonly ApplicationDbContext _context;
@@ -19,9 +16,6 @@ public class RoomRoleManager
         _logger = logger;
     }
 
-    /// <summary>
-    /// すべてのロールを取得
-    /// </summary>
     public async Task<List<RoomRole>> ListAsync(CancellationToken cancellationToken = default)
     {
         return await _context.RoomRoles
@@ -31,9 +25,6 @@ public class RoomRoleManager
             .ToListAsync(cancellationToken);
     }
 
-    /// <summary>
-    /// IDでロールを取得
-    /// </summary>
     public async Task<RoomRole?> FindByIdAsync(Guid id, CancellationToken cancellationToken = default)
     {
         return await _context.RoomRoles
@@ -41,9 +32,6 @@ public class RoomRoleManager
             .FirstOrDefaultAsync(r => r.Id == id, cancellationToken);
     }
 
-    /// <summary>
-    /// 名前でロールを取得
-    /// </summary>
     public async Task<RoomRole?> FindByNameAsync(string name, CancellationToken cancellationToken = default)
     {
         return await _context.RoomRoles
@@ -51,18 +39,12 @@ public class RoomRoleManager
             .FirstOrDefaultAsync(r => r.Name == name, cancellationToken);
     }
 
-    /// <summary>
-    /// ロールが存在するか確認
-    /// </summary>
     public async Task<bool> RoleExistsAsync(string name, CancellationToken cancellationToken = default)
     {
         return await _context.RoomRoles
             .AnyAsync(r => r.Name == name, cancellationToken);
     }
 
-    /// <summary>
-    /// ロールを作成
-    /// </summary>
     public async Task<RoomRole> CreateAsync(
         RoomRole role,
         CancellationToken cancellationToken = default)
@@ -79,9 +61,6 @@ public class RoomRoleManager
         return role;
     }
 
-    /// <summary>
-    /// ロールを更新
-    /// </summary>
     public async Task<RoomRole> UpdateAsync(
         RoomRole role,
         CancellationToken cancellationToken = default)
@@ -93,9 +72,6 @@ public class RoomRoleManager
         return role;
     }
 
-    /// <summary>
-    /// ロールを削除
-    /// </summary>
     public async Task<bool> DeleteAsync(
         Guid id,
         CancellationToken cancellationToken = default)
@@ -113,15 +89,11 @@ public class RoomRoleManager
         return true;
     }
 
-    /// <summary>
-    /// ロールに権限を追加
-    /// </summary>
     public async Task<RoomRolePermission> AddPermissionAsync(
         Guid roleId,
         string permissionName,
         CancellationToken cancellationToken = default)
     {
-        // ロールの存在確認（ヘルパー使用前に検証）
         var role = await _context.RoomRoles.FindAsync(new object[] { roleId }, cancellationToken);
         if (role == null)
         {
@@ -147,9 +119,6 @@ public class RoomRoleManager
             cancellationToken);
     }
 
-    /// <summary>
-    /// ロールから権限を削除
-    /// </summary>
     public async Task<bool> RemovePermissionAsync(
         Guid permissionId,
         CancellationToken cancellationToken = default)
@@ -165,9 +134,6 @@ public class RoomRoleManager
             cancellationToken);
     }
 
-    /// <summary>
-    /// ロールの権限を取得
-    /// </summary>
     public async Task<List<string>> GetPermissionNamesAsync(
         Guid roleId,
         CancellationToken cancellationToken = default)
@@ -178,9 +144,6 @@ public class RoomRoleManager
             .ToListAsync(cancellationToken);
     }
 
-    /// <summary>
-    /// ロールに権限が含まれているか確認
-    /// </summary>
     public async Task<bool> HasPermissionAsync(
         Guid roleId,
         string permissionName,

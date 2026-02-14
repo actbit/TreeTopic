@@ -11,11 +11,11 @@ namespace TreeTopic.Models
         public Guid ApplicationUserId { get; set; }
         public ApplicationUser ApplicationUser { get; set; } = null!;
 
-    [ForeignKey(nameof(Room))]
+        [ForeignKey(nameof(Room))]
         public Guid RoomId { get; set; }
         public Room Room { get; set; } = null!;
 
-    public string? Name { get; set; }
+        public string? Name { get; set; }
 
         public bool UseMainName { get; set; }
 
@@ -25,19 +25,14 @@ namespace TreeTopic.Models
 
         public List<RoomPermission> RoomPermission { get; set; } = new List<RoomPermission>();
 
-    /// <summary>
-    /// このユーザーのトピック権限設定
-    /// </summary>
-    public List<TopicUserPermission> TopicUserPermissions { get; set; } = new();
+        /// <summary>
+        /// このユーザーのトピック権限設定
+        /// </summary>
+        public List<TopicUserPermission> TopicUserPermissions { get; set; } = new();
 
-    /// <summary>
-    /// RoomUserとRoomRoleの多対多関係
-    /// </summary>
-    public List<RoomUserRoomRole> RoomUserRoomRoles { get; set; } = new();
+        /// <summary>
+        /// RoomUserとRoomRoleの多対多関係
+        /// </summary>
+        public List<RoomUserRoomRole> RoomUserRoomRoles { get; set; } = new();
+    }
 }
-}
-
-
-
-
-

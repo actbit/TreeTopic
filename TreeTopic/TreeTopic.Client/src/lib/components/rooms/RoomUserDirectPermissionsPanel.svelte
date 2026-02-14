@@ -1,6 +1,7 @@
 <script lang="ts">
   import { api } from '$lib/api/client';
   import type { AvailablePermissions } from '$lib/types/permissions';
+  import { formatPermissionName } from '$lib/utils/permission';
 
   interface Props {
     tenant: string;
@@ -100,13 +101,6 @@
 
   function hasPermission(userId: string, permissionName: string): boolean {
     return (userPermissions[userId] || []).includes(permissionName);
-  }
-
-  function formatPermissionName(name: string): string {
-    return name.split('.')
-      .filter((part) => part !== 'room')
-      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-      .join(' ');
   }
 
   let selectedUser = $derived.by(() => users.find((u) => u.id === selectedUserId) ?? null);
