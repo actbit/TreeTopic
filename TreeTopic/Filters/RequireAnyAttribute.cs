@@ -1,8 +1,5 @@
-using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
-using MaskedUUID.AspNetCore.Services;
-using TreeTopic.Models;
 using TreeTopic.Services;
 using TreeTopic.Permissions;
 
@@ -116,9 +113,6 @@ public class RequireAnyAttribute : Attribute, IAsyncActionFilter
 
             if (hasPermission)
             {
-                logger.LogDebug(
-                    "[RequireAny] Permission granted: UserId={UserId}, Requirement={Requirement}",
-                    permContext.UserId, requirement);
                 await next();
                 return;
             }

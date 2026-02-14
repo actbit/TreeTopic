@@ -38,7 +38,3 @@ namespace TreeTopic.Models
         public List<TopicUserPermission> TopicUserPermissions { get; set; } = new();
     }
 }
-
-
-
-

@@ -62,7 +62,6 @@ public class EFCoreMultiTenantStore : IMultiTenantStore<ApplicationTenantInfo>
         // キャッシュをチェック
         if (_cache.TryGetValue<ApplicationTenantInfo?>(cacheKey, out var cached))
         {
-            _logger.LogDebug("Tenant found in cache: {Identifier}", identifier);
             return cached;
         }
 
@@ -74,13 +73,11 @@ public class EFCoreMultiTenantStore : IMultiTenantStore<ApplicationTenantInfo>
 
             if (tenant == null)
             {
-                _logger.LogDebug("Tenant not found: {Identifier}", identifier);
                 return null;
             }
 
             // キャッシュに保存（5分間）
             _cache.Set(cacheKey, tenant, CacheExpiration);
-            _logger.LogDebug("Tenant cached: {Identifier}", identifier);
 
             return tenant;
         }
@@ -195,7 +192,3 @@ public class EFCoreMultiTenantStore : IMultiTenantStore<ApplicationTenantInfo>
         throw new NotImplementedException("Use TenantManagementService.DeleteTenantAsync instead");
     }
 }
-
-
-
-

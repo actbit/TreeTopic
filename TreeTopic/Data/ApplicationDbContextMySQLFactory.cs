@@ -1,7 +1,5 @@
-﻿using Finbuckle.MultiTenant;
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
-using Pomelo.EntityFrameworkCore.MySql.Infrastructure;
 using TreeTopic.Models;
 
 namespace TreeTopic.Data;
@@ -32,4 +30,3 @@ public class ApplicationDbContextMySQLFactory : IDesignTimeDbContextFactory<Appl
         return new ApplicationDbContextMySQL(accessor, optionsBuilder.Options);
     }
 }
-

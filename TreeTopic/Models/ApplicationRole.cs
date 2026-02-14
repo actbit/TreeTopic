@@ -18,7 +18,3 @@ namespace TreeTopic.Models
         public List<Permission> Authorities { get; set; } = new List<Permission>();
     }
 }
-
-
-
-

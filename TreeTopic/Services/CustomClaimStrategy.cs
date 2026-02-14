@@ -30,7 +30,6 @@ public class CustomClaimStrategy : IMultiTenantStrategy
         // 静的ファイルは tenant 解決をスキップ
         if (AuthenticationConstants.StaticFilePaths.IsStaticFile(httpContext.Request.Path.Value ?? string.Empty))
         {
-            _logger.LogDebug("[CustomClaimStrategy] Skipping tenant resolution for static file");
             return null;
         }
 
@@ -87,7 +86,6 @@ public class CustomClaimStrategy : IMultiTenantStrategy
                     {
                         if (string.Equals(firstSegment, "api", StringComparison.OrdinalIgnoreCase))
                         {
-                            _logger.LogDebug("[CustomClaimStrategy] Skipping tenant resolution for reserved segment: {Segment}", firstSegment);
                             return null;
                         }
 
@@ -105,11 +103,6 @@ public class CustomClaimStrategy : IMultiTenantStrategy
             _logger.LogError(ex, "[CustomClaimStrategy] Error resolving tenant from path");
         }
 
-        _logger.LogDebug("[CustomClaimStrategy] No tenant identifier found");
         return null;
     }
 }
-
-
-
-

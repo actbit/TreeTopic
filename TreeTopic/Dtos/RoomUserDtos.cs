@@ -10,46 +10,46 @@ public class RoomUserDto
     public MaskedGuid ApplicationUserId { get; set; }
     public MaskedGuid RoomId { get; set; }
     /// <summary>
-    /// Display name (already resolved based on UseMainName setting)
+    /// 表示名（UseMainName設定に基づいて解決済み）
     /// </summary>
     public string? DisplayName { get; set; }
     /// <summary>
-    /// Icon URL (already resolved based on UseMainIcon setting)
+    /// アイコンURL（UseMainIcon設定に基づいて解決済み）
     /// </summary>
     public string? IconUrl { get; set; }
     /// <summary>
-    /// Whether to use the main account's name
+    /// メインアカウントの名前を使用するかどうか
     /// </summary>
     public bool UseMainName { get; set; }
     /// <summary>
-    /// Whether to use the main account's icon
+    /// メインアカウントのアイコンを使用するかどうか
     /// </summary>
     public bool UseMainIcon { get; set; }
     /// <summary>
-    /// Role ID (optional)
+    /// ロールID（オプション）
     /// </summary>
     public MaskedGuid? RoomRoleId { get; set; }
     /// <summary>
-    /// Role Name (for display)
+    /// ロール名（表示用）
     /// </summary>
     public string? RoomRoleName { get; set; }
     /// <summary>
-    /// User's email (for permission editor)
+    /// ユーザーのメールアドレス（権限エディタ用）
     /// </summary>
     public string? Email { get; set; }
     /// <summary>
-    /// User's username (for permission editor)
+    /// ユーザー名（権限エディタ用）
     /// </summary>
     public string? UserName { get; set; }
     /// <summary>
-    /// Permission flags (for permission editor)
+    /// 権限フラグ（権限エディタ用）
     /// </summary>
     public bool CanRead { get; set; }
     public bool CanWrite { get; set; }
     public bool CanDelete { get; set; }
     public bool CanManage { get; set; }
     /// <summary>
-    /// Topic permission flags (for permission editor)
+    /// トピック権限フラグ（権限エディタ用）
     /// </summary>
     public bool CanReadTopic { get; set; }
     public bool CanWriteTopic { get; set; }

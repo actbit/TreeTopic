@@ -7,7 +7,6 @@ using System.Security.Claims;
 using TreeTopic.Common;
 using TreeTopic.Dtos;
 using TreeTopic.Filters;
-using TreeTopic.Models;
 using TreeTopic.Permissions;
 using TreeTopic.Services;
 
@@ -105,7 +104,7 @@ public class RoomPermissionsController : BaseController
             return Forbid();
         }
 
-        // Validate permission name
+        // 権限名を検証
         var validRoomPermissions = Permissions.PermissionHelper.GetRoomPermissions();
         if (!validRoomPermissions.Contains(request.PermissionName))
         {

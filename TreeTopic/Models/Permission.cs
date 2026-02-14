@@ -12,7 +12,3 @@ namespace TreeTopic.Models
         public ApplicationRole Role { get; set; }
     }
 }
-
-
-
-

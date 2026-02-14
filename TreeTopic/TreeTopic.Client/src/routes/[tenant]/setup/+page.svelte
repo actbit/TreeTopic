@@ -4,8 +4,8 @@
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
   import { api, createRoleWithSetupToken, getRolesWithSetupToken, getTenantDetail, invalidateSetupToken, getCurrentUser, assignUserRoleWithSetupToken, removeUserRoleWithSetupToken, createUserWithSetupToken } from '$lib/api/client';
-
-  // 型定義
+  import { formatPermissionName } from '$lib/utils/permission';
+  
   interface TenantDetail {
     identifier: string;
     name: string;
@@ -35,25 +35,25 @@
   let error = $state<string | null>(null);
   const requiredSetupPermissions = ['tenant.permission.read', 'tenant.role.manage'];
 
-  // Role management state
+  // ロール管理状態
   let roles = $state<any[]>([]);
   let newRoleName = $state('');
   let availablePermissions = $state<string[]>([]);
   let selectedPermissions = $state<Record<string, boolean>>({});
 
-  // User role assignment state
+  // ユーザーロール割り当て状態
   let currentUser = $state<User | null>(null);
   let selectedRoleForUser = $state<string>('');
 
-  // Token expiry
+  // トークン有効期限
   let tokenExpiryTime = $state<Date | null>(null);
   let timeRemaining = $state<string>('');
 
-  // Tenant detail
+  // テナント詳細
   let tenantDetail = $state<TenantDetail | null>(null);
   let canAssignRolesToUsers = $state(false);
 
-  // User creation state
+  // ユーザー作成状態
   let newUserEmail = $state('');
   let showUserCreation = $state(false);
 
@@ -61,33 +61,33 @@
     let interval: number;
 
     (async () => {
-      // Check for setup token in sessionStorage
+      // sessionStorageからセットアップトークンを確認
       setupToken = sessionStorage.getItem(`setupToken_${tenant}`);
 
       if (!setupToken) {
-        // No setup token, redirect to main page
+        // セットアップトークンがない場合はメインページにリダイレクト
         await goto(`/${tenant}/`);
         return;
       }
 
-      // Load initial data
+      // 初期データを読み込み
       await loadRoles();
       await loadAvailablePermissions();
       await loadTenantDetail();
       await loadCurrentUser();
 
-      // Set token expiry based on creation time (8 hours from creation)
+      // 作成時刻に基づいてトークン有効期限を設定（作成から8時間）
       const tokenCreatedAt = sessionStorage.getItem(`setupTokenCreatedAt_${tenant}`);
       if (tokenCreatedAt) {
         tokenExpiryTime = new Date(parseInt(tokenCreatedAt) + 480 * 60 * 1000);
       } else {
-        // Fallback: if no creation time stored, assume now and save it
+        // フォールバック: 作成時刻がない場合は現在時刻を保存
         const now = Date.now();
         sessionStorage.setItem(`setupTokenCreatedAt_${tenant}`, now.toString());
         tokenExpiryTime = new Date(now + 480 * 60 * 1000);
       }
 
-      // Update time remaining every second
+      // 残り時間を毎秒更新
       interval = window.setInterval(() => {
         if (tokenExpiryTime) {
           const diff = tokenExpiryTime.getTime() - Date.now();
@@ -115,7 +115,7 @@
       canAssignRolesToUsers = tenantDetail.canAssignRolesToUsers;
     } catch (err) {
       console.error('Error loading tenant detail:', err);
-      // Default to allowing role assignment if there's an error
+      // エラー時はデフォルトでロール割り当てを許可
       canAssignRolesToUsers = true;
     }
   }
@@ -164,17 +164,6 @@
     }
   }
 
-  function formatPermissionName(permissionName: string): string {
-    return permissionName
-      .split('.')
-      .map((part, index) => {
-        if (index === 0) return ''; // プレフィックス（tenant）を削除
-        return part.charAt(0).toUpperCase() + part.slice(1);
-      })
-      .filter(p => p !== '')
-      .join('');
-  }
-
   async function loadCurrentUser() {
     try {
       const response = await getCurrentUser(tenant!) as User;
@@ -202,7 +191,7 @@
       newUserEmail = '';
       showUserCreation = false;
 
-      // Reload users to get the newly created user
+      // 新規作成ユーザーを取得するために再読み込み
       await loadCurrentUser();
     } catch (err) {
       error = err instanceof Error ? err.message : 'Failed to create user';
@@ -227,10 +216,10 @@
 
       const updatedUser = await assignUserRoleWithSetupToken(tenant!, currentUser.id, selectedRoleForUser, setupToken!);
 
-      // Update current user with the response
+      // レスポンスで現在のユーザーを更新
       currentUser = updatedUser as User;
 
-      // Clear selection
+      // 選択をクリア
       selectedRoleForUser = '';
     } catch (err) {
       error = err instanceof Error ? err.message : 'Failed to assign role';
@@ -248,10 +237,10 @@
 
       const updatedUser = await removeUserRoleWithSetupToken(tenant!, currentUser.id, roleName, setupToken!);
 
-      // Update current user with the response
+      // レスポンスで現在のユーザーを更新
       currentUser = updatedUser as User;
     } catch (err) {
-      error = err instanceof Error ? err.message : 'Failed to remove role';
+      error = err instanceof Error ? err.message : 'ロールの削除に失敗しました';
     } finally {
       isLoading = false;
     }
@@ -269,7 +258,7 @@
 
       const response = await createRoleWithSetupToken(tenant!, setupToken!, newRoleName.trim());
 
-      // Assuming response structure matches RoleDto { Id: string, Name: string }
+      // レスポンス構造がRoleDto { Id: string, Name: string }と一致すると仮定
       roles = [...roles, response as Role];
       newRoleName = '';
     } catch (err) {

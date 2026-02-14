@@ -10,9 +10,6 @@ export interface BrainIdeaVote {
   value: number;
 }
 
-/**
- * Brainstorm idea information
- */
 export interface BrainIdea {
   id: string;
   brainBoardId: string;
@@ -25,9 +22,6 @@ export interface BrainIdea {
   votes?: BrainIdeaVote[];
 }
 
-/**
- * Brainstorm board information
- */
 export interface BrainstormBoard {
   id: string;
   topicId: string;
@@ -37,9 +31,6 @@ export interface BrainstormBoard {
   ideas: BrainIdea[];
 }
 
-/**
- * Brainstorm store state
- */
 export interface BrainstormState {
   boards: BrainstormBoard[];
   currentBoard: BrainstormBoard | null;
@@ -50,9 +41,6 @@ export interface BrainstormState {
   lastUpdated: number | null;
 }
 
-/**
- * Create brainstorm store
- */
 function createBrainstormStore() {
   const { subscribe, set, update } = writable<BrainstormState>({
     boards: [],
@@ -66,9 +54,6 @@ function createBrainstormStore() {
 
   return {
     subscribe,
-    /**
-     * Set all boards
-     */
     setBoards: (boards: BrainstormBoard[]) => {
       update((state) => ({
         ...state,
@@ -77,9 +62,6 @@ function createBrainstormStore() {
         lastUpdated: Date.now(),
       }));
     },
-    /**
-     * Set current board
-     */
     setCurrentBoard: (board: BrainstormBoard | null) => {
       update((state) => ({
         ...state,
@@ -91,18 +73,12 @@ function createBrainstormStore() {
         localStorage.setItem('selected_board', board.id);
       }
     },
-    /**
-     * Add a new board
-     */
     addBoard: (board: BrainstormBoard) => {
       update((state) => ({
         ...state,
         boards: [board, ...state.boards],
       }));
     },
-    /**
-     * Update board
-     */
     updateBoard: (boardId: string, updates: Partial<BrainstormBoard>) => {
       update((state) => ({
         ...state,
@@ -115,9 +91,6 @@ function createBrainstormStore() {
             : state.currentBoard,
       }));
     },
-    /**
-     * Delete board
-     */
     deleteBoard: (boardId: string) => {
       update((state) => ({
         ...state,
@@ -126,9 +99,6 @@ function createBrainstormStore() {
           state.currentBoard?.id === boardId ? null : state.currentBoard,
       }));
     },
-    /**
-     * Add idea to board
-     */
     addIdea: (boardId: string, idea: BrainIdea) => {
       update((state) => ({
         ...state,
@@ -141,9 +111,6 @@ function createBrainstormStore() {
             : state.currentBoard,
       }));
     },
-    /**
-     * Update idea
-     */
     updateIdea: (boardId: string, ideaId: string, updates: Partial<BrainIdea>) => {
       update((state) => ({
         ...state,
@@ -168,9 +135,6 @@ function createBrainstormStore() {
             : state.currentBoard,
       }));
     },
-    /**
-     * Move idea on board
-     */
     moveIdea: (boardId: string, ideaId: string, positionLeft: number, positionTop: number) => {
       update((state) => ({
         ...state,
@@ -195,9 +159,6 @@ function createBrainstormStore() {
             : state.currentBoard,
       }));
     },
-    /**
-     * Delete idea
-     */
     deleteIdea: (boardId: string, ideaId: string) => {
       update((state) => ({
         ...state,
@@ -218,39 +179,24 @@ function createBrainstormStore() {
             : state.currentBoard,
       }));
     },
-    /**
-     * Start editing idea
-     */
     startEditingIdea: (ideaId: string) => {
       update((state) => ({
         ...state,
         editingIdeaId: ideaId,
       }));
     },
-    /**
-     * Stop editing idea
-     */
     stopEditingIdea: () => {
       update((state) => ({
         ...state,
         editingIdeaId: null,
       }));
     },
-    /**
-     * Set loading state
-     */
     setLoading: (isLoading: boolean) => {
       update((state) => ({ ...state, isLoading }));
     },
-    /**
-     * Set error
-     */
     setError: (error: string | null) => {
       update((state) => ({ ...state, error }));
     },
-    /**
-     * Clear all boards
-     */
     clear: () => {
       set({
         boards: [],
@@ -268,9 +214,6 @@ function createBrainstormStore() {
 
 export const brainstorm = createBrainstormStore();
 
-/**
- * Helper functions for managing ideas globally
- */
 export function addIdea(idea: BrainIdea) {
   if (brainstorm && typeof brainstorm === 'object' && 'subscribe' in brainstorm) {
     try {
@@ -328,43 +271,25 @@ export function updateIdeaPosition(ideaId: string, positionLeft: number, positio
   }
 }
 
-/**
- * Get all ideas from all boards
- */
 export const ideas = derived(brainstorm, ($brainstorm) => {
   return $brainstorm.boards.flatMap((b) => b.ideas);
 });
 
-/**
- * Get all ideas from current board
- */
 export const brainstormBoard = derived(brainstorm, ($brainstorm) => $brainstorm.currentBoard);
 
-/**
- * Derived stores
- */
 export const boardList = derived(brainstorm, ($brainstorm) => $brainstorm.boards);
 export const currentBoard = derived(brainstorm, ($brainstorm) => $brainstorm.currentBoard);
 export const brainstormLoading = derived(brainstorm, ($brainstorm) => $brainstorm.isLoading);
 export const brainstormError = derived(brainstorm, ($brainstorm) => $brainstorm.error);
 export const editingIdeaId = derived(brainstorm, ($brainstorm) => $brainstorm.editingIdeaId);
 
-/**
- * Get board by ID
- */
 export const getBoardById = (boardId: string) =>
   derived(boardList, ($boards) => $boards.find((b) => b.id === boardId));
 
-/**
- * Get ideas on current board
- */
 export const currentBoardIdeas = derived(currentBoard, ($board) =>
   $board?.ideas ?? []
 );
 
-/**
- * Get total ideas count on a board
- */
 export const getBoardIdeasCount = (boardId: string) =>
   derived(
     getBoardById(boardId),

@@ -64,10 +64,6 @@ public class TenantCleanupBackgroundService : BackgroundService
                         "Completed cleanup: removed {Count} expired empty tenant(s)",
                         cleanedCount);
                 }
-                else
-                {
-                    _logger.LogDebug("No expired empty tenants found for cleanup");
-                }
             }
         }
         catch (Exception ex)

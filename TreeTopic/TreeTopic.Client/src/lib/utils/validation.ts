@@ -1,23 +1,9 @@
-/**
- * Input validation utilities
- */
-
-/**
- * Validate email address
- */
 export function isValidEmail(email: string): boolean {
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   return emailRegex.test(email);
 }
 
-/**
- * Validate password strength
- */
-export function validatePasswordStrength(password: string): {
-  isValid: boolean;
-  strength: 'weak' | 'medium' | 'strong';
-  feedback: string[];
-} {
+export function validatePasswordStrength(password: string): { isValid: boolean; strength: 'weak' | 'medium' | 'strong'; feedback: string[] } {
   const feedback: string[] = [];
 
   if (password.length < 8) {
@@ -51,17 +37,11 @@ export function validatePasswordStrength(password: string): {
   };
 }
 
-/**
- * Validate username
- */
 export function isValidUsername(username: string): boolean {
   if (username.length < 3 || username.length > 32) return false;
   return /^[a-zA-Z0-9_-]+$/.test(username);
 }
 
-/**
- * Validate URL
- */
 export function isValidUrl(url: string): boolean {
   try {
     new URL(url);
@@ -71,29 +51,14 @@ export function isValidUrl(url: string): boolean {
   }
 }
 
-/**
- * Validate file size
- */
-export function isValidFileSize(
-  sizeInBytes: number,
-  maxSizeInMb: number = 50
-): boolean {
+export function isValidFileSize(sizeInBytes: number, maxSizeInMb: number = 50): boolean {
   return sizeInBytes <= maxSizeInMb * 1024 * 1024;
 }
 
-/**
- * Validate file type
- */
-export function isValidFileType(
-  file: File,
-  allowedTypes: string[]
-): boolean {
+export function isValidFileType(file: File, allowedTypes: string[]): boolean {
   return allowedTypes.includes(file.type);
 }
 
-/**
- * Get file size display string
- */
 export function formatFileSize(sizeInBytes: number): string {
   if (sizeInBytes === 0) return '0 Bytes';
 
@@ -104,16 +69,10 @@ export function formatFileSize(sizeInBytes: number): string {
   return parseFloat((sizeInBytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 }
 
-/**
- * Validate hex color
- */
 export function isValidHexColor(color: string): boolean {
   return /^#[0-9A-F]{6}$/i.test(color);
 }
 
-/**
- * Validate JSON
- */
 export function isValidJson(jsonString: string): boolean {
   try {
     JSON.parse(jsonString);
@@ -123,9 +82,6 @@ export function isValidJson(jsonString: string): boolean {
   }
 }
 
-/**
- * Validate number range
- */
 export function isInRange(
   value: number,
   min: number,
@@ -134,55 +90,34 @@ export function isInRange(
   return value >= min && value <= max;
 }
 
-/**
- * Validate required field
- */
 export function isRequired(value: string | null | undefined): boolean {
   return value !== null && value !== undefined && value.trim().length > 0;
 }
 
-/**
- * Validate minimum length
- */
 export function minLength(value: string, length: number): boolean {
   return value.length >= length;
 }
 
-/**
- * Validate maximum length
- */
 export function maxLength(value: string, length: number): boolean {
   return value.length <= length;
 }
 
-/**
- * Validate UUID v4
- */
 export function isValidUUID(uuid: string): boolean {
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   return uuidRegex.test(uuid);
 }
 
-/**
- * Validate GUID/UUID
- */
 export function isValidGUID(guid: string): boolean {
   const guidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   return guidRegex.test(guid);
 }
 
-/**
- * Sanitize input to prevent XSS
- */
 export function sanitizeInput(input: string): string {
   const div = document.createElement('div');
   div.textContent = input;
   return div.innerHTML;
 }
 
-/**
- * Escape HTML special characters
- */
 export function escapeHtml(text: string): string {
   const map: { [key: string]: string } = {
     '&': '&amp;',

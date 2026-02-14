@@ -2,6 +2,7 @@
   import { api } from '$lib/api/client';
   import { roomRolePermissionsApi } from '$lib/api/permissions';
   import type { AvailablePermissions, Role } from '$lib/types/permissions';
+  import { formatPermissionName } from '$lib/utils/permission';
 
   interface Props {
     tenant: string;
@@ -104,13 +105,6 @@
 
   function hasPermission(roleName: string, permissionName: string): boolean {
     return (rolePermissions[roleName] || []).includes(permissionName);
-  }
-
-  function formatPermissionName(name: string): string {
-    return name.split('.')
-      .filter((part) => part !== 'room')
-      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-      .join(' ');
   }
 
   let selectedRole = $derived.by(() => roles.find((r) => r.name === selectedRoleName) ?? null);

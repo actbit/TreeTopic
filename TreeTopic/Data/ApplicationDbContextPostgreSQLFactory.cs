@@ -30,4 +30,3 @@ public class ApplicationDbContextPostgreSQLFactory : IDesignTimeDbContextFactory
         return new ApplicationDbContextPostgreSQL(accessor, optionsBuilder.Options);
     }
 }
-

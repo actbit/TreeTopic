@@ -35,7 +35,7 @@ public class BrainstormController : ControllerBase
         }
     }
 
-    // Board endpoints
+    // ボードエンドポイント
     [HttpGet]
     [RequireAny(PermissionScope.Topic, TopicPermissions.Read, RoomPermissions.TopicRead, TenantPermissions.TopicRead)]
     public async Task<IActionResult> GetAllBoards(CancellationToken cancellationToken)
@@ -90,7 +90,7 @@ public class BrainstormController : ControllerBase
         return result.ToApiResult();
     }
 
-    // Idea endpoints
+    // アイデアエンドポイント
     [HttpGet("{boardId}/ideas")]
     [RequireAny(PermissionScope.Topic, TopicPermissions.Read, RoomPermissions.TopicRead, TenantPermissions.TopicRead)]
     public async Task<IActionResult> GetIdeasByBoard([FromRoute] MaskedGuid boardId, CancellationToken cancellationToken)
@@ -137,7 +137,7 @@ public class BrainstormController : ControllerBase
         return result.ToApiResult();
     }
 
-    // Vote endpoints
+    // 投票エンドポイント
     [HttpPost("{boardId}/ideas/{ideaId}/votes")]
     [RequireAny(PermissionScope.Topic, TopicPermissions.Write, RoomPermissions.TopicWrite, TenantPermissions.TopicManage)]
     public async Task<IActionResult> AddVote([FromRoute] MaskedGuid boardId, [FromRoute] MaskedGuid ideaId, [FromBody] CreateBrainIdeaVoteRequest request, CancellationToken cancellationToken)

@@ -4,9 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using TreeTopic.Dtos;
 using TreeTopic.Filters;
-using TreeTopic.Models;
 using TreeTopic.Permissions;
-using TreeTopic.Constants;
 using TreeTopic.Common;
 using TreeTopic.Services;
 
@@ -86,7 +84,7 @@ public class TopicPermissionsController : BaseController
         [FromBody] AddTopicPermissionToUserRequest request,
         CancellationToken cancellationToken)
     {
-        // Validate permission name
+        // 権限名を検証
         var validTopicPermissions = Permissions.PermissionHelper.GetTopicPermissions();
         if (!validTopicPermissions.Contains(request.PermissionName))
         {
@@ -171,7 +169,7 @@ public class TopicPermissionsController : BaseController
         [FromBody] AddTopicRolePermissionRequest request,
         CancellationToken cancellationToken)
     {
-        // Validate permission name
+        // 権限名を検証
         var validTopicPermissions = Permissions.PermissionHelper.GetTopicPermissions();
         if (!validTopicPermissions.Contains(request.PermissionName))
         {

@@ -18,4 +18,3 @@ namespace TreeTopic.Models
         public bool IsCurrent { get; set; } = true;
     }
 }
-

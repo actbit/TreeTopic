@@ -19,10 +19,7 @@ public abstract class BaseService
         {
             var result = await operation();
 
-            if (result.IsSuccess)
-            {
-            }
-            else
+            if (!result.IsSuccess)
             {
                 Logger.LogWarning("Operation {OperationName} failed: {Error}", operationName, result.Error?.Message);
             }
@@ -48,10 +45,7 @@ public abstract class BaseService
         {
             var result = await operation();
 
-            if (result.IsSuccess)
-            {
-            }
-            else
+            if (!result.IsSuccess)
             {
                 Logger.LogWarning("Operation {OperationName} failed: {Error}", operationName, result.Error?.Message);
             }
@@ -77,10 +71,7 @@ public abstract class BaseService
         {
             var result = operation();
 
-            if (result.IsSuccess)
-            {
-            }
-            else
+            if (!result.IsSuccess)
             {
                 Logger.LogWarning("Operation {OperationName} failed: {Error}", operationName, result.Error?.Message);
             }
@@ -106,10 +97,7 @@ public abstract class BaseService
         {
             var result = operation();
 
-            if (result.IsSuccess)
-            {
-            }
-            else
+            if (!result.IsSuccess)
             {
                 Logger.LogWarning("Operation {OperationName} failed: {Error}", operationName, result.Error?.Message);
             }

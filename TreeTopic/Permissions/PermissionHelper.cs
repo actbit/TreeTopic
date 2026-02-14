@@ -88,4 +88,3 @@ public static class PermissionHelper
     public static Dictionary<string, string> GetTopicPermissionNameValuePairs() =>
         GetPermissionNameValuePairs(typeof(TopicPermissions));
 }
-

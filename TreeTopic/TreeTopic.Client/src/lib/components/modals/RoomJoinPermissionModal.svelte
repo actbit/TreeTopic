@@ -3,6 +3,7 @@
   import { api } from '$lib/api/client';
   import { ui, activeModals } from '$lib/stores/ui';
   import { page } from '$app/stores';
+  import { getDisplayName } from '$lib/utils/user';
 
   interface AllowedUser {
     userId: string;
@@ -136,10 +137,6 @@
   function close() {
     ui.closeModal(modalId);
   }
-
-  function displayUser(user: AllowedUser): string {
-    return user.displayName || user.userName || user.email || user.userId;
-  }
 </script>
 
 <Modal {isOpen} title="Room Join Permissions" onClose={close} size="large" closeButton={!isLoading}>
@@ -197,7 +194,7 @@
               <select bind:value={selectedUserId} class="flex-1 px-3 py-2 border border-border rounded focus:outline-none focus:border-primary">
                 <option value="">Select user</option>
                 {#each availableUsers.filter((u) => !allowedUsers.some((a) => a.userId === u.userId)) as user}
-                  <option value={user.userId}>{displayUser(user)}</option>
+                  <option value={user.userId}>{getDisplayName(user)}</option>
                 {/each}
               </select>
               <button
@@ -212,7 +209,7 @@
               {#each allowedUsers as user}
                 <div class="flex items-center justify-between p-3 rounded bg-surface border border-border">
                   <div class="text-sm">
-                    <div class="font-medium text-text">{displayUser(user)}</div>
+                    <div class="font-medium text-text">{getDisplayName(user)}</div>
                     <div class="text-text-light text-xs">{user.email}</div>
                   </div>
                   <button

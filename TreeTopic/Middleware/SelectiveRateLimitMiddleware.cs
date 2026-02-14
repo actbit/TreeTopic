@@ -64,8 +64,6 @@ public class SelectiveRateLimitMiddleware
                 else
                 {
                     _requests[ip].Add(now);
-                    _logger.LogDebug("Request to {Endpoint} from IP: {IpAddress}, Count: {Count}/{MaxRequests} in 1 hour",
-                        _rateLimitEndpoint, ip, _requests[ip].Count, _maxRequestsPerHour);
                 }
             }
 
@@ -117,11 +115,6 @@ public class SelectiveRateLimitMiddleware
         foreach (var key in keysToRemove)
         {
             _requests.Remove(key);
-        }
-
-        if (keysToRemove.Count > 0)
-        {
-            _logger.LogDebug("Cleaned up {Count} old rate limit entries", keysToRemove.Count);
         }
     }
 }

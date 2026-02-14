@@ -4,7 +4,6 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using TreeTopic.Dtos;
 using TreeTopic.Filters;
-using TreeTopic.Models;
 using TreeTopic.Permissions;
 using TreeTopic.Services;
 

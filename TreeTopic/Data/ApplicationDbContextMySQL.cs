@@ -1,5 +1,4 @@
-﻿using Finbuckle.MultiTenant;
-using Finbuckle.MultiTenant.Abstractions;
+﻿using Finbuckle.MultiTenant.Abstractions;
 using Microsoft.EntityFrameworkCore;
 using TreeTopic.Extensions;
 
@@ -22,7 +21,3 @@ public class ApplicationDbContextMySQL : ApplicationDbContext
         modelBuilder.ConfigureMySqlGuidColumns();
     }
 }
-
-
-
-

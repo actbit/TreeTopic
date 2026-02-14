@@ -31,7 +31,7 @@ public static class OpenIdConnectExtensions
         {
             options.SignInScheme = Microsoft.AspNetCore.Authentication.Cookies.CookieAuthenticationDefaults.AuthenticationScheme;
             options.RequireHttpsMetadata = !environment.IsDevelopment();
-            // Ensure OIDC correlation/nonce cookies survive the cross-site round-trip
+            // OIDC相関/ナンスCookieがクロスサイトラウンドトリップで生存するよう設定
             options.CorrelationCookie.SameSite = SameSiteMode.None;
             options.CorrelationCookie.SecurePolicy = environment.IsDevelopment()
                 ? CookieSecurePolicy.SameAsRequest
@@ -41,11 +41,10 @@ public static class OpenIdConnectExtensions
                 ? CookieSecurePolicy.SameAsRequest
                 : CookieSecurePolicy.Always;
 
-            // Callback paths for SPA
+            // SPA用コールバックパス
             // テナント情報は query parameter で渡す
             options.CallbackPath = "/auth/signin-oidc";
-            // Note: We only manage application session (Cookies), not Keycloak session
-            // SignedOutCallbackPath is not needed
+            // アプリケーションセッション（Cookie）のみ管理し、Keycloakセッションは管理しないためSignedOutCallbackPathは不要
 
             // メタデータ自動発見を防ぐため、空の Configuration を設定
             // 実際の設定は ConfigurePerTenant で動的に適用される
@@ -65,7 +64,7 @@ public static class OpenIdConnectExtensions
             // query モードを明示: callbackはGETリダイレクトで行う
             // （認証CookieがSameSite=Laxのため、form_post（POST）ではcorrelation以外のCookieが送信されない）
             options.ResponseMode = "query";
-            // Avoid bloating auth cookies; tokens are not needed in cookies for this app.
+            // 認証Cookieの肥大化を防止（このアプリではCookie内のトークンは不要）
             options.SaveTokens = false;
 
             // Pushed Authorization Request (PAR) を無効化
@@ -106,7 +105,7 @@ public static class OpenIdConnectExtensions
     {
         var logger = ctx.HttpContext.RequestServices.GetRequiredService<ILogger<Program>>();
 
-        // Only allow OIDC redirect from the login endpoint.
+        // ログインエンドポイントからのOIDCリダイレクトのみ許可
         var requestPath = ctx.HttpContext.Request.Path.Value ?? string.Empty;
         var tenantFromRoute = ctx.HttpContext.GetRouteValue("tenant")?.ToString();
         var expectedLoginPath = string.IsNullOrEmpty(tenantFromRoute)
@@ -121,7 +120,7 @@ public static class OpenIdConnectExtensions
             return;
         }
 
-        // Route parameter から tenant を取得
+        // ルートパラメータから tenant を取得
         var tenantId = ctx.HttpContext.GetRouteValue("tenant")?.ToString();
 
         if (string.IsNullOrWhiteSpace(tenantId))
@@ -133,7 +132,7 @@ public static class OpenIdConnectExtensions
             return;
         }
 
-        // redirect_uri を設定（query に tenant を含める）
+        // redirect_uri を設定
         var configuration = ctx.HttpContext.RequestServices.GetRequiredService<IConfiguration>();
         var tenantDb = ctx.HttpContext.RequestServices.GetRequiredService<TenantCatalogDbContext>();
         var tenantInfo = await tenantDb.Tenants
@@ -197,9 +196,6 @@ public static class OpenIdConnectExtensions
             await ctx.Response.WriteAsJsonAsync(new { error = "OIDC configuration is not properly configured for this tenant." });
             return;
         }
-
-        logger.LogDebug("[OnRedirectToIdentityProvider] TenantId: {TenantId}, ClientId: {ClientId}, IssuerAddress: {IssuerAddress}",
-            tenantId, ctx.Options.ClientId, ctx.ProtocolMessage.IssuerAddress);
     }
 
     /// <summary>
@@ -285,14 +281,14 @@ public static class OpenIdConnectExtensions
 
         var identity = (ClaimsIdentity)ctx.Principal!.Identity!;
 
-        // Get tenant info for RoleClaimName check
+        // RoleClaimName取得のためテナント情報を取得
         var tenantDb = ctx.HttpContext.RequestServices.GetRequiredService<TenantCatalogDbContext>();
         var tenant = await tenantDb.Tenants
             .Include(t => t.Detail)
             .FirstOrDefaultAsync(t => t.Identifier == tenantId);
         var roleClaimName = tenant?.Detail?.RoleClaimName;
 
-        // Check user existence and ban status
+        // ユーザーの存在確認とBAN状態チェック
         var subClaim = ctx.Principal?.FindFirst("sub")?.Value
             ?? ctx.Principal?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         if (!string.IsNullOrEmpty(subClaim))
@@ -302,7 +298,7 @@ public static class OpenIdConnectExtensions
 
             if (user != null)
             {
-                // Check if user is banned
+                // BAN状態をチェック
                 if (user.IsBanned)
                 {
                     logger.LogWarning("[OnTokenValidated] User {UserId} is banned. Reason: {Reason}", user.Id, user.BanReason ?? "No reason provided");
@@ -310,7 +306,7 @@ public static class OpenIdConnectExtensions
                     return;
                 }
 
-                // Update identityUserId with actual user id
+                // identityUserIdを実際のユーザーIDで更新
                 var existingNameId = identity.FindFirst(ClaimTypes.NameIdentifier);
                 if (existingNameId != null)
                 {
@@ -320,16 +316,16 @@ public static class OpenIdConnectExtensions
             }
             else
             {
-                // User doesn't exist in database
-                // Check if OIDC is configured - if NOT configured, user must be pre-created
+                // ユーザーがDBに存在しない場合
+                // OIDCが未設定の場合、ユーザーは事前に作成されている必要がある
                 if (!tenant.Detail.HasOidcSettings())
                 {
-                    // No OIDC mode - user must be pre-created through setup or DefaultUserController
+                    // OIDC未設定モード - ユーザーはsetupまたはDefaultUserController経由で事前に作成されている必要がある
                     logger.LogError("[OnTokenValidated] User {Sub} does not exist in database and OIDC is not configured for tenant {TenantId}. User must be created first.", subClaim, tenantId);
                     ctx.Fail("User account not found. Please contact your administrator to create an account.");
                     return;
                 }
-                // If OIDC is configured, user will be auto-created by UserSyncService
+                // OIDC設定済みの場合、UserSyncServiceにより自動作成される
             }
         }
 
@@ -340,7 +336,7 @@ public static class OpenIdConnectExtensions
             logger.LogInformation("Tenant claim added: {TenantId}", tenantId);
         }
 
-        // Reduce cookie size by keeping only essential claims.
+        // Cookieサイズ削減のため必須クレームのみ保持
         var minimalClaims = new List<Claim>();
         var nameId = identity.FindFirst(ClaimTypes.NameIdentifier)
             ?? ctx.Principal.FindFirst(ClaimTypes.NameIdentifier)
@@ -365,7 +361,7 @@ public static class OpenIdConnectExtensions
             minimalClaims.Add(new Claim(ClaimTypes.Name, name.Value));
         }
 
-        // Use the roleClaimName we already retrieved above
+        // 上記で取得済みのroleClaimNameを使用
         if (!string.IsNullOrEmpty(roleClaimName))
         {
             // RoleClaimNameが設定されている場合：OIDCプロバイダーのロールクレームを使用
@@ -402,8 +398,8 @@ public static class OpenIdConnectExtensions
             ClaimTypes.Role);
         ctx.Principal = new ClaimsPrincipal(reducedIdentity);
 
-        // Note: ID token storage for OIDC logout removed
-        // Application now only manages session cookies, not Keycloak session
+        // IDトークン保存は廃止（OIDCログアウト用）
+        // アプリケーションはセッションCookieのみ管理し、Keycloakセッションは管理しない
 
         return;
     }
@@ -422,7 +418,3 @@ public static class OpenIdConnectExtensions
     }
 
 }
-
-
-
-

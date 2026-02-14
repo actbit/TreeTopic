@@ -2,8 +2,6 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using TreeTopic.Models;
-using TreeTopic.Services;
-
 namespace TreeTopic.Controllers;
 
 /// <summary>

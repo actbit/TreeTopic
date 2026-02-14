@@ -364,3 +364,6 @@ FodyWeavers.xsd
 
 # User uploads (icons, files, etc.)
 TreeTopic/uploads/
+
+# VAPID keys (auto-generated)
+vapid-keys.json

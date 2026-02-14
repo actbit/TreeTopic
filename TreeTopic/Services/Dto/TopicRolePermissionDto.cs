@@ -1,5 +1,4 @@
 using MaskedUUID.AspNetCore.Types;
-using TreeTopic.Models;
 
 namespace TreeTopic.Services;
 

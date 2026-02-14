@@ -3,7 +3,6 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
-using Finbuckle.MultiTenant;
 using Finbuckle.MultiTenant.Abstractions;
 using TreeTopic.Dtos;
 using TreeTopic.Filters;
@@ -101,7 +100,7 @@ public class TenantRolePermissionsController : ControllerBase
         [FromBody] AddTenantPermissionRequest request,
         CancellationToken cancellationToken)
     {
-        // Validate permission name
+        // 権限名を検証
         var validTenantPermissions = Permissions.PermissionHelper.GetTenantPermissions();
         if (!validTenantPermissions.Contains(request.PermissionName))
         {

@@ -353,7 +353,7 @@ public class ShareController : ControllerBase
                     return Unauthorized(new { message = "Room user not found." });
 
                 var roomUserName = RoomUserNameHelper.ResolveDisplayName(roomUser);
-                // Create a new share entry for the new version, copying metadata from the selected share.
+                // 新しいバージョンのシェアエントリを作成（選択されたシェアからメタデータをコピー）
                 targetShare = new ShareItem
                 {
                     RoomId = baseShare.RoomId,
@@ -396,7 +396,7 @@ public class ShareController : ControllerBase
                 await _db.SaveChangesAsync(cancellationToken);
             }
 
-            // Resolve current file for version chain (if any).
+            // バージョンチェーン用の現在のファイルを解決（存在する場合）
             FileModel? currentFile = null;
             if (baseShare != null)
             {

@@ -113,5 +113,4 @@ public static class EntityHelper
 
         return Result.Success();
     }
-
 }

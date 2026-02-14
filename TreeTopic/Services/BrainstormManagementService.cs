@@ -277,12 +277,12 @@ public class BrainstormManagementService : BaseService, IBrainstormManagementSer
             if (roomUser == null)
                 return Result<BrainIdeaVoteDto>.BadRequest("Room user not found");
 
-            // Check if user already voted with this vote type
+            // ユーザーがこの投票タイプで既に投票しているか確認
             var existingVote = await _voteRepository.GetVoteAsync(ideaId, roomUser.Id, request.VoteType, cancellationToken);
             if (existingVote != null)
                 return Result<BrainIdeaVoteDto>.BadRequest("Already voted with this type");
 
-            // Remove previous votes of other types from this user for this idea
+            // このユーザーのこのアイデアに対する他のタイプの前回の投票を削除
             var previousVotes = await _voteRepository.Query()
                 .Where(v => v.BrainIdeaId == ideaId && v.RoomUserId == roomUser.Id)
                 .ToListAsync(cancellationToken);

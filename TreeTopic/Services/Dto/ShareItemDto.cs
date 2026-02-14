@@ -1,5 +1,3 @@
-using TreeTopic.Models;
-
 namespace TreeTopic.Services;
 
 /// <summary>

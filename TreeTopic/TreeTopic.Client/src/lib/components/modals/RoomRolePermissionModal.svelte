@@ -5,6 +5,7 @@
   import type { AvailablePermissions, Role } from '$lib/types/permissions';
   import { ui, activeModals } from '$lib/stores/ui';
   import { page } from '$app/stores';
+  import { formatPermissionName } from '$lib/utils/permission';
 
   const modalId = 'room-role-permission';
   let modal = $derived.by(() => $activeModals.find((m) => m.id === modalId) ?? null);
@@ -109,13 +110,6 @@
 
   function hasPermission(roleName: string, permissionName: string): boolean {
     return (rolePermissions[roleName] || []).includes(permissionName);
-  }
-
-  function formatPermissionName(name: string): string {
-    return name.split('.')
-      .map((part) => { if (part === 'room' || part === 'topic') return ''; return part.charAt(0).toUpperCase() + part.slice(1); })
-      .filter((p) => p !== '')
-      .join(' ').trim();
   }
 
   let selectedRole = $derived.by(() => roles.find((r) => r.name === selectedRoleName) ?? null);

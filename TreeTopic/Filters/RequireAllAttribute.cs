@@ -134,9 +134,6 @@ public class RequireAllAttribute : Attribute, IAsyncActionFilter
             return;
         }
 
-        logger.LogDebug(
-            "[RequireAll] All permissions granted: UserId={UserId}, Requirements={Requirements}",
-            permContext.UserId, string.Join(", ", _requirements.Select(r => r.ToString())));
         await next();
     }
 }
