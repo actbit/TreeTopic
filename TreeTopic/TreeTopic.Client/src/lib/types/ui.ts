@@ -1,19 +1,13 @@
-/* UI-specific type definitions */
 
-/**
- * Available view modes for displaying messages and topics
- */
 export type ViewMode =
-  | 'default'      // Standard chronological message view
-  | 'user'         // Grouped by user
-  | 'document'     // Grouped by document/attachment
-  | 'image'        // Gallery view of images
-  | 'topic'        // Messages by topic
-  | 'search';      // Search results
+  | 'default'
+  | 'user'
+  | 'document'
+  | 'image'
+  | 'topic'
+  | 'search';
 
-/**
- * UI state management
- */
+
 export interface UIState {
   viewMode: ViewMode;
   sidebarCollapsed: boolean;
@@ -24,9 +18,7 @@ export interface UIState {
   selectedItems: Set<string>;
 }
 
-/**
- * Drag and drop state
- */
+
 export interface DragState {
   isDragging: boolean;
   draggedItemId: string | null;
@@ -36,9 +28,6 @@ export interface DragState {
   offset: { x: number; y: number } | null;
 }
 
-/**
- * Modal configuration
- */
 export interface ModalConfig {
   id: string;
   title: string;
@@ -48,12 +37,9 @@ export interface ModalConfig {
   onConfirm?: () => void | Promise<void>;
   onCancel?: () => void | Promise<void>;
   isLoading?: boolean;
-  isDangerous?: boolean; // For delete confirmations
+  isDangerous?: boolean; 
 }
 
-/**
- * Context menu item configuration
- */
 export interface ContextMenuItem {
   id: string;
   label: string;
@@ -65,9 +51,7 @@ export interface ContextMenuItem {
   subItems?: ContextMenuItem[];
 }
 
-/**
- * Pagination state
- */
+
 export interface PaginationState {
   currentPage: number;
   pageSize: number;
@@ -77,24 +61,15 @@ export interface PaginationState {
   hasPreviousPage: boolean;
 }
 
-/**
- * Sort configuration
- */
 export interface SortConfig {
   field: string;
   direction: 'asc' | 'desc';
 }
 
-/**
- * Filter configuration
- */
 export interface FilterConfig {
   [key: string]: string | number | boolean | null;
 }
 
-/**
- * Search state
- */
 export interface SearchState {
   query: string;
   filters: FilterConfig;
@@ -105,9 +80,6 @@ export interface SearchState {
   error: string | null;
 }
 
-/**
- * Notification state
- */
 export interface Notification {
   id: string;
   type: 'success' | 'error' | 'warning' | 'info';
@@ -120,18 +92,12 @@ export interface Notification {
   createdAt: number;
 }
 
-/**
- * Loading state
- */
 export interface LoadingState {
   isLoading: boolean;
   error: Error | null;
   progress?: number; // 0-100 for multi-step operations
 }
 
-/**
- * Form state
- */
 export interface FormState<T> {
   values: T;
   errors: Record<keyof T, string | null>;
@@ -142,9 +108,6 @@ export interface FormState<T> {
   submitError: string | null;
 }
 
-/**
- * Topic tree node for hierarchical display
- */
 export interface TopicTreeNode {
   id: string;
   title: string;
@@ -161,9 +124,6 @@ export interface TopicTreeNode {
   canManagePermissions: boolean;
 }
 
-/**
- * Message view item with computed properties
- */
 export interface MessageViewItem {
   id: string;
   userId: string;
@@ -182,9 +142,6 @@ export interface MessageViewItem {
   canDelete: boolean;
 }
 
-/**
- * Attachment view with metadata
- */
 export interface AttachmentView {
   id: string;
   fileName: string;
@@ -196,9 +153,6 @@ export interface AttachmentView {
   uploadedBy: string;
 }
 
-/**
- * Brainstorm idea card
- */
 export interface IdeaCardView {
   id: string;
   boardId: string;
@@ -228,9 +182,6 @@ export interface IdeaCardView {
   isEditing: boolean;
 }
 
-/**
- * Room view for display
- */
 export interface RoomView {
   id: string;
   name: string;
@@ -245,14 +196,8 @@ export interface RoomView {
   canManageMembers: boolean;
 }
 
-/**
- * User presence status
- */
 export type PresenceStatus = 'online' | 'away' | 'offline' | 'idle';
 
-/**
- * User presence view
- */
 export interface UserPresence {
   userId: string;
   userName: string;
@@ -261,9 +206,6 @@ export interface UserPresence {
   currentActivity?: string;
 }
 
-/**
- * Keyboard shortcut configuration
- */
 export interface KeyboardShortcut {
   key: string;
   ctrl?: boolean;
@@ -274,18 +216,12 @@ export interface KeyboardShortcut {
   description: string;
 }
 
-/**
- * Breadcrumb item for navigation
- */
 export interface BreadcrumbItem {
   label: string;
   href?: string;
   onClick?: () => void;
 }
 
-/**
- * Permission display information
- */
 export interface PermissionInfo {
   roleId: string;
   roleName: string;
@@ -296,9 +232,6 @@ export interface PermissionInfo {
   description?: string;
 }
 
-/**
- * Viewport dimensions
- */
 export interface ViewportSize {
   width: number;
   height: number;
@@ -307,18 +240,12 @@ export interface ViewportSize {
   isDesktop: boolean;
 }
 
-/**
- * Animation state for components
- */
 export interface AnimationState {
   isAnimating: boolean;
   animationType?: 'slideIn' | 'fadeIn' | 'scaleIn';
   duration?: number;
 }
 
-/**
- * ApplicationUser model for user settings
- */
 export interface ApplicationUser {
   id: string;
   tenantId: string;
@@ -341,9 +268,6 @@ export interface ApplicationUser {
   sub: string | null;
 }
 
-/**
- * ApplicationUser DTO - バックエンドから返される必要最小限の情報
- */
 export interface ApplicationUserDto {
   id: string;
   userName: string;

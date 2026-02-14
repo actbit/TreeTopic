@@ -48,14 +48,7 @@ public class EncryptionService
                 // 開発環境では便宜上キーを自動生成
                 var generatedKey = GenerateNewKey();
                 _logger.LogWarning(
-                    "╔════════════════════════════════════════════════════════════════╗\n" +
-                    "║ No encryption key configured. Generated temporary key:        ║\n" +
-                    "║ {Key}\n" +
-                    "║                                                                ║\n" +
-                    "║ For persistent use, set one of:                               ║\n" +
-                    "║ 1. Environment variable: ENCRYPTION_KEY                       ║\n" +
-                    "║ 2. appsettings.json: \"Encryption\": {{ \"Key\": \"...\" }}      ║\n" +
-                    "╚════════════════════════════════════════════════════════════════╝",
+                    "No encryption key configured. Generated temporary key: {Key}. Set ENCRYPTION_KEY env var or Encryption:Key in appsettings.json for persistence.",
                     generatedKey);
 
                 keyString = generatedKey;

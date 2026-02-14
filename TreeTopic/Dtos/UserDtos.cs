@@ -14,7 +14,7 @@ public class UserSummaryDto
     public string? IconUrl { get; set; }
     public IList<string>? Roles { get; set; }
 
-    // Ban status
+    // BAN状態
     public bool IsBanned { get; set; }
     public string? BannedAt { get; set; }
     public string? BannedBy { get; set; }

@@ -1,13 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using TreeTopic.Common;
 using TreeTopic.Dtos;
-using TreeTopic.Models;
 using TreeTopic.Services;
-using System.Security.Claims;
-using MaskedUUID.AspNetCore.Types;
-using Npgsql;
 
 namespace TreeTopic.Controllers;
 

@@ -105,7 +105,7 @@ public class RoomPermissionsController : BaseController
             return Forbid();
         }
 
-        // Validate permission name
+        // 権限名を検証
         var validRoomPermissions = Permissions.PermissionHelper.GetRoomPermissions();
         if (!validRoomPermissions.Contains(request.PermissionName))
         {

@@ -192,7 +192,3 @@ public class EFCoreMultiTenantStore : IMultiTenantStore<ApplicationTenantInfo>
         throw new NotImplementedException("Use TenantManagementService.DeleteTenantAsync instead");
     }
 }
-
-
-
-

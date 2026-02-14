@@ -6,10 +6,8 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using MaskedUUID.AspNetCore.Types;
 using System.Security.Claims;
-using Finbuckle.MultiTenant;
 using TreeTopic.Dtos;
 using TreeTopic.Models;
-using TreeTopic.Constants;
 using TreeTopic.Services;
 using TreeTopic.Permissions;
 

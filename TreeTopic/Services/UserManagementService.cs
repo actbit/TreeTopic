@@ -112,11 +112,11 @@ public class UserManagementService : BaseService
                 return Result<(ApplicationUser, IList<string>)>.NotFound($"Role '{roleName}' does not exist");
             }
 
-            // Check if user has this role
+            // ユーザーがこのロールを持っているか確認
             var currentRoles = await _userManager.GetRolesAsync(user);
             if (!currentRoles.Contains(roleName))
             {
-                // Does not have role, return success with current roles
+                // ロールを持っていない場合は成功として現在のロールを返す
                 return Result<(ApplicationUser, IList<string>)>.Success((user, currentRoles));
             }
 
@@ -138,7 +138,7 @@ public class UserManagementService : BaseService
         {
             var email = request.Email!.Trim().ToLowerInvariant();
 
-            // Check if user already exists
+            // ユーザーが既に存在するか確認
             var existingUser = await _userManager.FindByEmailAsync(email);
             if (existingUser != null)
             {

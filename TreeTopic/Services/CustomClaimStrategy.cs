@@ -106,7 +106,3 @@ public class CustomClaimStrategy : IMultiTenantStrategy
         return null;
     }
 }
-
-
-
-

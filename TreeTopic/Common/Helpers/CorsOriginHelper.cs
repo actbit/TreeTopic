@@ -37,7 +37,7 @@ public static class CorsOriginHelper
 
             if (isWildcardHost)
             {
-                // Kestrel wildcard host cannot be used as CORS origin.
+                // KestrelワイルドカードホストはCORSオリジンとして使用できない
                 set.Add($"{uri.Scheme}://localhost:{uri.Port}");
                 set.Add($"{uri.Scheme}://127.0.0.1:{uri.Port}");
                 return;
@@ -57,7 +57,7 @@ public static class CorsOriginHelper
                 .Split(new[] { ';', ',' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         }
 
-        // Prefer explicit appsettings/environment section values when provided.
+        // 明示的なappsettings/environmentセクション値を優先
         var explicitOrigins = NormalizeOrigins(
             configuration.GetSection(configuredSectionKey).Get<string[]>() ?? Array.Empty<string>()
         );
@@ -68,7 +68,7 @@ public static class CorsOriginHelper
 
         var origins = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        // Fallback to runtime URL related settings.
+        // 実行時URL関連設定にフォールバック
         foreach (var candidate in SplitCandidates(configuration["Urls"]))
         {
             AddOrigin(origins, candidate);

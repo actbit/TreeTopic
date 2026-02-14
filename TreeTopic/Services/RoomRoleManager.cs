@@ -16,7 +16,7 @@ public class RoomRoleManager
         _logger = logger;
     }
 
-    public async Task<List<RoomRole>>> ListAsync(CancellationToken cancellationToken = default)
+    public async Task<List<RoomRole>> ListAsync(CancellationToken cancellationToken = default)
     {
         return await _context.RoomRoles
             .Include(r => r.Permissions)
@@ -134,7 +134,7 @@ public class RoomRoleManager
             cancellationToken);
     }
 
-    public async Task<List<string>>> GetPermissionNamesAsync(
+    public async Task<List<string>> GetPermissionNamesAsync(
         Guid roleId,
         CancellationToken cancellationToken = default)
     {

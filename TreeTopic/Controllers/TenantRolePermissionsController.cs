@@ -101,7 +101,7 @@ public class TenantRolePermissionsController : ControllerBase
         [FromBody] AddTenantPermissionRequest request,
         CancellationToken cancellationToken)
     {
-        // Validate permission name
+        // 権限名を検証
         var validTenantPermissions = Permissions.PermissionHelper.GetTenantPermissions();
         if (!validTenantPermissions.Contains(request.PermissionName))
         {

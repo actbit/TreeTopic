@@ -55,7 +55,7 @@ public class RoomRoleManagementService : BaseService
         {
             var cleanName = request.Name!.Trim();
 
-            // Check if role already exists
+            // ロールが既に存在するか確認
             if (await _roleRepository.ExistsAsync(cleanName, cancellationToken))
             {
                 return Result<RoomRole>.Conflict($"Role '{cleanName}' already exists");
@@ -97,7 +97,7 @@ public class RoomRoleManagementService : BaseService
 
             var cleanName = request.Name.Trim();
 
-            // Check if another role with the same name exists
+            // 同名の別ロールが存在するか確認
             var existingRole = await _roleRepository.FindByNameAsync(cleanName, cancellationToken);
             if (existingRole != null && existingRole.Id != id)
             {
@@ -108,7 +108,6 @@ public class RoomRoleManagementService : BaseService
             role.Description = request.Description?.Trim();
             role.SortOrder = request.SortOrder;
 
-            // Update permissions
             role.Permissions.Clear();
             foreach (var permName in request.Permissions)
             {

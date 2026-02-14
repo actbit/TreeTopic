@@ -7,7 +7,6 @@ using TreeTopic.Dtos;
 using TreeTopic.Services;
 using TreeTopic.Filters;
 using TreeTopic.Permissions;
-using TreeTopic.Models;
 using System.Security.Claims;
 
 namespace TreeTopic.Controllers;

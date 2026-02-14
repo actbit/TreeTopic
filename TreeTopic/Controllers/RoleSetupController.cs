@@ -65,12 +65,8 @@ public class RoleSetupController : ControllerBase
     [HttpDelete("{roleName}")]
     public async Task<IActionResult> DeleteRole(string tenant, string roleName)
     {
-        // 属性で検証済みのSetupTokenを取得
-        var setupToken = HttpContext.Items["ValidatedSetupToken"]?.ToString();
-
         var deletionRequest = new SetupRoleDeletionRequest
         {
-            SetupToken = setupToken!,
             RoleName = roleName
         };
 
@@ -91,10 +87,6 @@ public class RoleSetupController : ControllerBase
         {
             return ValidationProblem(ModelState);
         }
-
-        // 属性で検証済みのSetupTokenを取得
-        var setupToken = HttpContext.Items["ValidatedSetupToken"]?.ToString();
-        request.SetupToken = setupToken!;
 
         var result = await _roleManagementService.AddPermissionToRoleAsync(tenant, request);
 
@@ -128,10 +120,6 @@ public class RoleSetupController : ControllerBase
             return ValidationProblem(ModelState);
         }
 
-        // 属性で検証済みのSetupTokenを取得
-        var setupToken = HttpContext.Items["ValidatedSetupToken"]?.ToString();
-        request.SetupToken = setupToken!;
-
         var result = await _roleManagementService.DeletePermissionFromRoleAsync(tenant, request);
 
         if (result.IsFailure)
@@ -149,10 +137,6 @@ public class RoleSetupController : ControllerBase
         {
             return ValidationProblem(ModelState);
         }
-
-        // 属性で検証済みのSetupTokenを取得
-        var setupToken = HttpContext.Items["ValidatedSetupToken"]?.ToString();
-        request.SetupToken = setupToken!;
 
         var result = await _roleManagementService.SetupDefaultRoleAsync(tenant, request);
 

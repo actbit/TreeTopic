@@ -101,7 +101,7 @@ public class MessageManagementService : BaseService, IMessageManagementService
 
     private string GetTenantUploadsFolderName()
     {
-        // Prefer the tenant identifier (matches route segment), fallback to internal tenant id.
+        // テナント識別子（ルートセグメントに一致）を優先、なければ内部テナントIDにフォールバック
         return CurrentTenantIdentifier
                ?? CurrentTenantId
                ?? "default";
@@ -414,7 +414,6 @@ public class MessageManagementService : BaseService, IMessageManagementService
     {
         var topicId = (Guid)dto.Id;
 
-        // Get MessageCount
         var messageCount = await _dbContext.Messages
             .CountAsync(m => m.TopicId == topicId, cancellationToken);
 
@@ -993,7 +992,7 @@ public class MessageManagementService : BaseService, IMessageManagementService
                 await ProcessUploadedFilesAsync(message, request.Files, cancellationToken);
             }
 
-            // Ensure files are available on response DTO.
+            // レスポンスDTOでファイルを利用可能にする
             message.Files = await _fileRepository.Query()
                 .Where(f => f.MessageId == message.Id)
                 .ToListAsync(cancellationToken);

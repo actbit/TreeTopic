@@ -274,7 +274,7 @@ public class UsersController : BaseController
     }
 
     /// <summary>
-    /// Create a new user (only allowed when OIDC is not configured)
+    /// 新規ユーザー作成（OIDC未設定時のみ許可）
     /// </summary>
     [HttpPost]
     [Authorize]
@@ -312,7 +312,7 @@ public class UsersController : BaseController
     }
 
     /// <summary>
-    /// Ban a user
+    /// ユーザーをBANする
     /// </summary>
     [HttpPost("{userId}/ban")]
     [Authorize]
@@ -345,7 +345,7 @@ public class UsersController : BaseController
     }
 
     /// <summary>
-    /// Unban a user
+    /// ユーザーのBANを解除する
     /// </summary>
     [HttpDelete("{userId}/ban")]
     [Authorize]

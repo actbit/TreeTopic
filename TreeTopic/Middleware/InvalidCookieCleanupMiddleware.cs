@@ -47,14 +47,14 @@ public class InvalidCookieCleanupMiddleware
             if (!key.StartsWith(_baseCookieName, StringComparison.OrdinalIgnoreCase))
                 continue;
 
-            // Only handle base cookie or tenant-suffixed cookie: ".TreeTopic.Auth" or ".TreeTopic.Auth_{tenant}"
+            // ベースクッキーまたはテナントサフィックス付きクッキーのみ処理: ".TreeTopic.Auth" または ".TreeTopic.Auth_{tenant}"
             var baseKey = key;
             if (!string.Equals(key, _baseCookieName, StringComparison.OrdinalIgnoreCase))
             {
                 if (key.Length <= _baseCookieName.Length + 1 || key[_baseCookieName.Length] != tenantSeparator[0])
                     continue;
 
-                // validate tenant suffix chars
+                // テナントサフィックス文字を検証
                 if (!key.EndsWith(tenantSuffix, StringComparison.OrdinalIgnoreCase))
                     continue;
 
@@ -81,7 +81,7 @@ public class InvalidCookieCleanupMiddleware
                 continue;
             }
 
-            // If this is a chunk cookie (ends with C + digits), delete the chunk set for its base.
+            // チャンククッキー（C + 数字で終わる）の場合、そのベースのチャンクセットを削除
             var lastIndex = key.LastIndexOf('C');
             if (lastIndex > _baseCookieName.Length &&
                 lastIndex < key.Length - 1)
@@ -99,7 +99,7 @@ public class InvalidCookieCleanupMiddleware
                     continue;
 
                 baseKey = key.Substring(0, lastIndex);
-                // Ensure baseKey still matches base cookie pattern to avoid accidental deletions.
+                // baseKeyがベースクッキーパターンに一致することを確認（誤削除を防ぐ）
                 if (string.Equals(baseKey, _baseCookieName, StringComparison.OrdinalIgnoreCase) ||
                     (baseKey.Length > _baseCookieName.Length + 1 &&
                      baseKey.StartsWith(_baseCookieName + tenantSeparator, StringComparison.OrdinalIgnoreCase) &&

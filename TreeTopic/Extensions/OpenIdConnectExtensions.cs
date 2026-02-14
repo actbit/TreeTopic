@@ -418,7 +418,3 @@ public static class OpenIdConnectExtensions
     }
 
 }
-
-
-
-

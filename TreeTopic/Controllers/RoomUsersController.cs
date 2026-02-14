@@ -78,7 +78,7 @@ public class RoomUsersController : ControllerBase
         if (entity == null)
             return NotFound();
 
-        // Ensure ApplicationUser has an icon if using main icon
+        // メインアイコン使用時はApplicationUserにアイコンがあることを確認
         if (entity.UseMainIcon && entity.ApplicationUser != null)
         {
             var iconFileName = await EnsureApplicationUserIconAsync(entity.ApplicationUser, cancellationToken);
@@ -129,7 +129,7 @@ public class RoomUsersController : ControllerBase
             _roomUserRepository.Update(existing);
             await _roomUserRepository.SaveChangesAsync(cancellationToken);
 
-            // Ensure ApplicationUser has icon if using main icon
+            // メインアイコン使用時はApplicationUserにアイコンがあることを確認
             if (existing.UseMainIcon && existing.ApplicationUser != null)
             {
                 var iconFileName = await EnsureApplicationUserIconAsync(existing.ApplicationUser, cancellationToken);
@@ -160,7 +160,7 @@ public class RoomUsersController : ControllerBase
 
         await _roomUserManager.CreateMemberAsync(toCreate, cancellationToken);
 
-        // Ensure ApplicationUser has icon
+        // ApplicationUserにアイコンがあることを確認
         if (toCreate.UseMainIcon)
         {
             var iconFileName = await EnsureApplicationUserIconAsync(currentApplicationUser, cancellationToken);
@@ -386,15 +386,15 @@ public class RoomUsersController : ControllerBase
 
     private async Task<string?> EnsureApplicationUserIconAsync(ApplicationUser user, CancellationToken cancellationToken)
     {
-        // If user already has an icon file, nothing to do
+        // 既にアイコンファイルがある場合は何もしない
         if (!string.IsNullOrWhiteSpace(user.IconFileName))
             return user.IconFileName;
 
-        // Generate default icon for user if they don't have one
+        // アイコンがない場合はデフォルトアイコンを生成
         var displayName = user.DisplayName ?? user.UserName ?? user.Email ?? "User";
         var generatedFileName = await _iconService.EnsureDefaultUserIconAsync(user, cancellationToken);
 
-        // Update the user's icon filename
+        // ユーザーのアイコンファイル名を更新
         if (generatedFileName != null)
         {
             user.IconFileName = generatedFileName;
@@ -412,7 +412,7 @@ public class RoomUsersController : ControllerBase
             Id = entity.Id,
             ApplicationUserId = entity.ApplicationUserId,
             RoomId = entity.RoomId,
-            // DisplayName and IconUrl are already resolved based on UseMainName/UseMainIcon settings
+            // DisplayNameとIconUrlはUseMainName/UseMainIcon設定に基づいて解決済み
             DisplayName = RoomUserNameHelper.ResolveDisplayName(entity),
             IconUrl = _iconService.GetRoomUserIconUrl(entity),
             UseMainName = entity.UseMainName,

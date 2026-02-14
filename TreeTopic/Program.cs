@@ -178,8 +178,6 @@ public class Program
                     },
                     OnValidatePrincipal = context =>
                     {
-                        var tenantId = context.HttpContext.GetRouteValue("tenant")?.ToString();
-
                         if (!context.Properties.Items.ContainsKey(AuthenticationConstants.TenantClaimType))
                         {
                             var tenantId = context.HttpContext.GetRouteValue("tenant")?.ToString();
@@ -382,9 +380,6 @@ public class Program
                                 new OpenIdConnectConfigurationRetriever(),
                                 httpDocumentRetriever);
                         }
-                        else
-                        {
-                        }
                     }
 
                     if (!string.IsNullOrEmpty(tenantDetail.TenantEncryptionKey) &&
@@ -404,9 +399,6 @@ public class Program
                         catch (Exception)
                         {
                         }
-                    }
-                    else if (!string.IsNullOrEmpty(tenantDetail.TenantEncryptionKey) || !string.IsNullOrEmpty(tenantDetail.OpenIdConnectClientSecret))
-                    {
                     }
                 }
                 else
@@ -658,7 +650,7 @@ public class Program
                 shouldUseForwardedHeaders = true;
                 app.Logger.LogInformation("ForwardedHeaders is enabled by configuration");
             }
-            else // Auto mode (default)
+            else // 自動モード（デフォルト）
             {
                 // 環境変数やヘッダーの有無でリバースプロキシの有無を判定
                 // Docker環境では通常Nginx等のリバースプロキシが前に配置される

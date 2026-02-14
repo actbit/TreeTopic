@@ -451,7 +451,6 @@ public class TopicManagementService : BaseService, ITopicManagementService
 
     private async Task<TopicRealtimeDto> MapToRealtimeAsync(Guid topicId, TopicDetailDto dto, CancellationToken cancellationToken)
     {
-        // Get MessageCount
         var messageCount = await _dbContext.Messages
             .CountAsync(m => m.TopicId == topicId, cancellationToken);
 
