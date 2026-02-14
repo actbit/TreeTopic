@@ -79,9 +79,6 @@ function createFilesStore() {
         };
       });
     },
-    /**
-     * Update file
-     */
     updateFile: (fileId: string, updates: Partial<Material>) => {
       update((state) => ({
         ...state,
@@ -90,9 +87,6 @@ function createFilesStore() {
         ),
       }));
     },
-    /**
-     * Delete file
-     */
     deleteFile: (fileId: string) => {
       update((state) => ({
         ...state,
@@ -177,17 +171,11 @@ function createFilesStore() {
 
 export const files = createFilesStore();
 
-/**
- * Derived stores
- */
 export const fileList = derived(files, ($files) => $files.files);
 export const filesLoading = derived(files, ($files) => $files.isLoading);
 export const filesError = derived(files, ($files) => $files.error);
 export const uploads = derived(files, ($files) => $files.uploads);
 
-/**
- * Get files by type
- */
 export const imageFiles = derived(fileList, ($files) =>
   $files.filter((f) => f.fileType === 'image')
 );
@@ -200,63 +188,36 @@ export const documentFiles = derived(fileList, ($files) =>
   $files.filter((f) => f.fileType === 'document')
 );
 
-/**
- * Get files by room
- */
 export const getFilesByRoom = (roomId: string) =>
   derived(fileList, ($files) =>
     $files.filter((f) => f.roomId === roomId)
   );
 
-/**
- * Get files by message
- */
 export const getFilesByMessage = (messageId: string) =>
   derived(fileList, ($files) =>
     $files.filter((f) => f.messageId === messageId)
   );
 
-/**
- * Get file by ID
- */
 export const getFileById = (fileId: string) =>
   derived(fileList, ($files) => $files.find((f) => f.id === fileId));
 
-/**
- * Get upload progress by file ID
- */
 export const getUploadProgress = (fileId: string) =>
   derived(uploads, ($uploads) => $uploads.get(fileId));
 
-/**
- * Get all active uploads
- */
 export const activeUploads = derived(uploads, ($uploads) =>
   Array.from($uploads.values()).filter((u) => u.status === 'uploading')
 );
 
-/**
- * Get upload completion percentage
- */
 export const uploadProgress = (fileId: string) =>
   derived(
     getUploadProgress(fileId),
     ($progress) => $progress?.progress ?? 0
   );
 
-/**
- * Helper functions to interact with files store
- */
 export function addFile(file: Material) {
   files.addFile(file);
 }
 
-/**
- * Update file metadata via API
- * @param fileId File ID to update
- * @param updates Partial file data to update
- * @param tenant Tenant identifier
- */
 export async function updateFile(fileId: string, updates: Partial<Material>, tenant: string) {
   try {
     // Call backend API to update file
@@ -274,11 +235,6 @@ export async function updateFile(fileId: string, updates: Partial<Material>, ten
   }
 }
 
-/**
- * Delete file via API
- * @param fileId File ID to delete
- * @param tenant Tenant identifier
- */
 export async function deleteFile(fileId: string, tenant: string) {
   try {
     // Call backend API to delete file

@@ -199,23 +199,14 @@ export const totalUnreadCount = derived(roomList, ($rooms) =>
   ($rooms || []).reduce((sum, room) => sum + (room?.unreadCount ?? 0), 0)
 );
 
-/**
- * Get active (non-archived) rooms
- */
 export const activeRooms = derived(roomList, ($rooms) =>
   ($rooms || []).filter((r) => r && !r.isArchived)
 );
 
-/**
- * Get archived rooms
- */
 export const archivedRooms = derived(roomList, ($rooms) =>
   ($rooms || []).filter((r) => r && r.isArchived)
 );
 
-/**
- * Helper functions to interact with rooms store
- */
 export function setCurrentRoom(room: Room | null) {
   rooms.setCurrentRoom(room);
 }

@@ -1,9 +1,6 @@
 import { writable, derived } from 'svelte/store';
 import type { ViewMode, ModalConfig, Notification, DragState } from '$lib/types/ui';
 
-/**
- * Global UI state
- */
 export interface UIStateData {
   viewMode: ViewMode;
   sidebarCollapsed: boolean;
@@ -21,9 +18,6 @@ export interface UIStateData {
   viewportWidth: number;
 }
 
-/**
- * Create UI store
- */
 // Store notification timeout IDs for cleanup
 const notificationTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
@@ -55,16 +49,10 @@ function createUIStore() {
 
   return {
     subscribe,
-    /**
-     * Set view mode
-     */
     setViewMode: (mode: ViewMode) => {
       update((state) => ({ ...state, viewMode: mode }));
       localStorage.setItem('ui_view_mode', mode);
     },
-    /**
-     * Toggle sidebar
-     */
     toggleSidebar: () => {
       update((state) => ({ ...state, sidebarCollapsed: !state.sidebarCollapsed }));
       update((state) => {
@@ -72,16 +60,10 @@ function createUIStore() {
         return state;
       });
     },
-    /**
-     * Set sidebar collapsed state
-     */
     setSidebarCollapsed: (collapsed: boolean) => {
       update((state) => ({ ...state, sidebarCollapsed: collapsed }));
       localStorage.setItem('ui_sidebar_collapsed', collapsed.toString());
     },
-    /**
-     * Toggle subpanel
-     */
     toggleSubpanel: () => {
       update((state) => ({ ...state, subpanelCollapsed: !state.subpanelCollapsed }));
       update((state) => {
@@ -89,16 +71,10 @@ function createUIStore() {
         return state;
       });
     },
-    /**
-     * Set subpanel collapsed state
-     */
     setSubpanelCollapsed: (collapsed: boolean) => {
       update((state) => ({ ...state, subpanelCollapsed: collapsed }));
       localStorage.setItem('ui_subpanel_collapsed', collapsed.toString());
     },
-    /**
-     * Open modal
-     */
     openModal: (modal: ModalConfig) => {
       update((state) => ({
         ...state,
@@ -107,27 +83,18 @@ function createUIStore() {
           : [...state.activeModals, modal],
       }));
     },
-    /**
-     * Close modal
-     */
     closeModal: (modalId: string) => {
       update((state) => ({
         ...state,
         activeModals: state.activeModals.filter((m) => m.id !== modalId),
       }));
     },
-    /**
-     * Close all modals
-     */
     closeAllModals: () => {
       update((state) => ({
         ...state,
         activeModals: [],
       }));
     },
-    /**
-     * Add notification
-     */
     addNotification: (notification: Omit<Notification, 'id' | 'createdAt'>) => {
       const newNotification: Notification = {
         ...notification,
@@ -151,9 +118,6 @@ function createUIStore() {
 
       return newNotification.id;
     },
-    /**
-     * Remove notification
-     */
     removeNotification: (notificationId: string) => {
       // Clear the auto-remove timeout if it exists
       const timer = notificationTimers.get(notificationId);
@@ -167,9 +131,6 @@ function createUIStore() {
         notifications: state.notifications.filter((n) => n.id !== notificationId),
       }));
     },
-    /**
-     * Clear all notifications
-     */
     clearNotifications: () => {
       // Clear all notification timeouts
       notificationTimers.forEach((timer) => clearTimeout(timer));
@@ -180,9 +141,6 @@ function createUIStore() {
         notifications: [],
       }));
     },
-    /**
-     * Start drag operation
-     */
     startDrag: (dragState: DragState) => {
       update((state) => ({
         ...state,
@@ -190,18 +148,12 @@ function createUIStore() {
         dragState,
       }));
     },
-    /**
-     * Update drag state
-     */
     updateDragState: (dragState: Partial<DragState>) => {
       update((state) => ({
         ...state,
         dragState: state.dragState ? { ...state.dragState, ...dragState } : null,
       }));
     },
-    /**
-     * End drag operation
-     */
     endDrag: () => {
       update((state) => ({
         ...state,
@@ -209,9 +161,6 @@ function createUIStore() {
         dragState: null,
       }));
     },
-    /**
-     * Show context menu
-     */
     showContextMenu: (x: number, y: number) => {
       update((state) => ({
         ...state,
@@ -219,9 +168,6 @@ function createUIStore() {
         contextMenuPosition: { x, y },
       }));
     },
-    /**
-     * Hide context menu
-     */
     hideContextMenu: () => {
       update((state) => ({
         ...state,
@@ -229,9 +175,6 @@ function createUIStore() {
         contextMenuPosition: null,
       }));
     },
-    /**
-     * Select item
-     */
     selectItem: (itemId: string) => {
       update((state) => {
         const selected = new Set(state.selectedItems);
@@ -239,9 +182,6 @@ function createUIStore() {
         return { ...state, selectedItems: selected };
       });
     },
-    /**
-     * Deselect item
-     */
     deselectItem: (itemId: string) => {
       update((state) => {
         const selected = new Set(state.selectedItems);
@@ -249,9 +189,6 @@ function createUIStore() {
         return { ...state, selectedItems: selected };
       });
     },
-    /**
-     * Toggle item selection
-     */
     toggleItemSelection: (itemId: string) => {
       update((state) => {
         const selected = new Set(state.selectedItems);
@@ -263,18 +200,12 @@ function createUIStore() {
         return { ...state, selectedItems: selected };
       });
     },
-    /**
-     * Clear selection
-     */
     clearSelection: () => {
       update((state) => ({
         ...state,
         selectedItems: new Set(),
       }));
     },
-    /**
-     * Set viewport size
-     */
     setViewportSize: (width: number, height: number) => {
       update((state) => {
         const isMobile = width < 768;
@@ -290,9 +221,6 @@ function createUIStore() {
         };
       });
     },
-    /**
-     * Restore UI state from localStorage
-     */
     restoreState: () => {
       const savedViewMode = localStorage.getItem('ui_view_mode');
       const savedSidebarCollapsed = localStorage.getItem('ui_sidebar_collapsed');
@@ -310,9 +238,6 @@ function createUIStore() {
 
 export const ui = createUIStore();
 
-/**
- * Derived stores
- */
 export const viewMode = derived(ui, ($ui) => $ui.viewMode);
 export const sidebarCollapsed = derived(ui, ($ui) => $ui.sidebarCollapsed);
 export const subpanelCollapsed = derived(ui, ($ui) => $ui.subpanelCollapsed);
@@ -328,30 +253,18 @@ export const isTablet = derived(ui, ($ui) => $ui.isTablet);
 export const isDesktop = derived(ui, ($ui) => $ui.isDesktop);
 export const responsiveLayout = derived(ui, ($ui) => $ui.viewportWidth <= 1030);
 
-/**
- * Check if there are active modals
- */
 export const hasActiveModals = derived(activeModals, ($modals) => $modals.length > 0);
 
-/**
- * Get notifications count
- */
 export const notificationsCount = derived(
   notifications,
   ($notifs) => $notifs.length
 );
 
-/**
- * Get selection count
- */
 export const selectionCount = derived(
   selectedItems,
   ($selected) => $selected.size
 );
 
-/**
- * Modal store utilities
- */
 export const modals = {
   open: (id: string, title: string, data?: Record<string, unknown>) => {
     ui.openModal({ id, title, type: 'custom', data });

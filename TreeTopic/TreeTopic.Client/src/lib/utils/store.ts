@@ -1,9 +1,9 @@
 import type { Writable } from 'svelte/store';
 
 export const STORE_CACHE_TTL = {
-	SHORT: 30 * 1000, // 30 seconds - volatile data
-	MEDIUM: 5 * 60 * 1000, // 5 minutes - default
-	LONG: 15 * 60 * 1000 // 15 minutes - static data
+	SHORT: 30 * 1000,
+	MEDIUM: 5 * 60 * 1000,
+	LONG: 15 * 60 * 1000
 } as const;
 
 export interface CachedState {
@@ -57,20 +57,10 @@ export function createCachedUpdater<T extends CachedState>(
 	};
 }
 
-/**
- * Batch update multiple stores atomically
- * @param updates - Array of store update functions
- */
 export function batchUpdate(...updates: Array<() => void>): void {
-	// Svelte stores are updated synchronously, so we can just call them in sequence
 	updates.forEach((update) => update());
 }
 
-/**
- * Create a derived store that includes cache information
- * @param store - The source store
- * @returns An object with cache status information
- */
 export function getCacheInfo(state: CachedState): {
 	isValid: boolean;
 	age: number;
@@ -88,11 +78,6 @@ export function getCacheInfo(state: CachedState): {
 	};
 }
 
-/**
- * Persist store state to localStorage
- * @param key - Storage key
- * @param state - State to persist
- */
 export function persistToStorage<T>(key: string, state: T): void {
 	try {
 		localStorage.setItem(key, JSON.stringify(state));
@@ -101,11 +86,6 @@ export function persistToStorage<T>(key: string, state: T): void {
 	}
 }
 
-/**
- * Restore store state from localStorage
- * @param key - Storage key
- * @returns Restored state or null
- */
 export function restoreFromStorage<T>(key: string): T | null {
 	try {
 		const stored = localStorage.getItem(key);
