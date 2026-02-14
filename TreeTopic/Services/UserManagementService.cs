@@ -69,13 +69,7 @@ public class UserManagementService : BaseService
 
             var user = userResult.Data!;
 
-            var roleNameValidation = ValidationHelper.ValidateRequired(request.RoleName, "RoleName");
-            if (roleNameValidation.IsFailure)
-            {
-                return Result<(ApplicationUser, IList<string>)>.BadRequest(roleNameValidation.Error!.Message);
-            }
-
-            var roleName = request.RoleName.Trim();
+            var roleName = request.RoleName!.Trim();
             if (!await _roleManager.RoleExistsAsync(roleName))
             {
                 return Result<(ApplicationUser, IList<string>)>.NotFound($"Role '{roleName}' does not exist");
@@ -112,13 +106,7 @@ public class UserManagementService : BaseService
 
             var user = userResult.Data!;
 
-            var roleNameValidation = ValidationHelper.ValidateRequired(request.RoleName, "RoleName");
-            if (roleNameValidation.IsFailure)
-            {
-                return Result<(ApplicationUser, IList<string>)>.BadRequest(roleNameValidation.Error!.Message);
-            }
-
-            var roleName = request.RoleName.Trim();
+            var roleName = request.RoleName!.Trim();
             if (!await _roleManager.RoleExistsAsync(roleName))
             {
                 return Result<(ApplicationUser, IList<string>)>.NotFound($"Role '{roleName}' does not exist");
@@ -148,12 +136,6 @@ public class UserManagementService : BaseService
     {
         return await ExecuteAsync(async () =>
         {
-            var emailValidation = ValidationHelper.ValidateRequired(request.Email, "Email");
-            if (emailValidation.IsFailure)
-            {
-                return Result<(ApplicationUser, IList<string>)>.BadRequest(emailValidation.Error!.Message);
-            }
-
             var email = request.Email!.Trim().ToLowerInvariant();
 
             // Check if user already exists
@@ -195,12 +177,6 @@ public class UserManagementService : BaseService
             }
 
             var user = userResult.Data!;
-            
-            var reasonValidation = ValidationHelper.ValidateRequired(request.Reason, "Reason");
-            if (reasonValidation.IsFailure)
-            {
-                return Result<(ApplicationUser, IList<string>)>.BadRequest(reasonValidation.Error!.Message);
-            }
 
             user.IsBanned = true;
             user.BannedAt = DateTime.UtcNow;

@@ -16,7 +16,7 @@ namespace TreeTopic.Controllers;
 
 [ApiController]
 [Route("{tenant}/api/[controller]")]
-public class UsersController : ControllerBase
+public class UsersController : BaseController
 {
     private readonly UserManagementService _userManagementService;
     private readonly IconService _iconService;

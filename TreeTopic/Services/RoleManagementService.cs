@@ -1,7 +1,6 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using TreeTopic.Common;
-using TreeTopic.Common.Helpers;
 using TreeTopic.Dtos;
 using TreeTopic.Models;
 
@@ -41,13 +40,7 @@ public class RoleManagementService : BaseService
     {
         return await ExecuteAsync(async () =>
         {
-            var nameValidation = ValidationHelper.ValidateRequired(request.Name, "Role name");
-            if (nameValidation.IsFailure)
-            {
-                return Result<ApplicationRole>.BadRequest(nameValidation.Error!.Message);
-            }
-
-            var cleanName = request.Name.Trim();
+            var cleanName = request.Name!.Trim();
 
             if (await _roleManager.RoleExistsAsync(cleanName))
             {
@@ -72,13 +65,7 @@ public class RoleManagementService : BaseService
     {
         return await ExecuteAsync(async () =>
         {
-            var roleNameValidation = ValidationHelper.ValidateRequired(request.RoleName, "Role name");
-            if (roleNameValidation.IsFailure)
-            {
-                return Result.BadRequest(roleNameValidation.Error!.Message);
-            }
-
-            var role = await _roleManager.FindByNameAsync(request.RoleName.Trim());
+            var role = await _roleManager.FindByNameAsync(request.RoleName!.Trim());
             if (role == null)
             {
                 return Result.NotFound($"Role '{request.RoleName}' not found");
@@ -100,19 +87,7 @@ public class RoleManagementService : BaseService
     {
         return await ExecuteAsync(async () =>
         {
-            var roleNameValidation = ValidationHelper.ValidateRequired(request.RoleName, "Role name");
-            if (roleNameValidation.IsFailure)
-            {
-                return Result<Permission>.BadRequest(roleNameValidation.Error!.Message);
-            }
-
-            var permissionNameValidation = ValidationHelper.ValidateRequired(request.PermissionName, "Permission name");
-            if (permissionNameValidation.IsFailure)
-            {
-                return Result<Permission>.BadRequest(permissionNameValidation.Error!.Message);
-            }
-
-            var normalizedName = _roleManager.NormalizeKey(request.RoleName.Trim());
+            var normalizedName = _roleManager.NormalizeKey(request.RoleName!.Trim());
 
             var role = await _context.Roles
                 .AsNoTracking()
@@ -152,19 +127,7 @@ public class RoleManagementService : BaseService
     {
         return await ExecuteAsync(async () =>
         {
-            var roleNameValidation = ValidationHelper.ValidateRequired(request.RoleName, "Role name");
-            if (roleNameValidation.IsFailure)
-            {
-                return Result.BadRequest(roleNameValidation.Error!.Message);
-            }
-
-            var permissionNameValidation = ValidationHelper.ValidateRequired(request.PermissionName, "Permission name");
-            if (permissionNameValidation.IsFailure)
-            {
-                return Result.BadRequest(permissionNameValidation.Error!.Message);
-            }
-
-            var normalizedName = _roleManager.NormalizeKey(request.RoleName.Trim());
+            var normalizedName = _roleManager.NormalizeKey(request.RoleName!.Trim());
 
             var role = await _context.Roles
                 .AsNoTracking()
@@ -195,13 +158,7 @@ public class RoleManagementService : BaseService
     {
         return await ExecuteAsync(async () =>
         {
-            var nameValidation = ValidationHelper.ValidateRequired(request.DefaultRoleName, "Default role name");
-            if (nameValidation.IsFailure)
-            {
-                return Result<RoleSetupCompletionResponse>.BadRequest(nameValidation.Error!.Message);
-            }
-
-            var cleanName = request.DefaultRoleName.Trim();
+            var cleanName = request.DefaultRoleName!.Trim();
 
             using var transaction = await _context.Database.BeginTransactionAsync();
             try

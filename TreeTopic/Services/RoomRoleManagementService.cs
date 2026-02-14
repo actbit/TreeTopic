@@ -1,5 +1,4 @@
 using TreeTopic.Common;
-using TreeTopic.Common.Helpers;
 using TreeTopic.Dtos;
 using TreeTopic.Models;
 using TreeTopic.Repositories;
@@ -54,14 +53,7 @@ public class RoomRoleManagementService : BaseService
     {
         return await ExecuteAsync(async () =>
         {
-            // Validate name
-            var nameValidation = ValidationHelper.ValidateRequired(request.Name, "Name");
-            if (nameValidation.IsFailure)
-            {
-                return Result<RoomRole>.BadRequest(nameValidation.Error!.Message);
-            }
-
-            var cleanName = request.Name.Trim();
+            var cleanName = request.Name!.Trim();
 
             // Check if role already exists
             if (await _roleRepository.ExistsAsync(cleanName, cancellationToken))
@@ -95,13 +87,6 @@ public class RoomRoleManagementService : BaseService
             if (id == Guid.Empty)
             {
                 return Result<RoomRole>.BadRequest("Role ID cannot be empty");
-            }
-
-            // Validate name
-            var nameValidation = ValidationHelper.ValidateRequired(request.Name, "Name");
-            if (nameValidation.IsFailure)
-            {
-                return Result<RoomRole>.BadRequest(nameValidation.Error!.Message);
             }
 
             var role = await _roleRepository.FindByIdAsync(id, cancellationToken);
