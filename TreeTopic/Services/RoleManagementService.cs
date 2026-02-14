@@ -9,14 +9,17 @@ namespace TreeTopic.Services;
 public class RoleManagementService : BaseService
 {
     private readonly RoleManager<ApplicationRole> _roleManager;
+    private readonly SetupTokenValidationService _setupTokenValidator;
     private readonly ApplicationDbContext _context;
 
     public RoleManagementService(
         RoleManager<ApplicationRole> roleManager,
+        SetupTokenValidationService setupTokenValidator,
         ApplicationDbContext context,
         ILogger<RoleManagementService> logger) : base(logger)
     {
         _roleManager = roleManager;
+        _setupTokenValidator = setupTokenValidator;
         _context = context;
     }
 

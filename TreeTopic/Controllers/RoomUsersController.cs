@@ -495,7 +495,3 @@ public class RoomUsersController : ControllerBase
         return Ok(MapToDto(roomUser));
     }
 }
-
-
-
-

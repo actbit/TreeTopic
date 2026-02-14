@@ -98,9 +98,4 @@ public class DefaultUserController : ControllerBase
         var maskedId = new MaskedGuid(user.Id);
         return CreatedAtAction(nameof(CreateUser), new { tenant, user.Id, user.Email }, new { user = new { id = maskedId, email = user.Email } });
     }
-
 }
-
-
-
-
