@@ -93,9 +93,6 @@ public class Program
                 options.SlidingExpiration = true;
                 options.Cookie.HttpOnly = true;
 
-                // Session CookieのSameSite設定
-                // デフォルト: Lax（CSRF保護のため）
-                // OIDC Correlation/Nonce Cookieとは別設定
                 var sessionCookieSameSiteStr = builder.Configuration["Authentication:SessionCookieSameSite"];
 
                 SameSiteMode sameSiteMode;
@@ -105,11 +102,9 @@ public class Program
                 }
                 else
                 {
-                    // デフォルト: Lax（CSRF保護に必要、クロスサイトPOSTでCookie送信を防ぐ）
                     sameSiteMode = SameSiteMode.Lax;
                 }
 
-                // SameSite=Noneを使用する場合はSecureが必須
                 CookieSecurePolicy securePolicy;
                 if (sameSiteMode == SameSiteMode.None)
                 {
@@ -125,7 +120,6 @@ public class Program
                 options.Cookie.SameSite = sameSiteMode;
                 options.Cookie.SecurePolicy = securePolicy;
 
-                // Set cookie path per tenant to allow multiple tenant logins
                 options.Events = new CookieAuthenticationEvents
                 {
                     OnRedirectToLogin = ctx =>
@@ -162,7 +156,6 @@ public class Program
                             ? AuthenticationConstants.Paths.LoginPath
                             : $"/{tenantId}{AuthenticationConstants.Paths.LoginPath}";
 
-                        // returnUrlを保持 - 現在のパスをreturnUrlとして設定
                         var currentPath = ctx.Request.Path.Value ?? string.Empty;
                         var currentQuery = ctx.Request.QueryString.Value ?? string.Empty;
                         var fullReturnUrl = currentPath + currentQuery;
@@ -317,7 +310,7 @@ public class Program
         var altchaService = Altcha.CreateServiceBuilder()
             .UseSha256(altchaKey)
             .UseInMemoryStore()
-            .SetComplexity(20000, 30000)  // デフォルト50000-100000から厳しく（約2.5-3.3倍の難易度）
+            .SetComplexity(20000, 30000)
             .SetExpiryInSeconds(180)
             .Build();
         builder.Services.AddSingleton(altchaService);

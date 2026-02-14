@@ -1,16 +1,3 @@
-/**
- * API Client Wrapper
- *
- * This wrapper provides:
- * - Authentication management
- * - Request/response interceptors
- * - Error handling
- * - Tenant context management
- * - Response caching with TTL
- *
- * Note: This integrates with OpenAPI auto-generated client from 'src/lib/api/generated'
- */
-
 import { auth } from '$lib/stores/auth';
 import type { User, AuthContext } from '$lib/stores/auth';
 import { get as getStore } from 'svelte/store';
@@ -18,9 +5,6 @@ import { goto } from '$app/navigation';
 import * as cacheManager from './cache';
 import { activeModals, ui } from '$lib/stores/ui';
 
-/**
- * API Error
- */
 export class ApiError extends Error {
   constructor(
     public status: number,
@@ -33,26 +17,17 @@ export class ApiError extends Error {
   }
 }
 
-/**
- * API Client configuration
- */
 export interface ApiClientConfig {
   baseUrl: string;
   tenant: string;
   headers?: Record<string, string>;
 }
 
-/**
- * Initialize API client
- */
 export function initializeApiClient(config: ApiClientConfig): void {
   // Store for later use in interceptors
   apiClientConfig = config;
 }
 
-/**
- * Global API client configuration
- */
 const DEFAULT_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string) ?? '';
 
 let apiClientConfig: ApiClientConfig = {
@@ -60,10 +35,6 @@ let apiClientConfig: ApiClientConfig = {
   tenant: '',
 };
 
-/**
- * Build headers for API request
- * Note: Cookie-based authentication is used (credentials: 'include')
- */
 function buildHeaders(customHeaders?: Record<string, string>): Record<string, string> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -127,9 +98,6 @@ function showForbiddenModal(data?: unknown): void {
   });
 }
 
-/**
- * Handle API response
- */
 async function handleResponse<T>(response: Response): Promise<T> {
   const contentType = response.headers.get('content-type');
   let data: unknown;
@@ -202,10 +170,6 @@ async function handleResponse<T>(response: Response): Promise<T> {
   return data as T;
 }
 
-/**
- * Make GET request
- * Supports caching for improved performance
- */
 export async function get<T>(
   path: string,
   options?: {
@@ -271,10 +235,6 @@ export async function get<T>(
   return result;
 }
 
-/**
- * Make POST request
- * Invalidates related cache entries on success
- */
 export async function post<T>(
   path: string,
   data?: FormData | object,
@@ -309,10 +269,6 @@ export async function post<T>(
   return result;
 }
 
-/**
- * Make PUT request
- * Invalidates related cache entries on success
- */
 export async function put<T>(
   path: string,
   data?: object,
@@ -340,10 +296,6 @@ export async function put<T>(
   return result;
 }
 
-/**
- * Make PATCH request
- * Invalidates related cache entries on success
- */
 export async function patch<T>(
   path: string,
   data?: object,
@@ -371,10 +323,6 @@ export async function patch<T>(
   return result;
 }
 
-/**
- * Make DELETE request
- * Invalidates related cache entries on success
- */
 export async function del<T>(
   path: string,
   options?: {
@@ -405,37 +353,22 @@ export async function del<T>(
   return result;
 }
 
-/**
- * Configure API client with tenant
- */
 export function configureApiClient(tenant: string): void {
   apiClientConfig.tenant = tenant;
 }
 
-/**
- * Get the current tenant from API client config
- */
 export function getCurrentTenant(): string {
   return apiClientConfig.tenant;
 }
 
-/**
- * Set API base URL
- */
 export function setApiBaseUrl(baseUrl: string): void {
   apiClientConfig.baseUrl = baseUrl;
 }
 
-/**
- * Get current API base URL
- */
 export function getApiBaseUrl(): string {
   return apiClientConfig.baseUrl;
 }
 
-/**
- * Check API connectivity
- */
 export async function checkApiHealth(): Promise<boolean> {
   try {
     const url = apiClientConfig.baseUrl ? `${apiClientConfig.baseUrl}/health` : '/health';
@@ -449,9 +382,6 @@ export async function checkApiHealth(): Promise<boolean> {
   }
 }
 
-/**
- * Upload file with progress tracking
- */
 export async function uploadFile(
   path: string,
   file: File,

@@ -1,9 +1,6 @@
 import { writable, derived } from 'svelte/store';
 import { api } from '$lib/api/client';
 
-/**
- * File version information
- */
 export interface FileVersion {
   id: string;
   versionNumber: number;
@@ -14,9 +11,6 @@ export interface FileVersion {
   changeNote?: string;
 }
 
-/**
- * Material/File information
- */
 export interface Material {
   id: string;
   roomId: string;
@@ -33,9 +27,6 @@ export interface Material {
   versions: FileVersion[];
 }
 
-/**
- * File upload progress
- */
 export interface FileUploadProgress {
   fileId: string;
   fileName: string;
@@ -46,9 +37,6 @@ export interface FileUploadProgress {
   uploadedBytes: number;
 }
 
-/**
- * Files store state
- */
 export interface FilesState {
   files: Material[];
   uploads: Map<string, FileUploadProgress>;
@@ -57,9 +45,6 @@ export interface FilesState {
   lastUpdated: number | null;
 }
 
-/**
- * Create files store
- */
 function createFilesStore() {
   const { subscribe, set, update } = writable<FilesState>({
     files: [],
@@ -71,9 +56,6 @@ function createFilesStore() {
 
   return {
     subscribe,
-    /**
-     * Set all files
-     */
     setFiles: (files: Material[]) => {
       update((state) => ({
         ...state,
@@ -82,9 +64,6 @@ function createFilesStore() {
         lastUpdated: Date.now(),
       }));
     },
-    /**
-     * Add a new file
-     */
     addFile: (file: Material) => {
       update((state) => {
         // Check if file already exists to prevent duplicates
@@ -120,9 +99,6 @@ function createFilesStore() {
         files: state.files.filter((f) => f.id !== fileId),
       }));
     },
-    /**
-     * Add new file version
-     */
     addFileVersion: (fileId: string, version: FileVersion) => {
       update((state) => ({
         ...state,
@@ -133,9 +109,6 @@ function createFilesStore() {
         ),
       }));
     },
-    /**
-     * Start file upload
-     */
     startUpload: (fileId: string, progress: FileUploadProgress) => {
       update((state) => {
         const uploads = new Map(state.uploads);
@@ -143,9 +116,6 @@ function createFilesStore() {
         return { ...state, uploads };
       });
     },
-    /**
-     * Update upload progress
-     */
     updateUploadProgress: (
       fileId: string,
       progress: number,
@@ -160,9 +130,6 @@ function createFilesStore() {
         return { ...state, uploads };
       });
     },
-    /**
-     * Complete upload
-     */
     completeUpload: (fileId: string) => {
       update((state) => {
         const uploads = new Map(state.uploads);
@@ -173,9 +140,6 @@ function createFilesStore() {
         return { ...state, uploads };
       });
     },
-    /**
-     * Fail upload
-     */
     failUpload: (fileId: string, error: string) => {
       update((state) => {
         const uploads = new Map(state.uploads);
@@ -186,9 +150,6 @@ function createFilesStore() {
         return { ...state, uploads };
       });
     },
-    /**
-     * Remove upload tracking
-     */
     removeUpload: (fileId: string) => {
       update((state) => {
         const uploads = new Map(state.uploads);
@@ -196,21 +157,12 @@ function createFilesStore() {
         return { ...state, uploads };
       });
     },
-    /**
-     * Set loading state
-     */
     setLoading: (isLoading: boolean) => {
       update((state) => ({ ...state, isLoading }));
     },
-    /**
-     * Set error
-     */
     setError: (error: string | null) => {
       update((state) => ({ ...state, error }));
     },
-    /**
-     * Clear all files
-     */
     clear: () => {
       set({
         files: [],

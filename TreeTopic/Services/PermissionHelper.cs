@@ -34,7 +34,7 @@ public static class PermissionHelper
         where TEntity : class
         where TContext : DbContext
     {
-        // 既にトランザクション内の場合はトランザクションを開始しない
+        // 既存トランザクション内の場合はトランザクションを開始しない
         var hasExistingTransaction = context.Database.CurrentTransaction != null;
 
         var transaction = hasExistingTransaction

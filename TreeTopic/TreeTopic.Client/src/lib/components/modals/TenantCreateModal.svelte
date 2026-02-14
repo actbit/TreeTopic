@@ -39,14 +39,12 @@
     clientSecret: false
   });
 
-  // フォームフィールド
   let identifier = $state('');
   let name = $state('');
   let dbProvider = $state('postgres');
   let useCustomConnection = $state(false);
   let dbConnectionString = $state('');
 
-  // OIDC設定
   let useOidc = $state(false);
   let openIdConnectAuthority = $state('');
   let roleClaimName = $state('');
@@ -56,7 +54,6 @@
 
   $effect(() => {
     if (isOpen) {
-      // リセット
       identifier = '';
       name = '';
       dbProvider = 'postgres';
@@ -73,7 +70,6 @@
   });
 
   $effect(() => {
-    // MySQLを選ぶと自動的にカスタム接続文字列を有効にする
     if (dbProvider === 'mysql') {
       useCustomConnection = true;
     } else if (dbProvider === 'postgres') {
@@ -82,14 +78,12 @@
   });
 
   $effect(() => {
-    // カスタム文字列を使用しないときはPostgreSQLに設定
     if (!useCustomConnection) {
       dbProvider = 'postgres';
     }
   });
 
   async function handleSubmit() {
-    // エラーをリセット
     errors = {
       identifier: false,
       name: false,
@@ -104,7 +98,6 @@
       errors.identifier = true;
       return;
     } else {
-      // 識別子のバリデーション
       const identifierRegex = /^[a-z0-9-]+$/;
       if (!identifierRegex.test(identifier)) {
         error = 'Identifier must contain only lowercase letters, numbers, and hyphens (3-50 characters)';
@@ -122,14 +115,12 @@
       return;
     }
 
-    // カスタム接続文字列が有効な場合のバリデーション
     if (useCustomConnection && !dbConnectionString.trim()) {
       error = 'Connection string is required when using custom connection';
       errors.dbConnectionString = true;
       return;
     }
 
-    // OIDC設定が有効な場合のバリデーション
     if (useOidc) {
       if (!openIdConnectAuthority.trim()) {
         error = 'Authority URL is required for OIDC authentication';
@@ -163,12 +154,10 @@
         dbProvider: dbProvider
       };
 
-      // カスタム接続文字列を追加
       if (useCustomConnection && dbConnectionString.trim()) {
         request.dbConnectionString = dbConnectionString.trim();
       }
 
-      // OIDC設定を追加
       if (useOidc) {
         if (roleClaimName) request.roleClaimName = roleClaimName.trim();
         if (openIdConnectAuthority) request.openIdConnectAuthority = openIdConnectAuthority.trim();
@@ -179,7 +168,6 @@
 
       const response = await api.post<RegisterTenantResponse>('/api/tenants/register', request);
 
-      // セットアップトークンを保存して表示
       if (response.setupToken) {
         setupToken = response.setupToken;
         sessionStorage.setItem(`setupToken_${identifier}`, response.setupToken);
@@ -230,12 +218,7 @@
 
         <div class="setup-token-box">
           <code class="token-text">{setupToken}</code>
-          <button
-            type="button"
-            onclick={copyToken}
-            class="copy-button"
-            disabled={isLoading}
-          >
+          <button type="button" onclick={copyToken} class="copy-button" disabled={isLoading}>
             {setupTokenCopied ? '✓ Copied' : 'Copy'}
           </button>
         </div>
@@ -251,12 +234,7 @@
       </div>
 
       <div class="setup-token-footer">
-        <button
-          type="button"
-          onclick={continueToLogin}
-          disabled={isLoading}
-          class="modal-submit-button"
-        >
+        <button type="button" onclick={continueToLogin} disabled={isLoading} class="modal-submit-button">
           Continue to Login
         </button>
       </div>
@@ -270,40 +248,22 @@
       {/if}
 
       <div class="modal-content">
-      <!-- 識別子 -->
       <label>
         <span class="modal-label">Identifier *</span>
-        <input
-          type="text"
-          bind:value={identifier}
-          placeholder="e.g. acme-corp"
-          disabled={isLoading}
-          class:input-error={errors.identifier}
-        />
+        <input type="text" bind:value={identifier} placeholder="e.g. acme-corp" disabled={isLoading} class:input-error={errors.identifier} />
         <p class="modal-helper">
           Lowercase letters, numbers, and hyphens only (3-50 characters)
         </p>
       </label>
 
-      <!-- 表示名 -->
       <label>
         <span class="modal-label">Display name *</span>
-        <input
-          type="text"
-          bind:value={name}
-          placeholder="e.g. ACME Corporation"
-          disabled={isLoading}
-          class:input-error={errors.name}
-        />
+        <input type="text" bind:value={name} placeholder="e.g. ACME Corporation" disabled={isLoading} class:input-error={errors.name} />
       </label>
 
-      <!-- データベース -->
       <label>
         <span class="modal-label">Database</span>
-        <select
-          bind:value={dbProvider}
-          disabled={isLoading}
-        >
+        <select bind:value={dbProvider} disabled={isLoading}>
           <option value="postgres">PostgreSQL</option>
           <option value="mysql">MySQL</option>
         </select>
@@ -312,40 +272,24 @@
         </p>
       </label>
 
-      <!-- カスタム接続文字列 -->
       <label class="modal-checkbox-label">
-        <input
-          type="checkbox"
-          bind:checked={useCustomConnection}
-          disabled={isLoading}
-        />
+        <input type="checkbox" bind:checked={useCustomConnection} disabled={isLoading} />
         <span>Use custom connection string</span>
       </label>
 
       {#if useCustomConnection}
         <label>
           <span class="modal-label">Connection string *</span>
-          <input
-            type="text"
-            bind:value={dbConnectionString}
-            placeholder={dbProvider === 'postgres' ? 'Host=localhost;Port=5432;Username=user;Password=password;Database=mydb' : 'Server=localhost;Port=3306;Uid=user;Pwd=password;Database=mydb;'}
-            disabled={isLoading}
-            class:input-error={errors.dbConnectionString}
-          />
+          <input type="text" bind:value={dbConnectionString} placeholder={dbProvider === 'postgres' ? 'Host=localhost;Port=5432;Username=user;Password=password;Database=mydb' : 'Server=localhost;Port=3306;Uid=user;Pwd=password;Database=mydb;'} disabled={isLoading} class:input-error={errors.dbConnectionString} />
           <p class="modal-helper">
             Enter a custom database connection string
           </p>
         </label>
       {/if}
 
-      <!-- OIDC設定 -->
       <div class="modal-divider">
         <label class="modal-checkbox-label">
-          <input
-            type="checkbox"
-            bind:checked={useOidc}
-            disabled={isLoading}
-          />
+          <input type="checkbox" bind:checked={useOidc} disabled={isLoading} />
           <span>Use custom OpenID Connect authentication</span>
         </label>
         <p class="modal-helper">
@@ -357,49 +301,17 @@
       {#if useOidc}
         <label>
           <span class="modal-label">Role claim name</span>
-          <input
-            type="text"
-            bind:value={roleClaimName}
-            placeholder="e.g. roles, groups (optional)"
-            disabled={isLoading}
-            class:input-error={errors.roleClaimName}
-          />
-          <p class="modal-helper">
-            Optional: Set this if your OIDC provider uses a custom role claim name.
-            <br><br>
-            <strong>When set:</strong> Roles are automatically assigned from your OIDC provider
-            using this claim name during login. Manual role assignment is disabled.
-            <br><br>
-            <strong>When not set:</strong> Roles are managed manually through the setup interface.
-            No automatic role assignment from OIDC claims.
-            <br><br>
-            <strong>Common examples:</strong>
-            <br>- Keycloak: "roles" or "realm_access.roles"
-            <br>- Azure AD: "roles"
-            <br>- Google: "roles" (from custom claims)
-          </p>
+          <input type="text" bind:value={roleClaimName} placeholder="e.g. roles, groups (optional)" disabled={isLoading} class:input-error={errors.roleClaimName} />
         </label>
 
         <label>
           <span class="modal-label">Metadata address *</span>
-          <input
-            type="url"
-            bind:value={metadataAddress}
-            placeholder="https://example.com/.well-known/openid-configuration"
-            disabled={isLoading}
-            class:input-error={errors.metadataAddress}
-          />
+          <input type="url" bind:value={metadataAddress} placeholder="https://example.com/.well-known/openid-configuration" disabled={isLoading} class:input-error={errors.metadataAddress} />
         </label>
 
         <label>
           <span class="modal-label">Authority *</span>
-          <input
-            type="url"
-            bind:value={openIdConnectAuthority}
-            placeholder="https://example.com"
-            disabled={isLoading}
-            class:input-error={errors.openIdConnectAuthority}
-          />
+          <input type="url" bind:value={openIdConnectAuthority} placeholder="https://example.com" disabled={isLoading} class:input-error={errors.openIdConnectAuthority} />
           <p class="modal-helper">
             The base URL of your OIDC provider
           </p>
@@ -407,43 +319,21 @@
 
         <label>
           <span class="modal-label">Client ID *</span>
-          <input
-            type="text"
-            bind:value={clientId}
-            placeholder="Client ID"
-            disabled={isLoading}
-            class:input-error={errors.clientId}
-          />
+          <input type="text" bind:value={clientId} placeholder="Client ID" disabled={isLoading} class:input-error={errors.clientId} />
         </label>
 
         <label>
           <span class="modal-label">Client Secret *</span>
-          <input
-            type="password"
-            bind:value={clientSecret}
-            placeholder="Client Secret"
-            disabled={isLoading}
-            class:input-error={errors.clientSecret}
-          />
+          <input type="password" bind:value={clientSecret} placeholder="Client Secret" disabled={isLoading} class:input-error={errors.clientSecret} />
         </label>
       {/if}
     </div>
 
-    <!-- Footer -->
     <div class="modal-footer">
-      <button
-        type="button"
-        onclick={handleClose}
-        disabled={isLoading}
-        class="modal-cancel-button"
-      >
+      <button type="button" onclick={handleClose} disabled={isLoading} class="modal-cancel-button">
         Cancel
       </button>
-      <button
-        type="submit"
-        disabled={isLoading}
-        class="modal-submit-button"
-      >
+      <button type="submit" disabled={isLoading} class="modal-submit-button">
         {#if isLoading}
           <span class="modal-spinner"></span>
         {/if}

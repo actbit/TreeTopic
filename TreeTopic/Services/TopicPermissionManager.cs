@@ -4,10 +4,6 @@ using TreeTopic.Permissions;
 
 namespace TreeTopic.Services;
 
-/// <summary>
-/// トピックレベルの権限管理を行うマネージャー
-/// RoomUserManagerと同じパターンで権限名ベースの管理
-/// </summary>
 public class TopicPermissionManager
 {
     private readonly ApplicationDbContext _context;
@@ -24,11 +20,7 @@ public class TopicPermissionManager
         _permissionScanService = permissionScanService;
     }
 
-    #region TopicRolePermission 管理
 
-    /// <summary>
-    /// トピックとロールの権限設定を取得
-    /// </summary>
     public async Task<List<TopicRolePermission>> GetRolePermissionsAsync(
         Guid topicId,
         Guid roleId,
@@ -39,9 +31,6 @@ public class TopicPermissionManager
             .ToListAsync(cancellationToken);
     }
 
-    /// <summary>
-    /// トピックのすべてのロール権限を取得
-    /// </summary>
     public async Task<List<TopicRolePermission>> GetTopicRolePermissionsAsync(
         Guid topicId,
         CancellationToken cancellationToken = default)
@@ -52,9 +41,6 @@ public class TopicPermissionManager
             .ToListAsync(cancellationToken);
     }
 
-    /// <summary>
-    /// ロール権限を追加
-    /// </summary>
     public async Task<TopicRolePermission> AddRolePermissionAsync(
         Guid topicId,
         Guid roleId,
@@ -81,9 +67,6 @@ public class TopicPermissionManager
             cancellationToken);
     }
 
-    /// <summary>
-    /// ロール権限を削除
-    /// </summary>
     public async Task<bool> RemoveRolePermissionAsync(
         Guid topicId,
         Guid roleId,
@@ -101,9 +84,6 @@ public class TopicPermissionManager
             cancellationToken);
     }
 
-    /// <summary>
-    /// ロールのトピック権限をすべてクリア
-    /// </summary>
     public async Task ClearRolePermissionsAsync(
         Guid topicId,
         Guid roleId,
@@ -119,13 +99,7 @@ public class TopicPermissionManager
         _logger.LogInformation("All TopicRolePermissions cleared: TopicId={TopicId}, RoleId={RoleId}", topicId, roleId);
     }
 
-    #endregion
 
-    #region TopicUserPermission 管理
-
-    /// <summary>
-    /// トピックとユーザーの権限設定を取得
-    /// </summary>
     public async Task<List<TopicUserPermission>> GetUserPermissionsAsync(
         Guid topicId,
         Guid roomUserId,
@@ -136,9 +110,6 @@ public class TopicPermissionManager
             .ToListAsync(cancellationToken);
     }
 
-    /// <summary>
-    /// トピックのすべてのユーザー権限を取得
-    /// </summary>
     public async Task<List<TopicUserPermission>> GetTopicUserPermissionsAsync(
         Guid topicId,
         CancellationToken cancellationToken = default)
@@ -150,9 +121,6 @@ public class TopicPermissionManager
             .ToListAsync(cancellationToken);
     }
 
-    /// <summary>
-    /// ユーザー権限を追加
-    /// </summary>
     public async Task<TopicUserPermission> AddUserPermissionAsync(
         Guid topicId,
         Guid roomUserId,
@@ -179,9 +147,6 @@ public class TopicPermissionManager
             cancellationToken);
     }
 
-    /// <summary>
-    /// ユーザー権限を削除
-    /// </summary>
     public async Task<bool> RemoveUserPermissionAsync(
         Guid topicId,
         Guid roomUserId,
@@ -199,9 +164,6 @@ public class TopicPermissionManager
             cancellationToken);
     }
 
-    /// <summary>
-    /// ユーザーのトピック権限をすべてクリア
-    /// </summary>
     public async Task ClearUserPermissionsAsync(
         Guid topicId,
         Guid roomUserId,
@@ -217,13 +179,7 @@ public class TopicPermissionManager
         _logger.LogInformation("All TopicUserPermissions cleared: TopicId={TopicId}, RoomUserId={RoomUserId}", topicId, roomUserId);
     }
 
-    #endregion
 
-    #region 権限コピー
-
-    /// <summary>
-    /// 親トピックの権限を子トピックにコピー
-    /// </summary>
     public async Task CopyPermissionsAsync(
         Guid parentTopicId,
         Guid childTopicId,
@@ -235,7 +191,6 @@ public class TopicPermissionManager
             : await _context.Database.BeginTransactionAsync(cancellationToken);
         try
         {
-            // 1. TopicRolePermissionをコピー
             var parentRolePermissions = await _context.TopicRolePermissions
                 .Where(trp => trp.TopicId == parentTopicId)
                 .ToListAsync(cancellationToken);
@@ -252,7 +207,6 @@ public class TopicPermissionManager
                 _context.TopicRolePermissions.Add(childPerm);
             }
 
-            // 2. TopicUserPermissionをコピー
             var parentUserPermissions = await _context.TopicUserPermissions
                 .Where(tup => tup.TopicId == parentTopicId)
                 .ToListAsync(cancellationToken);
@@ -289,27 +243,21 @@ public class TopicPermissionManager
         }
     }
 
-    /// <summary>
-    /// トピック作成者に管理者権限を付与
-    /// </summary>
     public async Task GrantCreatorPermissionsAsync(
         Guid topicId,
         Guid roomUserId,
         CancellationToken cancellationToken = default)
     {
-        // このトピックとユーザーに対して既に付与されている権限を取得
         var existingPermissions = await _context.TopicUserPermissions
             .Where(tup => tup.TopicId == topicId && tup.RoomUserId == roomUserId)
             .Select(tup => tup.Name)
             .ToHashSetAsync(cancellationToken);
 
-        // PermissionScanServiceからTopicレベルの全権限を取得
         var allTopicPermissions = _permissionScanService.GetTopicPermissions();
 
         var addedCount = 0;
         foreach (var permission in allTopicPermissions)
         {
-            // 既に存在する権限はスキップ
             if (existingPermissions.Contains(permission.Name))
                 continue;
 
@@ -334,13 +282,7 @@ public class TopicPermissionManager
             roomUserId, topicId, addedCount);
     }
 
-    #endregion
 
-    #region 権限チェック
-
-    /// <summary>
-    /// ユーザーのトピック権限をすべて取得（ロール + 個別設定）
-    /// </summary>
     public async Task<HashSet<string>> GetPermissionsAsync(
         RoomUser roomUser,
         Guid topicId,
@@ -348,7 +290,6 @@ public class TopicPermissionManager
     {
         var permissions = new HashSet<string>();
 
-        // 1. ロールから権限を取得（多対多関係）
         var rolePermissions = await _context.RoomUserRoomRoles
             .Where(rur => rur.RoomUserId == roomUser.Id)
             .Join(_context.TopicRolePermissions,
@@ -364,7 +305,6 @@ public class TopicPermissionManager
             permissions.Add(perm);
         }
 
-        // 2. 個別ユーザー権限を追加（ロール権限に追加）
         var userPermissions = await _context.TopicUserPermissions
             .Where(tup => tup.TopicId == topicId && tup.RoomUserId == roomUser.Id)
             .Select(tup => tup.Name)
@@ -378,16 +318,12 @@ public class TopicPermissionManager
         return permissions;
     }
 
-    /// <summary>
-    /// ユーザーが特定の権限を持っているか確認
-    /// </summary>
     public async Task<bool> HasPermissionAsync(
         RoomUser roomUser,
         Guid topicId,
         string permissionName,
         CancellationToken cancellationToken = default)
     {
-        // 1. ロール権限を確認（多対多関係）
         var hasRolePermission = await _context.RoomUserRoomRoles
             .Where(rur => rur.RoomUserId == roomUser.Id)
             .Join(_context.TopicRolePermissions,
@@ -401,12 +337,9 @@ public class TopicPermissionManager
             return true;
         }
 
-        // 2. 個別ユーザー権限を確認
         var hasUserPermission = await _context.TopicUserPermissions
             .AnyAsync(tup => tup.TopicId == topicId && tup.RoomUserId == roomUser.Id && tup.Name == permissionName, cancellationToken);
 
         return hasUserPermission;
     }
-
-    #endregion
 }

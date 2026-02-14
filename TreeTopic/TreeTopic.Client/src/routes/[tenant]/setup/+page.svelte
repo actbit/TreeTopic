@@ -4,6 +4,7 @@
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
   import { api, createRoleWithSetupToken, getRolesWithSetupToken, getTenantDetail, invalidateSetupToken, getCurrentUser, assignUserRoleWithSetupToken, removeUserRoleWithSetupToken, createUserWithSetupToken } from '$lib/api/client';
+  import { formatPermissionName } from '$lib/utils/permission';
 
   // 型定義
   interface TenantDetail {
@@ -162,17 +163,6 @@
       console.error('Error loading permissions:', err);
       availablePermissions = [];
     }
-  }
-
-  function formatPermissionName(permissionName: string): string {
-    return permissionName
-      .split('.')
-      .map((part, index) => {
-        if (index === 0) return ''; // プレフィックス（tenant）を削除
-        return part.charAt(0).toUpperCase() + part.slice(1);
-      })
-      .filter(p => p !== '')
-      .join('');
   }
 
   async function loadCurrentUser() {

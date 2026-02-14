@@ -28,7 +28,6 @@ public class RoleManagementService : BaseService
     {
         return await ExecuteAsync(async () =>
         {
-            // すべてのロールとそのパーミッションを取得
             var allRoles = await _roleManager.Roles
                 .Include(r => r.Authorities)
                 .ToListAsync();
@@ -42,7 +41,6 @@ public class RoleManagementService : BaseService
     {
         return await ExecuteAsync(async () =>
         {
-            // Validate role name is not empty
             var nameValidation = ValidationHelper.ValidateRequired(request.Name, "Role name");
             if (nameValidation.IsFailure)
             {
@@ -51,7 +49,6 @@ public class RoleManagementService : BaseService
 
             var cleanName = request.Name.Trim();
 
-            // Check if role already exists
             if (await _roleManager.RoleExistsAsync(cleanName))
             {
                 return Result<ApplicationRole>.Conflict($"Role '{cleanName}' already exists");
@@ -75,21 +72,18 @@ public class RoleManagementService : BaseService
     {
         return await ExecuteAsync(async () =>
         {
-            // ロール名を検証
             var roleNameValidation = ValidationHelper.ValidateRequired(request.RoleName, "Role name");
             if (roleNameValidation.IsFailure)
             {
                 return Result.BadRequest(roleNameValidation.Error!.Message);
             }
 
-            // ロール名で検索
             var role = await _roleManager.FindByNameAsync(request.RoleName.Trim());
             if (role == null)
             {
                 return Result.NotFound($"Role '{request.RoleName}' not found");
             }
 
-            // ロールを削除
             var deleteResult = await _roleManager.DeleteAsync(role);
             var identityResult = deleteResult.ToResult();
             if (identityResult.IsFailure)
@@ -106,26 +100,20 @@ public class RoleManagementService : BaseService
     {
         return await ExecuteAsync(async () =>
         {
-            // ロール名を検証
             var roleNameValidation = ValidationHelper.ValidateRequired(request.RoleName, "Role name");
             if (roleNameValidation.IsFailure)
             {
                 return Result<Permission>.BadRequest(roleNameValidation.Error!.Message);
             }
 
-            // Validate permission name is not empty
             var permissionNameValidation = ValidationHelper.ValidateRequired(request.PermissionName, "Permission name");
             if (permissionNameValidation.IsFailure)
             {
                 return Result<Permission>.BadRequest(permissionNameValidation.Error!.Message);
             }
 
-            // DbContextを使用して操作
-
-            // ロール名を正規化
             var normalizedName = _roleManager.NormalizeKey(request.RoleName.Trim());
 
-            // ロール名で検索（AsNoTrackingを使用して追跡を回避）
             var role = await _context.Roles
                 .AsNoTracking()
                 .FirstOrDefaultAsync(r => r.NormalizedName == normalizedName);
@@ -135,7 +123,6 @@ public class RoleManagementService : BaseService
                 return Result<Permission>.NotFound($"Role '{request.RoleName}' not found");
             }
 
-            // Check if permission already exists for this role
             var existingPermission = await _context.Permissions
                 .AsNoTracking()
                 .FirstOrDefaultAsync(p => p.RoleId == role.Id && p.Name == request.PermissionName);
@@ -165,24 +152,20 @@ public class RoleManagementService : BaseService
     {
         return await ExecuteAsync(async () =>
         {
-            // ロール名を検証
             var roleNameValidation = ValidationHelper.ValidateRequired(request.RoleName, "Role name");
             if (roleNameValidation.IsFailure)
             {
                 return Result.BadRequest(roleNameValidation.Error!.Message);
             }
 
-            // パーミッション名を検証
             var permissionNameValidation = ValidationHelper.ValidateRequired(request.PermissionName, "Permission name");
             if (permissionNameValidation.IsFailure)
             {
                 return Result.BadRequest(permissionNameValidation.Error!.Message);
             }
 
-            // ロール名を正規化
             var normalizedName = _roleManager.NormalizeKey(request.RoleName.Trim());
 
-            // ロール名で検索
             var role = await _context.Roles
                 .AsNoTracking()
                 .FirstOrDefaultAsync(r => r.NormalizedName == normalizedName);
@@ -192,7 +175,6 @@ public class RoleManagementService : BaseService
                 return Result.NotFound($"Role '{request.RoleName}' not found");
             }
 
-            // パーミッションを検索して削除
             var permission = await _context.Permissions
                 .FirstOrDefaultAsync(p => p.RoleId == role.Id && p.Name == request.PermissionName.Trim());
 
@@ -213,7 +195,6 @@ public class RoleManagementService : BaseService
     {
         return await ExecuteAsync(async () =>
         {
-            // Validate role name is not empty
             var nameValidation = ValidationHelper.ValidateRequired(request.DefaultRoleName, "Default role name");
             if (nameValidation.IsFailure)
             {
@@ -222,17 +203,14 @@ public class RoleManagementService : BaseService
 
             var cleanName = request.DefaultRoleName.Trim();
 
-            // トランザクションを開始してデータ整合性を確保
             using var transaction = await _context.Database.BeginTransactionAsync();
             try
             {
-                // Check if default role already exists
                 if (await _roleManager.RoleExistsAsync(cleanName))
                 {
                     return Result<RoleSetupCompletionResponse>.Conflict($"Default role '{cleanName}' already exists");
                 }
 
-                // Create default role
                 var role = new ApplicationRole(cleanName);
                 var createResult = await _roleManager.CreateAsync(role);
 
@@ -242,7 +220,6 @@ public class RoleManagementService : BaseService
                     return Result<RoleSetupCompletionResponse>.BadRequest(identityResult.Error!.Message);
                 }
 
-                // Add default permissions using DbContext directly
                 int permissionsAdded = 0;
                 if (request.DefaultPermissions?.Count > 0)
                 {
@@ -269,7 +246,6 @@ public class RoleManagementService : BaseService
                     }
                 }
 
-                // トランザクションをコミット
                 await transaction.CommitAsync();
 
                 var response = new RoleSetupCompletionResponse
