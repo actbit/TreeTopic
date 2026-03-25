@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk.Web">
 
 	<PropertyGroup>
-		<TargetFramework>net9.0</TargetFramework>
+		<TargetFramework>net10.0</TargetFramework>
 		<Nullable>enable</Nullable>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<UserSecretsId>974af100-b0a1-49e8-adf1-8bdfdff3b69a</UserSecretsId>
@@ -17,7 +17,7 @@
 		<PackageReference Include="Lib.Net.Http.WebPush" Version="3.3.1" />
 
 		<PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="9.0.13" />
-		<PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="9.0.0" />
+		<PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.0" />
 
 		<PackageReference Include="Microsoft.EntityFrameworkCore" Version="9.0.13" />
 		<PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="9.0.13">
@@ -35,7 +35,7 @@
 
 	<ItemGroup>
 		<ProjectReference Include="..\TreeTopic.ServiceDefaults\TreeTopic.ServiceDefaults.csproj" />
-		<ProjectReference Include="..\submodules\MaskedUUID\src\MaskedUUID.AspNetCore\MaskedUUID.AspNetCore.csproj" />
+		<PackageReference Include="MaskedUUID.AspNetCore" Version="1.0.3" />
 	</ItemGroup>
 
 	<Target Name="NpmBuild" BeforeTargets="Build">
