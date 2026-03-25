@@ -343,11 +343,18 @@ TreeTopicは **Finbuckle.MultiTenant** をベースにした完全なマルチ�
 | 項目 | 説明 |
 |-----|------|
 | テナント識別 | URLパス `/{tenant}` で識別 |
-| データベース分離 | テナントごとに独立したDB |
+| データ分離方式 | **個別DB** + **RLS（Row Level Security）** |
+| 対応DB | PostgreSQL / MySQL |
 | キャッシュ | テナント情報を5分間キャッシュ |
 | 認証 | テナントごとに異なるOIDCプロバイダー |
 
-### データベース構成
+### データ分離戦略
+
+TreeTopicは2層のデータ分離を実装しています：
+
+#### 1. 個別データベース（Database per Tenant）
+
+各テナントは完全に独立したデータベースを持ちます：
 
 ```
 ┌─────────────────────────────────────────────────────┐
@@ -369,6 +376,34 @@ TreeTopicは **Finbuckle.MultiTenant** をベースにした完全なマルチ�
    │   DB     │    │   DB     │    │   DB     │
    └──────────┘    └──────────┘    └──────────┘
 ```
+
+**メリット:**
+- 完全なデータ分離
+- テナントごとのバックアップ・リストアが可能
+- パフォーマンスの影響が他テナントに及ばない
+- 法規制対応（データ居住地の指定など）
+
+#### 2. Row Level Security（RLS）
+
+各テーブルに `TenantId` カラムを持ち、データベースレベルでのアクセス制御を提供：
+
+```csharp
+// BaseModel.cs - 全エンティティの基底クラス
+public class BaseModel
+{
+    public Guid Id { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public DateTime UpdatedAt { get; set; }
+    public string TenantId { get; set; }  // RLS用カラム
+}
+```
+
+**RLSの役割:**
+- アプリケーションレベルでのテナント分離
+- 誤ったクエリによるデータ漏洩を防止
+- 監査ログでのテナント追跡
+
+### データベース構成
 
 - **テナントカタログDB**: `treetopic_tenants` - 全テナントのメタデータ管理
 - **テナント別DB**: テナント登録時に自動作成・マイグレーション
