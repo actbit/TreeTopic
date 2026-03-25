@@ -356,25 +356,18 @@ TreeTopicは2層のデータ分離を実装しています：
 
 各テナントは完全に独立したデータベースを持ちます：
 
-```
-┌─────────────────────────────────────────────────────┐
-│                  TenantCatalogDB                     │
-│              (treetopic_tenants)                    │
-│  ┌─────────────────┐  ┌─────────────────────────┐  │
-│  │ ApplicationTenant│  │ ApplicationTenantDetail │  │
-│  │     Info         │──│  - ConnectionString     │  │
-│  │  - Id           │  │  - EncryptionKey        │  │
-│  │  - Identifier   │  │  - OIDC Settings        │  │
-│  │  - Name         │  │  - DbProvider           │  │
-│  └─────────────────┘  └─────────────────────────┘  │
-└─────────────────────────────────────────────────────┘
-                         │
-         ┌───────────────┼───────────────┐
-         ▼               ▼               ▼
-   ┌──────────┐    ┌──────────┐    ┌──────────┐
-   │ Tenant A │    │ Tenant B │    │ Tenant C │
-   │   DB     │    │   DB     │    │   DB     │
-   └──────────┘    └──────────┘    └──────────┘
+```mermaid
+flowchart TB
+    subgraph Catalog["TenantCatalogDB (treetopic_tenants)"]
+        direction TB
+        Info["ApplicationTenantInfo<br/>- Id<br/>- Identifier<br/>- Name"]
+        Detail["ApplicationTenantDetail<br/>- ConnectionString<br/>- EncryptionKey<br/>- OIDC Settings<br/>- DbProvider"]
+        Info --> Detail
+    end
+
+    Catalog --> DB1["Tenant A DB"]
+    Catalog --> DB2["Tenant B DB"]
+    Catalog --> DB3["Tenant C DB"]
 ```
 
 **メリット:**
@@ -421,21 +414,27 @@ public class BaseModel
 
 ### テナント作成フロー
 
-```
-1. POST /api/tenants/register
-   ├── テナント情報をカタログDBに登録
-   ├── テナント固有の暗号化キーを生成
-   ├── 接続文字列を暗号化して保存
-   └── セットアップトークンを発行
+```mermaid
+flowchart TD
+    A["POST /api/tenants/register"] --> B["テナント情報をカタログDBに登録"]
+    B --> C["テナント固有の暗号化キーを生成"]
+    C --> D["接続文字列を暗号化して保存"]
+    D --> E["セットアップトークンを発行"]
 
-2. テナントDB自動作成
-   ├── 指定されたDBプロバイダー（PostgreSQL/MySQL）でDB作成
-   └── マイグレーション実行
+    E --> F["テナントDB自動作成"]
+    F --> G{"DBプロバイダー"}
+    G -->|PostgreSQL| H["PostgreSQL DB作成"]
+    G -->|MySQL| I["MySQL DB作成"]
+    H --> J["マイグレーション実行"]
+    I --> J
 
-3. POST /{tenant}/api/setup
-   ├── セットアップトークン検証
-   ├── 管理者ユーザー作成（OIDC未設定時）
-   └── 初期ロール・パーミッション設定
+    J --> K["POST /{tenant}/api/setup"]
+    K --> L["セットアップトークン検証"]
+    L --> M{"OIDC設定あり?"}
+    M -->|なし| N["管理者ユーザー作成"]
+    M -->|あり| O["OIDCログイン待ち"]
+    N --> P["初期ロール・パーミッション設定"]
+    O --> P
 ```
 
 ### テナント設定項目
@@ -458,14 +457,17 @@ public class BaseModel
 
 テナントで `RoleClaimName` を設定すると、OIDCログイン時に自動的にロールが同期されます：
 
-```
-OIDC Token                    TreeTopic
-┌─────────────┐              ┌─────────────┐
-│ "roles": [  │──同期──▶     │ Application │
-│   "admin",  │              │    Role     │
-│   "user"    │              │             │
-│ ]           │              │             │
-└─────────────┘              └─────────────┘
+```mermaid
+flowchart LR
+    subgraph OIDC["OIDC Token"]
+        roles["roles: [admin, user]"]
+    end
+
+    subgraph TreeTopic["TreeTopic"]
+        role["Application Role"]
+    end
+
+    roles -->|"自動同期"| role
 ```
 
 **注意**: OIDCロール同期が有効な場合、手動でのロール割り当ては無効になります。
@@ -474,9 +476,10 @@ OIDC Token                    TreeTopic
 
 デフォルトでテナントごとに独立したセッションCookieが発行されます：
 
-```
-https://example.com/tenant-a/ → Cookie: TreeTopic.Cookie (path=/tenant-a)
-https://example.com/tenant-b/ → Cookie: TreeTopic.Cookie (path=/tenant-b)
+```mermaid
+flowchart LR
+    A["https://example.com/tenant-a/"] --> B["Cookie: TreeTopic.Cookie<br/>(path=/tenant-a)"]
+    C["https://example.com/tenant-b/"] --> D["Cookie: TreeTopic.Cookie<br/>(path=/tenant-b)"]
 ```
 
 設定で無効化も可能：
